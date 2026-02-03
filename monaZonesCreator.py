@@ -6,6 +6,61 @@ import os
 import pyproj
 import numpy as np
 import json
+import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+import tkinter as tk
+from tkinter import ttk
+
+
+def get_user_inputs():
+    root = tk.Tk()
+    root.title("Greenhouse Bed Generator")
+    root.geometry("300x280")
+    root.resizable(False, False)
+
+    values = {}
+
+    def submit():
+        values["num_lines"] = int(num_lines_var.get())
+        values["zone_length"] = float(zone_length_var.get())
+        values["buffer_distance"] = float(buffer_distance_var.get())
+        values["bed_numbering"] = bed_numbering_var.get()
+        root.destroy()
+
+    ttk.Label(root, text="Number of Beds").pack(pady=(10, 0))
+    num_lines_var = tk.StringVar(value="146")
+    ttk.Entry(root, textvariable=num_lines_var).pack()
+
+    ttk.Label(root, text="Zone Length (meters)").pack(pady=(10, 0))
+    zone_length_var = tk.StringVar(value="4.0")
+    ttk.Entry(root, textvariable=zone_length_var).pack()
+
+    ttk.Label(root, text="Buffer Distance (meters)").pack(pady=(10, 0))
+    buffer_distance_var = tk.StringVar(value="3.0")
+    ttk.Entry(root, textvariable=buffer_distance_var).pack()
+
+    ttk.Label(root, text="Bed Numbering Direction").pack(pady=(10, 0))
+    bed_numbering_var = tk.StringVar(value=bed_numbering)
+    ttk.Combobox(
+        root,
+        textvariable=bed_numbering_var,
+        state="readonly",
+        values=[
+            "bottom_to_top",
+            "top_to_bottom",
+            "left_to_right",
+            "right_to_left",
+            "north",
+            "south",
+            "east",
+            "west",
+        ],
+    ).pack()
+
+    ttk.Button(root, text="Run", command=submit).pack(pady=15)
+
+    root.mainloop()
+    return values
 
 # ==================== CONFIGURATION ====================
 bed_numbering = 'right_to_left'  # Options:
@@ -138,6 +193,61 @@ def reorder_lines_by_direction(lines_gdf: gpd.GeoDataFrame, direction: str) -> g
     return lines_gdf
 
 
+def visualize_layout(polygon_gdf, beds_gdf, zones_gdf):
+    """
+    Visualize greenhouse polygon, beds, and zones.
+    """
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Plot greenhouse polygon
+    polygon_gdf.plot(
+        ax=ax,
+        facecolor="none",
+        edgecolor="black",
+        linewidth=2,
+        label="Greenhouse"
+    )
+
+    # Plot zones (lighter, thinner)
+    zones_gdf.plot(
+        ax=ax,
+        linewidth=1,
+        alpha=0.6,
+        label="Zones"
+    )
+
+    # Plot beds (thicker)
+    beds_gdf.plot(
+        ax=ax,
+        linewidth=3,
+        label="Beds"
+    )
+
+    # Label beds
+    for _, row in beds_gdf.iterrows():
+        centroid = row.geometry.centroid
+        ax.text(
+            centroid.x,
+            centroid.y,
+            str(row["line_id"]),
+            fontsize=9,
+            ha="center",
+            va="center",
+            bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7)
+        )
+
+    ax.set_aspect("equal")
+    ax.set_title("Greenhouse Bed & Zone Layout")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.grid(True, linestyle="--", alpha=0.4)
+
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
 def create_line_zones(lines_gdf: gpd.GeoDataFrame, zone_length: float) -> gpd.GeoDataFrame:
     all_zones = []
     fid_counter = 1
@@ -192,47 +302,48 @@ def featurecollection_from_row(row):
 if __name__ == "__main__":
     # --- Example Usage ---
     geojson_data ={
-    "type": "FeatureCollection",
-    "features": [
-      {
-        "type": "Feature",
-        "properties": {
-          "id": "Main GH 18- MFL"
-        },
-        "geometry": {
-          "type": "Polygon",
-          "coordinates": [
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Main GH 17 - MFL"
+      },
+      "geometry": {
+        "coordinates": [
+          [
             [
-              [
-                35.3944548,
-                0.4190711
-              ],
-              [
-                35.3943228,
-                0.4185406
-              ],
-              [
-                35.3960575,
-                0.4181197
-              ],
-              [
-                35.3961762,
-                0.4186431
-              ],
-              [
-                35.3944548,
-                0.4190711
-              ]
+              35.39627438780599,
+              0.41863926646996674
+            ],
+            [
+              35.39614186734798,
+              0.4181059267455254
+            ],
+            [
+              35.39788099385737,
+              0.41768219975959653
+            ],
+            [
+              35.39799878982052,
+              0.4182139035023198
+            ],
+            [
+              35.39627438780599,
+              0.41863926646996674
             ]
           ]
-        }
+        ],
+        "type": "Polygon"
       }
-    ]
-  }
+    }
+  ]
+}
 
     desired_num_lines = 146
     zone_length_m = 4.0
     buffer_distance_m = 3.0
+    
 
     print("Loading polygon from GeoJSON data...")
     try:
@@ -300,6 +411,17 @@ if __name__ == "__main__":
 
                 print(f"Generated {len(clipped_lines_gdf_projected)} beds ({len(line_zones_gdf)} zones total)")
                 print(f"Output saved: {os.path.abspath(output_filepath)}")
+
+               
+                visualize_layout(
+                     polygon_gdf,
+                    clipped_lines_gdf_projected.to_crs(original_crs),
+                    line_zones_gdf
+                )
+
+
+
+                
 
     except Exception as e:
         print(f"Error: {e}")
