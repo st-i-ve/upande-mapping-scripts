@@ -331,6 +331,84 @@ def featurecollection_from_row(row):
         }]
     }
 
+def run_processing(geojson_data, desired_num_lines, zone_length_m,
+                   buffer_distance_m, bed_numbering):
+    try:
+        print("Loading polygon from GeoJSON data...")
+        main_polygon = None
+        greenhouse_id_from_geojson = None
+
+        for feature in geojson_data["features"]:
+            if feature['geometry']['type'] == 'Polygon':
+                main_polygon = Polygon(feature['geometry']['coordinates'][0])
+                greenhouse_id_from_geojson = feature['properties'].get(
+                    'id', 'unknown_id'
+                ).replace(" ", "_").replace("/", "_").strip()
+                break
+
+        if main_polygon is None:
+            raise ValueError("No polygon found in GeoJSON.")
+
+        print(f"Processing greenhouse: {greenhouse_id_from_geojson}")
+
+        polygon_gdf = gpd.GeoDataFrame(geometry=[main_polygon], crs="EPSG:4326")
+        original_crs = polygon_gdf.crs
+
+        # Reproject to UTM
+        if polygon_gdf.crs.is_geographic:
+            lon = polygon_gdf.centroid.x.iloc[0]
+            utm_zone = int((lon + 180) / 6) + 1
+            utm_crs = (
+                f"EPSG:326{utm_zone:02d}"
+                if polygon_gdf.centroid.y.iloc[0] >= 0
+                else f"EPSG:327{utm_zone:02d}"
+            )
+            projected_polygon_gdf = polygon_gdf.to_crs(utm_crs)
+            projected_polygon = projected_polygon_gdf.geometry.iloc[0]
+        else:
+            projected_polygon = main_polygon
+            projected_polygon_gdf = polygon_gdf
+
+        clipped_lines_gdf_projected = create_offset_lines_in_buffered_polygon(
+            projected_polygon, desired_num_lines, buffer_distance_m
+        )
+
+        if clipped_lines_gdf_projected.empty:
+            raise ValueError("No lines generated – polygon too small or buffer too large.")
+
+        clipped_lines_gdf_projected.crs = projected_polygon_gdf.crs
+
+        clipped_lines_gdf_projected = reorder_lines_by_direction(
+            clipped_lines_gdf_projected, bed_numbering
+        )
+
+        line_zones_gdf_projected = create_line_zones(
+            clipped_lines_gdf_projected, zone_length_m
+        )
+
+        line_zones_gdf = line_zones_gdf_projected.to_crs(original_crs)
+
+        output_dir = "output"
+        os.makedirs(output_dir, exist_ok=True)
+        output_filepath = os.path.join(
+            output_dir, f"{greenhouse_id_from_geojson}_line_zones.geojson"
+        )
+
+        with open(output_filepath, "w") as f:
+            for _, row in line_zones_gdf.iterrows():
+                f.write(json.dumps(featurecollection_from_row(row)) + "\n")
+
+        print(f"Output saved: {os.path.abspath(output_filepath)}")
+
+        # VISUALIZE
+        visualize_layout(
+            polygon_gdf,
+            clipped_lines_gdf_projected.to_crs(original_crs),
+            line_zones_gdf
+        )
+
+    except Exception as e:
+        raise RuntimeError(str(e))
 
 
 if __name__ == "__main__":
