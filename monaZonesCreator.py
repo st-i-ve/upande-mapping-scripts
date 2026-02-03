@@ -10,36 +10,69 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 import tkinter as tk
 from tkinter import ttk
+from tkinter import filedialog, messagebox, scrolledtext
+
 
 
 def get_user_inputs():
     root = tk.Tk()
     root.title("Greenhouse Bed Generator")
-    root.geometry("300x280")
-    root.resizable(False, False)
+    root.geometry("520x520")
+    root.resizable(True, True)
 
-    values = {}
+    values = {"geojson": None}
+
+    def browse_file():
+        path = filedialog.askopenfilename(
+            title="Select GeoJSON file",
+            filetypes=[("GeoJSON files", "*.geojson *.json")]
+        )
+        if path:
+            with open(path, "r") as f:
+                geojson_text.delete("1.0", tk.END)
+                geojson_text.insert(tk.END, f.read())
 
     def submit():
-        values["num_lines"] = int(num_lines_var.get())
-        values["zone_length"] = float(zone_length_var.get())
-        values["buffer_distance"] = float(buffer_distance_var.get())
-        values["bed_numbering"] = bed_numbering_var.get()
-        root.destroy()
+        try:
+            geojson_raw = geojson_text.get("1.0", tk.END).strip()
+            if not geojson_raw:
+                messagebox.showerror("Missing GeoJSON", "Paste GeoJSON or load a file.")
+                return
 
-    ttk.Label(root, text="Number of Beds").pack(pady=(10, 0))
+            values["geojson"] = json.loads(geojson_raw)
+            values["num_lines"] = int(num_lines_var.get())
+            values["zone_length"] = float(zone_length_var.get())
+            values["buffer_distance"] = float(buffer_distance_var.get())
+            values["bed_numbering"] = bed_numbering_var.get()
+            root.destroy()
+
+        except json.JSONDecodeError:
+            messagebox.showerror("Invalid GeoJSON", "Pasted text is not valid JSON.")
+        except ValueError:
+            messagebox.showerror("Invalid input", "Check numeric values.")
+
+    ttk.Label(root, text="GeoJSON (Paste or Load File)").pack(pady=(8, 0))
+
+    geojson_text = scrolledtext.ScrolledText(root, height=12, wrap=tk.NONE)
+    geojson_text.pack(fill="both", expand=True, padx=10)
+
+    ttk.Button(root, text="Load GeoJSON from File", command=browse_file).pack(pady=5)
+
+    ttk.Separator(root, orient="horizontal").pack(fill="x", pady=8)
+
+    ttk.Label(root, text="Number of Beds").pack()
     num_lines_var = tk.StringVar(value="146")
     ttk.Entry(root, textvariable=num_lines_var).pack()
 
-    ttk.Label(root, text="Zone Length (meters)").pack(pady=(10, 0))
+    ttk.Label(root, text="Zone Length (meters)").pack(pady=(6, 0))
     zone_length_var = tk.StringVar(value="4.0")
     ttk.Entry(root, textvariable=zone_length_var).pack()
 
-    ttk.Label(root, text="Buffer Distance (meters)").pack(pady=(10, 0))
+    ttk.Label(root, text="Buffer Distance (meters)").pack(pady=(6, 0))
     buffer_distance_var = tk.StringVar(value="3.0")
     ttk.Entry(root, textvariable=buffer_distance_var).pack()
 
-    ttk.Label(root, text="Bed Numbering Direction").pack(pady=(10, 0))
+    ttk.Label(root, text="Bed Numbering Direction").pack(pady=(6, 0))
     bed_numbering_var = tk.StringVar(value=bed_numbering)
     ttk.Combobox(
         root,
@@ -57,7 +90,7 @@ def get_user_inputs():
         ],
     ).pack()
 
-    ttk.Button(root, text="Run", command=submit).pack(pady=15)
+    ttk.Button(root, text="Run", command=submit).pack(pady=12)
 
     root.mainloop()
     return values
@@ -299,6 +332,7 @@ def featurecollection_from_row(row):
     }
 
 
+
 if __name__ == "__main__":
     # --- Example Usage ---
     geojson_data ={
@@ -340,9 +374,13 @@ if __name__ == "__main__":
   ]
 }
 
-    desired_num_lines = 146
-    zone_length_m = 4.0
-    buffer_distance_m = 3.0
+    inputs = get_user_inputs()
+
+    desired_num_lines = inputs["num_lines"]
+    zone_length_m = inputs["zone_length"]
+    buffer_distance_m = inputs["buffer_distance"]
+    bed_numbering = inputs["bed_numbering"]
+    geojson_data = inputs["geojson"]
     
 
     print("Loading polygon from GeoJSON data...")
