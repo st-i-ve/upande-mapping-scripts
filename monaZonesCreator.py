@@ -33,23 +33,36 @@ def get_user_inputs():
                 geojson_text.insert(tk.END, f.read())
 
     def submit():
-        try:
-            geojson_raw = geojson_text.get("1.0", tk.END).strip()
-            if not geojson_raw:
-                messagebox.showerror("Missing GeoJSON", "Paste GeoJSON or load a file.")
-                return
+            try:
+                geojson_raw = geojson_text.get("1.0", tk.END).strip()
+                if not geojson_raw:
+                    messagebox.showerror("Missing GeoJSON", "Paste GeoJSON or load a file.")
+                    return
 
-            values["geojson"] = json.loads(geojson_raw)
-            values["num_lines"] = int(num_lines_var.get())
-            values["zone_length"] = float(zone_length_var.get())
-            values["buffer_distance"] = float(buffer_distance_var.get())
-            values["bed_numbering"] = bed_numbering_var.get()
-            root.destroy()
+                geojson_data = json.loads(geojson_raw)
 
-        except json.JSONDecodeError:
-            messagebox.showerror("Invalid GeoJSON", "Pasted text is not valid JSON.")
-        except ValueError:
-            messagebox.showerror("Invalid input", "Check numeric values.")
+                desired_num_lines = int(num_lines_var.get())
+                zone_length_m = float(zone_length_var.get())
+                buffer_distance_m = float(buffer_distance_var.get())
+                bed_numbering_val = bed_numbering_var.get()
+
+                root.withdraw()  # hide UI while running
+
+                run_processing(
+                    geojson_data,
+                    desired_num_lines,
+                    zone_length_m,
+                    buffer_distance_m,
+                    bed_numbering_val
+                )
+
+                root.deiconify()  # show UI again
+
+            except json.JSONDecodeError:
+                messagebox.showerror("Invalid GeoJSON", "Pasted text is not valid JSON.")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
 
     ttk.Label(root, text="GeoJSON (Paste or Load File)").pack(pady=(8, 0))
 
@@ -413,44 +426,7 @@ def run_processing(geojson_data, desired_num_lines, zone_length_m,
 
 if __name__ == "__main__":
     # --- Example Usage ---
-    geojson_data ={
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "properties": {
-        "id": "Main GH 17 - MFL"
-      },
-      "geometry": {
-        "coordinates": [
-          [
-            [
-              35.39627438780599,
-              0.41863926646996674
-            ],
-            [
-              35.39614186734798,
-              0.4181059267455254
-            ],
-            [
-              35.39788099385737,
-              0.41768219975959653
-            ],
-            [
-              35.39799878982052,
-              0.4182139035023198
-            ],
-            [
-              35.39627438780599,
-              0.41863926646996674
-            ]
-          ]
-        ],
-        "type": "Polygon"
-      }
-    }
-  ]
-}
+    geojson_data ={"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"id": "Kapkolia GH 8"}, "geometry": {"type": "Polygon", "coordinates": [[[35.7483423, 0.0680745], [35.7472962, 0.0671437], [35.7475371, 0.066873], [35.7485832, 0.0678037], [35.7483423, 0.0680745]]]}}]}
 
     inputs = get_user_inputs()
 
