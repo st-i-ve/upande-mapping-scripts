@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Greenhouse Bed Mapper</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Turf -->
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+  <!-- Proj4 -->
+  <script src="https://unpkg.com/proj4@2.9.0/dist/proj4.js"></script>
+
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #map { height: 100vh; width: 70%; float: right; }
+    #panel {
+      width: 30%;
+      height: 100vh;
+      padding: 10px;
+      box-sizing: border-box;
+      overflow: auto;
+      background: #f5f5f5;
+    }
+    textarea { width: 100%; height: 200px; }
+    button { width: 100%; margin-top: 10px; padding: 10px; }
+    input { width: 100%; margin-top: 5px; }
+  </style>
+</head>
+
+<body>
+
+<div id="panel">
+  <h3>Greenhouse Bed Generator</h3>
+
+  <label>Paste GeoJSON</label>
+  <textarea id="geojsonInput"></textarea>
+
+  <label>Bed width (meters)</label>
+  <input id="bedWidth" type="number" value="1.2" />
+
+  <label>Section length (meters)</label>
+  <input id="sectionLength" type="number" value="5" />
+
+  <button onclick="generate()">Generate Beds</button>
+</div>
+
+<div id="map"></div>
+
+<script>
+  const map = L.map('map').setView([0.0687, 35.7484], 18);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+  let layerGroup = L.layerGroup().addTo(map);
+
+  function generate() {
+    layerGroup.clearLayers();
+
+    const geojson = JSON.parse(document.getElementById('geojsonInput').value);
+    const bedWidth = Number(document.getElementById('bedWidth').value);
+    const sectionLength = Number(document.getElementById('sectionLength').value);
+
+    const poly = geojson.features[0];
+
+    L.geoJSON(poly, { color: 'black' }).addTo(layerGroup);
+    map.fitBounds(L.geoJSON(poly).getBounds());
+
+    // --- 1. Find orientation (longest edge)
+    const coords = poly.geometry.coordinates[0];
+    let maxLen = 0, angle = 0;
+
+    for (let i = 0; i < coords.length - 1; i++) {
+      const p1 = turf.point(coords[i]);
+      const p2 = turf.point(coords[i + 1]);
+      const len = turf.distance(p1, p2, { units: 'meters' });
+
+      if (len > maxLen) {
+        maxLen = len;
+        angle = turf.bearing(p1, p2);
+      }
+    }
+
+    // --- 2. Create parallel lines
+    const bbox = turf.bbox(poly);
+    const diagonal = turf.distance(
+      turf.point([bbox[0], bbox[1]]),
+      turf.point([bbox[2], bbox[3]]),
+      { units: 'meters' }
+    );
+
+    const lines = [];
+    const steps = Math.ceil(diagonal / bedWidth);
+
+    for (let i = -steps; i <= steps; i++) {
+      const offset = i * bedWidth;
+      const base = turf.center(poly);
+      const shifted = turf.transformTranslate(base, offset, angle + 90, { units: 'meters' });
+      const line = turf.transformTranslate(
+        turf.transformRotate(
+          turf.lineString([
+            turf.destination(shifted, diagonal, angle - 180, { units: 'meters' }).geometry.coordinates,
+            turf.destination(shifted, diagonal, angle, { units: 'meters' }).geometry.coordinates
+          ]),
+          0
+        ),
+        0,
+        0
+      );
+      lines.push(line);
+    }
+
+    // --- 3. Convert to strips & clip
+    const beds = [];
+    for (let i = 0; i < lines.length - 1; i++) {
+      const strip = turf.polygon([[
+        lines[i].geometry.coordinates[0],
+        lines[i].geometry.coordinates[1],
+        lines[i + 1].geometry.coordinates[1],
+        lines[i + 1].geometry.coordinates[0],
+        lines[i].geometry.coordinates[0]
+      ]]);
+
+      const clipped = turf.intersect(strip, poly);
+      if (clipped) beds.push(clipped);
+    }
+
+    // --- 4. Split beds into sections
+    beds.forEach((bed, bedIndex) => {
+      const bedLen = turf.length(turf.polygonToLine(bed), { units: 'meters' });
+      const count = Math.floor(bedLen / sectionLength);
+
+      let current = bed;
+
+      for (let i = 0; i < count; i++) {
+        const cutLine = turf.transformTranslate(
+          turf.center(current),
+          i * sectionLength,
+          angle,
+          { units: 'meters' }
+        );
+
+        const splitter = turf.lineOffset(
+          turf.lineString([
+            turf.destination(cutLine, diagonal, angle + 90, { units: 'meters' }).geometry.coordinates,
+            turf.destination(cutLine, diagonal, angle - 90, { units: 'meters' }).geometry.coordinates
+          ]),
+          0
+        );
+
+        const split = turf.split(current, splitter);
+        if (split.features.length > 1) {
+          current = split.features[1];
+          split.features[0].properties = { bed: bedIndex, section: i };
+          L.geoJSON(split.features[0], {
+            style: { color: 'green', weight: 1, fillOpacity: 0.4 }
+          }).addTo(layerGroup);
+        }
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
