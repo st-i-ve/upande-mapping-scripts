@@ -1,167 +1,214 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Greenhouse Bed Mapper</title>
+<div class="harvest-dashboard-v2">
+    <!-- Header with filters -->
+    <div class="dashboard-header">
+        <div class="header-left">
+            <h3 class="dashboard-title">Harvest Operations</h3>
+            <span class="dashboard-subtitle">Real-time overview of stock movements</span>
+        </div>
+        <div class="header-right">
+            <div class="date-filter-group">
+                <div class="view-toggle">
+                    <button class="toggle-btn" id="hd-stems-btn" data-mode="stems">Stems</button>
+                    <button class="toggle-btn" id="hd-buckets-btn" data-mode="buckets">Buckets</button>
+                </div>
+                <div class="filter-field">
+                    <label>From</label>
+                    <input type="date" id="hd-from-date" class="filter-input" />
+                </div>
+                <div class="filter-field">
+                    <label>To</label>
+                    <input type="date" id="hd-to-date" class="filter-input" />
+                </div>
+                <button id="hd-refresh-btn" class="refresh-btn">
+                    <svg class="icon icon-sm" style="margin-right: 4px;"><use href="#icon-refresh"></use></svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </div>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Stats Cards Row -->
+    <div class="stats-grid">
+        <div class="stat-card harvesting" data-type="Harvesting">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Harvesting</div>
+                <div class="stat-value" id="hd-harvesting-count">0</div>
+                <div class="stat-unit" id="hd-harvesting-unit">stems</div>
+                <div class="stat-trend" id="hd-harvesting-trend">
+                    <span class="trend-icon"></span>
+                    <span class="trend-value">0%</span>
+                    <span class="trend-label">vs previous period</span>
+                </div>
+            </div>
+        </div>
 
-  <!-- Turf -->
-  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+        <div class="stat-card receiving" data-type="Receiving">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Receiving</div>
+                <div class="stat-value" id="hd-receiving-count">0</div>
+                <div class="stat-unit" id="hd-receiving-unit">stems</div>
+                <div class="stat-trend" id="hd-receiving-trend">
+                    <span class="trend-icon"></span>
+                    <span class="trend-value">0%</span>
+                    <span class="trend-label">vs previous period</span>
+                </div>
+            </div>
+        </div>
 
-  <!-- Proj4 -->
-  <script src="https://unpkg.com/proj4@2.9.0/dist/proj4.js"></script>
+        <div class="stat-card grading" data-type="Grading">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label">Grading</div>
+                <div class="stat-value" id="hd-grading-count">0</div>
+                <div class="stat-unit" id="hd-grading-unit">stems</div>
+                <div class="stat-trend" id="hd-grading-trend">
+                    <span class="trend-icon"></span>
+                    <span class="trend-value">0%</span>
+                    <span class="trend-label">vs previous period</span>
+                </div>
+            </div>
+        </div>
 
-  <style>
-    body { margin: 0; font-family: sans-serif; }
-    #map { height: 100vh; width: 70%; float: right; }
-    #panel {
-      width: 30%;
-      height: 100vh;
-      padding: 10px;
-      box-sizing: border-box;
-      overflow: auto;
-      background: #f5f5f5;
-    }
-    textarea { width: 100%; height: 200px; }
-    button { width: 100%; margin-top: 10px; padding: 10px; }
-    input { width: 100%; margin-top: 5px; }
-  </style>
-</head>
+        <div class="stat-card total">
+            <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"/>
+                    <line x1="12" y1="20" x2="12" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+            </div>
+            <div class="stat-content">
+                <div class="stat-label" id="hd-total-label">Total Stems</div>
+                <div class="stat-value" id="hd-total-count">0</div>
+                <div class="stat-trend neutral">
+                    <span class="trend-label">All operations combined</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
-<body>
+    <!-- Charts Row -->
+    <div class="charts-grid">
+        <div class="chart-card trend-chart">
+            <div class="chart-header">
+                <h4>Operations Trend</h4>
+                <div class="chart-legend" id="hd-trend-legend"></div>
+            </div>
+            <div class="chart-body">
+                <canvas id="hd-trend-chart"></canvas>
+            </div>
+        </div>
 
-<div id="panel">
-  <h3>Greenhouse Bed Generator</h3>
+        <div class="chart-card donut-chart">
+            <div class="chart-header">
+                <h4>Distribution</h4>
+            </div>
+            <div class="chart-body donut-container">
+                <canvas id="hd-donut-chart"></canvas>
+                <div class="donut-center">
+                    <div class="donut-total" id="hd-donut-total">0</div>
+                    <div class="donut-label" id="hd-donut-label">Stems</div>
+                </div>
+            </div>
+            <div class="donut-legend" id="hd-donut-legend"></div>
+        </div>
+    </div>
 
-  <label>Paste GeoJSON</label>
-  <textarea id="geojsonInput"></textarea>
+    <!-- Greenhouse Section -->
+    <div class="greenhouse-section">
+        <div class="chart-card greenhouse-chart">
+            <div class="chart-header">
+                <h4>Greenhouse Distribution</h4>
+                <span class="chart-subtitle">Harvest by greenhouse (click for details)</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="hd-greenhouse-chart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card greenhouse-list">
+            <div class="chart-header">
+                <h4>Greenhouse Details</h4>
+                <span class="chart-subtitle" id="hd-gh-subtitle">Select a greenhouse</span>
+            </div>
+            <div class="chart-body">
+                <div class="greenhouse-cards" id="hd-greenhouse-cards">
+                    <div class="empty-state">Loading greenhouses...</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-  <label>Bed width (meters)</label>
-  <input id="bedWidth" type="number" value="1.2" />
+    <!-- Bottom Row -->
+    <div class="bottom-grid">
+        <div class="chart-card activity-chart">
+            <div class="chart-header">
+                <h4>Today's Activity</h4>
+                <span class="chart-subtitle">Hourly distribution</span>
+            </div>
+            <div class="chart-body">
+                <canvas id="hd-activity-chart"></canvas>
+            </div>
+        </div>
 
-  <label>Section length (meters)</label>
-  <input id="sectionLength" type="number" value="5" />
+        <div class="chart-card top-items">
+            <div class="chart-header">
+                <h4>Top Varieties</h4>
+                <span class="chart-subtitle" id="hd-top-items-subtitle">By stems harvested</span>
+            </div>
+            <div class="chart-body">
+                <div class="items-list" id="hd-top-items">
+                    <div class="empty-state">No items found</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-  <button onclick="generate()">Generate Beds</button>
+    <!-- Greenhouse Detail Modal -->
+    <div class="gh-modal" id="hd-gh-modal">
+        <div class="gh-modal-content">
+            <div class="gh-modal-header">
+                <h4 id="hd-gh-modal-title">Greenhouse Details</h4>
+                <button class="gh-modal-close" id="hd-gh-modal-close">&times;</button>
+            </div>
+            <div class="gh-modal-body" id="hd-gh-modal-body">
+                <div class="gh-detail-grid">
+                    <div class="gh-detail-section">
+                        <h5>Varieties Harvested</h5>
+                        <div id="hd-gh-varieties"></div>
+                    </div>
+                    <div class="gh-detail-section">
+                        <h5>Harvester Performance</h5>
+                        <div id="hd-gh-harvesters"></div>
+                    </div>
+                </div>
+                <div class="gh-detail-section full-width">
+                    <h5>Daily Trend</h5>
+                    <canvas id="hd-gh-trend-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="hd-loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading dashboard...</div>
+    </div>
 </div>
-
-<div id="map"></div>
-
-<script>
-  const map = L.map('map').setView([0.0687, 35.7484], 18);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-  let layerGroup = L.layerGroup().addTo(map);
-
-  function generate() {
-    layerGroup.clearLayers();
-
-    const geojson = JSON.parse(document.getElementById('geojsonInput').value);
-    const bedWidth = Number(document.getElementById('bedWidth').value);
-    const sectionLength = Number(document.getElementById('sectionLength').value);
-
-    const poly = geojson.features[0];
-
-    L.geoJSON(poly, { color: 'black' }).addTo(layerGroup);
-    map.fitBounds(L.geoJSON(poly).getBounds());
-
-    // --- 1. Find orientation (longest edge)
-    const coords = poly.geometry.coordinates[0];
-    let maxLen = 0, angle = 0;
-
-    for (let i = 0; i < coords.length - 1; i++) {
-      const p1 = turf.point(coords[i]);
-      const p2 = turf.point(coords[i + 1]);
-      const len = turf.distance(p1, p2, { units: 'meters' });
-
-      if (len > maxLen) {
-        maxLen = len;
-        angle = turf.bearing(p1, p2);
-      }
-    }
-
-    // --- 2. Create parallel lines
-    const bbox = turf.bbox(poly);
-    const diagonal = turf.distance(
-      turf.point([bbox[0], bbox[1]]),
-      turf.point([bbox[2], bbox[3]]),
-      { units: 'meters' }
-    );
-
-    const lines = [];
-    const steps = Math.ceil(diagonal / bedWidth);
-
-    for (let i = -steps; i <= steps; i++) {
-      const offset = i * bedWidth;
-      const base = turf.center(poly);
-      const shifted = turf.transformTranslate(base, offset, angle + 90, { units: 'meters' });
-      const line = turf.transformTranslate(
-        turf.transformRotate(
-          turf.lineString([
-            turf.destination(shifted, diagonal, angle - 180, { units: 'meters' }).geometry.coordinates,
-            turf.destination(shifted, diagonal, angle, { units: 'meters' }).geometry.coordinates
-          ]),
-          0
-        ),
-        0,
-        0
-      );
-      lines.push(line);
-    }
-
-    // --- 3. Convert to strips & clip
-    const beds = [];
-    for (let i = 0; i < lines.length - 1; i++) {
-      const strip = turf.polygon([[
-        lines[i].geometry.coordinates[0],
-        lines[i].geometry.coordinates[1],
-        lines[i + 1].geometry.coordinates[1],
-        lines[i + 1].geometry.coordinates[0],
-        lines[i].geometry.coordinates[0]
-      ]]);
-
-      const clipped = turf.intersect(strip, poly);
-      if (clipped) beds.push(clipped);
-    }
-
-    // --- 4. Split beds into sections
-    beds.forEach((bed, bedIndex) => {
-      const bedLen = turf.length(turf.polygonToLine(bed), { units: 'meters' });
-      const count = Math.floor(bedLen / sectionLength);
-
-      let current = bed;
-
-      for (let i = 0; i < count; i++) {
-        const cutLine = turf.transformTranslate(
-          turf.center(current),
-          i * sectionLength,
-          angle,
-          { units: 'meters' }
-        );
-
-        const splitter = turf.lineOffset(
-          turf.lineString([
-            turf.destination(cutLine, diagonal, angle + 90, { units: 'meters' }).geometry.coordinates,
-            turf.destination(cutLine, diagonal, angle - 90, { units: 'meters' }).geometry.coordinates
-          ]),
-          0
-        );
-
-        const split = turf.split(current, splitter);
-        if (split.features.length > 1) {
-          current = split.features[1];
-          split.features[0].properties = { bed: bedIndex, section: i };
-          L.geoJSON(split.features[0], {
-            style: { color: 'green', weight: 1, fillOpacity: 0.4 }
-          }).addTo(layerGroup);
-        }
-      }
-    });
-  }
-</script>
-
-</body>
-</html>
