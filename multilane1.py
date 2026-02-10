@@ -1,89 +1,214 @@
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, scrolledtext, messagebox
+import json
 import numpy as np
 
 class PolygonViewer:
     def __init__(self, root):
         self.root = root
-        self.root.title("Polygon Edge Selector - Kaptumbo GH 03 - KR")
-        self.root.geometry("1200x800")
+        self.root.title("Polygon Edge Selector - GeoJSON Input")
+        self.root.geometry("1400x900")
         
-        # GeoJSON coordinates
-        self.coords = [
-            [35.7486266142804, 0.09298520732512827],
-            [35.74880627366329, 0.09244952638019299],
-            [35.749824892916195, 0.09278247269176632],
-            [35.749645233533215, 0.09332145012884041],
-            [35.7486266142804, 0.09298520732512827]
-        ]
-        
-        self.polygon_name = "Kaptumbo GH 03 - KR"
-        
-        # Edge labels based on our analysis
-        self.edge_labels = {
-            0: "Left",
-            1: "Bottom",
-            2: "Right",
-            3: "Top"
-        }
-        
-        # Current selection
+        # Initial data
+        self.coords = []
+        self.polygon_name = ""
+        self.edge_labels = {}
         self.selected_edges = set()
         
         # Create UI
         self.create_widgets()
         self.draw_polygon()
+        
+        # Pre-fill with example data
+        example_geojson = '''{ "type": "FeatureCollection", "features": [{ "type": "Feature", "properties": {"id": "Kaptumbo GH 03 - KR"}, "geometry": { "coordinates": [[[35.7486266142804,0.09298520732512827],[35.74880627366329,0.09244952638019299],[35.749824892916195,0.09278247269176632],[35.749645233533215,0.09332145012884041],[35.7486266142804,0.09298520732512827]]], "type": "Polygon" } }] }'''
+        self.geojson_text.insert('1.0', example_geojson)
     
     def create_widgets(self):
-        # Control panel frame
-        control_frame = ttk.Frame(self.root, padding="10")
-        control_frame.pack(side=tk.TOP, fill=tk.X)
+        # Main container with two panels
+        main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Left panel for input and controls
+        left_frame = ttk.Frame(main_paned, width=400)
+        main_paned.add(left_frame, weight=0)
+        
+        # Right panel for canvas
+        right_frame = ttk.Frame(main_paned)
+        main_paned.add(right_frame, weight=1)
+        
+        # === LEFT PANEL ===
         
         # Title
-        title_label = ttk.Label(control_frame, text="Edge Selection", 
-                               font=('Arial', 14, 'bold'))
-        title_label.pack(pady=5)
+        title_label = ttk.Label(left_frame, text="🗺️ GeoJSON Polygon Viewer", 
+                               font=('Arial', 16, 'bold'))
+        title_label.pack(pady=10)
         
-        # Button frame
-        button_frame = ttk.Frame(control_frame)
-        button_frame.pack(pady=10)
+        # GeoJSON input section
+        input_label = ttk.Label(left_frame, text="📄 Paste GeoJSON Here:", 
+                               font=('Arial', 12, 'bold'))
+        input_label.pack(pady=(10, 5))
         
-        # Polar Selection button (Top and Bottom)
-        polar_btn = tk.Button(button_frame, text="Polar Selection\n(Top & Bottom)",
-                             command=self.select_polar,
-                             bg='#4CAF50', fg='white', font=('Arial', 11, 'bold'),
-                             width=20, height=3, cursor='hand2')
-        polar_btn.grid(row=0, column=0, padx=10)
+        # Scrolled text widget for GeoJSON input
+        self.geojson_text = scrolledtext.ScrolledText(left_frame, 
+                                                      width=45, 
+                                                      height=12,
+                                                      wrap=tk.WORD,
+                                                      font=('Courier', 9))
+        self.geojson_text.pack(pady=5, padx=10)
         
-        # Side to Side Selection button (Left and Right)
-        side_btn = tk.Button(button_frame, text="Side to Side Selection\n(Left & Right)",
-                            command=self.select_side_to_side,
-                            bg='#2196F3', fg='white', font=('Arial', 11, 'bold'),
-                            width=20, height=3, cursor='hand2')
-        side_btn.grid(row=0, column=1, padx=10)
-        
-        # Clear Selection button
-        clear_btn = tk.Button(button_frame, text="Clear Selection",
-                             command=self.clear_selection,
-                             bg='#FF5722', fg='white', font=('Arial', 11, 'bold'),
-                             width=20, height=3, cursor='hand2')
-        clear_btn.grid(row=0, column=2, padx=10)
+        # Load button
+        load_btn = tk.Button(left_frame, text="🔄 Load & Process GeoJSON",
+                           command=self.load_geojson,
+                           bg='#9C27B0', fg='white', 
+                           font=('Arial', 11, 'bold'),
+                           cursor='hand2',
+                           pady=10)
+        load_btn.pack(pady=10, padx=10, fill=tk.X)
         
         # Status label
-        self.status_label = ttk.Label(control_frame, text="No edges selected", 
-                                     font=('Arial', 10))
+        self.status_label = ttk.Label(left_frame, text="Ready - Load GeoJSON to start", 
+                                     font=('Arial', 10),
+                                     foreground='blue')
         self.status_label.pack(pady=5)
         
-        # Canvas frame
-        canvas_frame = ttk.Frame(self.root)
-        canvas_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Separator
+        ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
+        
+        # Edge selection section
+        selection_label = ttk.Label(left_frame, text="Edge Selection:", 
+                                   font=('Arial', 12, 'bold'))
+        selection_label.pack(pady=(5, 10))
+        
+        # Polar Selection button
+        self.polar_btn = tk.Button(left_frame, text="🌐 Polar Selection\n(Top & Bottom)",
+                                  command=self.select_polar,
+                                  bg='#4CAF50', fg='white', 
+                                  font=('Arial', 11, 'bold'),
+                                  cursor='hand2',
+                                  state='disabled',
+                                  pady=15)
+        self.polar_btn.pack(pady=5, padx=10, fill=tk.X)
+        
+        # Side to Side Selection button
+        self.side_btn = tk.Button(left_frame, text="↔️ Side to Side Selection\n(Left & Right)",
+                                 command=self.select_side_to_side,
+                                 bg='#2196F3', fg='white', 
+                                 font=('Arial', 11, 'bold'),
+                                 cursor='hand2',
+                                 state='disabled',
+                                 pady=15)
+        self.side_btn.pack(pady=5, padx=10, fill=tk.X)
+        
+        # Clear Selection button
+        self.clear_btn = tk.Button(left_frame, text="🔄 Clear Selection",
+                                  command=self.clear_selection,
+                                  bg='#FF5722', fg='white', 
+                                  font=('Arial', 11, 'bold'),
+                                  cursor='hand2',
+                                  state='disabled',
+                                  pady=15)
+        self.clear_btn.pack(pady=5, padx=10, fill=tk.X)
+        
+        # Separator
+        ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
+        
+        # Polygon info section
+        info_label = ttk.Label(left_frame, text="Polygon Info:", 
+                              font=('Arial', 12, 'bold'))
+        info_label.pack(pady=(5, 5))
+        
+        # Info text widget
+        info_frame = ttk.Frame(left_frame)
+        info_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
+        
+        self.info_text = tk.Text(info_frame, 
+                                width=45, 
+                                height=10,
+                                wrap=tk.WORD,
+                                font=('Arial', 9),
+                                bg='#f9f9f9',
+                                relief=tk.FLAT,
+                                state='disabled')
+        self.info_text.pack(fill=tk.BOTH, expand=True)
+        
+        # === RIGHT PANEL ===
         
         # Create matplotlib figure
-        self.fig, self.ax = plt.subplots(figsize=(10, 8))
-        self.canvas = FigureCanvasTkAgg(self.fig, master=canvas_frame)
+        self.fig, self.ax = plt.subplots(figsize=(10, 9))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+    
+    def load_geojson(self):
+        """Load and process GeoJSON from text input"""
+        try:
+            # Get text from input
+            geojson_str = self.geojson_text.get('1.0', tk.END).strip()
+            
+            if not geojson_str:
+                messagebox.showwarning("Empty Input", "Please paste GeoJSON data first!")
+                return
+            
+            # Parse JSON
+            geojson = json.loads(geojson_str)
+            
+            # Validate structure
+            if geojson.get('type') != 'FeatureCollection':
+                raise ValueError("Invalid GeoJSON: Must be a FeatureCollection")
+            
+            if not geojson.get('features') or len(geojson['features']) == 0:
+                raise ValueError("No features found in GeoJSON")
+            
+            feature = geojson['features'][0]
+            
+            if feature.get('geometry', {}).get('type') != 'Polygon':
+                raise ValueError("First feature must be a Polygon")
+            
+            # Extract coordinates
+            self.coords = feature['geometry']['coordinates'][0]
+            self.polygon_name = feature.get('properties', {}).get('id') or \
+                               feature.get('properties', {}).get('name') or \
+                               'Unnamed Polygon'
+            
+            if len(self.coords) < 4:
+                raise ValueError("Polygon must have at least 3 vertices (4 coordinates including closing point)")
+            
+            # Calculate edge labels
+            self.calculate_edge_labels()
+            
+            # Enable buttons
+            self.polar_btn.config(state='normal')
+            self.side_btn.config(state='normal')
+            self.clear_btn.config(state='normal')
+            
+            # Clear selection
+            self.selected_edges = set()
+            
+            # Update info
+            self.update_info()
+            
+            # Draw polygon
+            self.draw_polygon()
+            
+            # Update status
+            self.status_label.config(text=f"✅ Successfully loaded: {self.polygon_name}", 
+                                    foreground='green')
+            
+        except json.JSONDecodeError as e:
+            messagebox.showerror("JSON Error", f"Invalid JSON format:\n{str(e)}")
+            self.status_label.config(text="❌ Error: Invalid JSON", foreground='red')
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load GeoJSON:\n{str(e)}")
+            self.status_label.config(text=f"❌ Error: {str(e)}", foreground='red')
+    
+    def calculate_edge_labels(self):
+        """Calculate edge labels based on position"""
+        self.edge_labels = {}
+        
+        for i in range(len(self.coords) - 1):
+            label = self.get_edge_label(self.coords[i], self.coords[i + 1])
+            self.edge_labels[i] = label
     
     def get_edge_label(self, p1, p2):
         """Determine edge position label - assigns one of: Left, Right, Top, Bottom"""
@@ -128,8 +253,35 @@ class PolygonViewer:
             else:
                 return "Left"
     
+    def update_info(self):
+        """Update the info panel with polygon details"""
+        self.info_text.config(state='normal')
+        self.info_text.delete('1.0', tk.END)
+        
+        info = f"Name: {self.polygon_name}\n"
+        info += f"Vertices: {len(self.coords) - 1}\n"
+        info += f"Edges: {len(self.coords) - 1}\n\n"
+        info += "Edge Details:\n"
+        info += "-" * 30 + "\n"
+        
+        for i in range(len(self.coords) - 1):
+            info += f"Edge {i+1}: {self.edge_labels[i]}\n"
+        
+        self.info_text.insert('1.0', info)
+        self.info_text.config(state='disabled')
+    
     def draw_polygon(self):
+        """Draw the polygon on the canvas"""
         self.ax.clear()
+        
+        if not self.coords:
+            # Show placeholder
+            self.ax.text(0.5, 0.5, 'Load GeoJSON to display polygon',
+                        ha='center', va='center', fontsize=14, color='gray')
+            self.ax.set_xlim(0, 1)
+            self.ax.set_ylim(0, 1)
+            self.canvas.draw()
+            return
         
         # Extract x and y coordinates
         x_coords = [point[0] for point in self.coords]
@@ -215,25 +367,23 @@ class PolygonViewer:
         """Select Top and Bottom edges"""
         self.selected_edges = {i for i, label in self.edge_labels.items() 
                               if label in ['Top', 'Bottom']}
-        self.update_status("Polar Selection: Top & Bottom edges highlighted")
+        self.status_label.config(text="🌐 Polar Selection: Top & Bottom edges highlighted",
+                                foreground='green')
         self.draw_polygon()
     
     def select_side_to_side(self):
         """Select Left and Right edges"""
         self.selected_edges = {i for i, label in self.edge_labels.items() 
                               if label in ['Left', 'Right']}
-        self.update_status("Side to Side Selection: Left & Right edges highlighted")
+        self.status_label.config(text="↔️ Side to Side Selection: Left & Right edges highlighted",
+                                foreground='green')
         self.draw_polygon()
     
     def clear_selection(self):
         """Clear all selections"""
         self.selected_edges = set()
-        self.update_status("No edges selected")
+        self.status_label.config(text="🔄 Selection cleared", foreground='blue')
         self.draw_polygon()
-    
-    def update_status(self, message):
-        """Update status label"""
-        self.status_label.config(text=message)
 
 def main():
     root = tk.Tk()
