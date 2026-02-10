@@ -344,7 +344,8 @@ class PolygonViewer:
             info += f"New Vertices: {len(self.slice_vertices)}\n"
             info += "-" * 30 + "\n"
             for vertex in self.slice_vertices:
-                info += f"V{vertex['number']}: {vertex['edge']} edge\n"
+                vertex_label = f"{vertex['number']}{vertex['suffix']}"
+                info += f"V{vertex_label}: {vertex['edge']} edge\n"
         
         self.info_text.insert('1.0', info)
         self.info_text.config(state='disabled')
@@ -446,13 +447,15 @@ class PolygonViewer:
             for vertex in self.slice_vertices:
                 coords = vertex['coords']
                 number = vertex['number']
+                suffix = vertex['suffix']
+                vertex_label = f"{number}{suffix}"
                 
                 # Draw vertex point
                 self.ax.plot(coords[0], coords[1], 'go', markersize=10, 
                            markeredgecolor='darkgreen', markeredgewidth=2, zorder=5)
                 
-                # Draw vertex label with number
-                self.ax.annotate(f'V{number}', (coords[0], coords[1]), 
+                # Draw vertex label with number and suffix
+                self.ax.annotate(f'V{vertex_label}', (coords[0], coords[1]), 
                                xytext=(10, 10), textcoords='offset points',
                                fontsize=11, fontweight='bold', color='darkgreen',
                                bbox=dict(boxstyle='round,pad=0.3', 
@@ -499,11 +502,10 @@ class PolygonViewer:
         if bottom_p1[0] > bottom_p2[0]:  # if p1 is to the right, swap
             bottom_p1, bottom_p2 = bottom_p2, bottom_p1
         
-        vertex_num = 1
-        
-        # Create vertices from left to right on top edge, then bottom edge
+        # Create vertices from left to right, paired (1T with 1B, 2T with 2B, etc.)
         for i in range(1, self.num_segments):
             t = i / self.num_segments
+            
             # Top edge vertex
             top_vertex = [
                 top_p1[0] + t * (top_p2[0] - top_p1[0]),
@@ -511,13 +513,11 @@ class PolygonViewer:
             ]
             self.slice_vertices.append({
                 'coords': top_vertex,
-                'number': vertex_num,
+                'number': i,
+                'suffix': 'T',
                 'edge': 'Top'
             })
-            vertex_num += 1
-        
-        for i in range(1, self.num_segments):
-            t = i / self.num_segments
+            
             # Bottom edge vertex
             bottom_vertex = [
                 bottom_p1[0] + t * (bottom_p2[0] - bottom_p1[0]),
@@ -525,10 +525,10 @@ class PolygonViewer:
             ]
             self.slice_vertices.append({
                 'coords': bottom_vertex,
-                'number': vertex_num,
+                'number': i,
+                'suffix': 'B',
                 'edge': 'Bottom'
             })
-            vertex_num += 1
         
         # Update status
         self.status_label.config(
@@ -578,11 +578,10 @@ class PolygonViewer:
         if right_p1[1] < right_p2[1]:  # if p1 is below, swap
             right_p1, right_p2 = right_p2, right_p1
         
-        vertex_num = 1
-        
-        # Create vertices from top to bottom on left edge, then right edge
+        # Create vertices from top to bottom, paired (1L with 1R, 2L with 2R, etc.)
         for i in range(1, self.num_segments):
             t = i / self.num_segments
+            
             # Left edge vertex
             left_vertex = [
                 left_p1[0] + t * (left_p2[0] - left_p1[0]),
@@ -590,13 +589,11 @@ class PolygonViewer:
             ]
             self.slice_vertices.append({
                 'coords': left_vertex,
-                'number': vertex_num,
+                'number': i,
+                'suffix': 'L',
                 'edge': 'Left'
             })
-            vertex_num += 1
-        
-        for i in range(1, self.num_segments):
-            t = i / self.num_segments
+            
             # Right edge vertex
             right_vertex = [
                 right_p1[0] + t * (right_p2[0] - right_p1[0]),
@@ -604,10 +601,10 @@ class PolygonViewer:
             ]
             self.slice_vertices.append({
                 'coords': right_vertex,
-                'number': vertex_num,
+                'number': i,
+                'suffix': 'R',
                 'edge': 'Right'
             })
-            vertex_num += 1
         
         # Update status
         self.status_label.config(
