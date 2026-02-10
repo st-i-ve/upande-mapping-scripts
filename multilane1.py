@@ -17,6 +17,11 @@ class PolygonViewer:
         self.edge_labels = {}
         self.selected_edges = set()
         
+        # Slicing data
+        self.slice_vertices = []
+        self.slice_mode = None  # 'polar' or 'side_to_side'
+        self.num_segments = 2
+        
         # Create UI
         self.create_widgets()
         self.draw_polygon()
@@ -114,6 +119,63 @@ class PolygonViewer:
         # Separator
         ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
         
+        # SECTION 2: Slicing controls
+        slicing_label = ttk.Label(left_frame, text="🍰 Section 2: Polygon Slicing", 
+                                 font=('Arial', 12, 'bold'))
+        slicing_label.pack(pady=(5, 10))
+        
+        # Number of segments control
+        segments_frame = ttk.Frame(left_frame)
+        segments_frame.pack(pady=5, padx=10, fill=tk.X)
+        
+        ttk.Label(segments_frame, text="Number of Segments:", 
+                 font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.segments_var = tk.IntVar(value=2)
+        self.segments_spinbox = ttk.Spinbox(segments_frame, 
+                                           from_=2, to=20, 
+                                           textvariable=self.segments_var,
+                                           width=10,
+                                           command=self.update_slicing,
+                                           state='disabled')
+        self.segments_spinbox.pack(side=tk.LEFT)
+        
+        # Polar Slicing button
+        self.polar_slice_btn = tk.Button(left_frame, 
+                                        text="🌐 Polar Slicing\n(Divide Top & Bottom)",
+                                        command=self.slice_polar,
+                                        bg='#8BC34A', fg='white', 
+                                        font=('Arial', 10, 'bold'),
+                                        cursor='hand2',
+                                        state='disabled',
+                                        pady=12)
+        self.polar_slice_btn.pack(pady=5, padx=10, fill=tk.X)
+        
+        # Side to Side Slicing button
+        self.side_slice_btn = tk.Button(left_frame, 
+                                       text="↔️ Side to Side Slicing\n(Divide Left & Right)",
+                                       command=self.slice_side_to_side,
+                                       bg='#03A9F4', fg='white', 
+                                       font=('Arial', 10, 'bold'),
+                                       cursor='hand2',
+                                       state='disabled',
+                                       pady=12)
+        self.side_slice_btn.pack(pady=5, padx=10, fill=tk.X)
+        
+        # Clear Slicing button
+        self.clear_slice_btn = tk.Button(left_frame, 
+                                        text="🔄 Clear Slicing",
+                                        command=self.clear_slicing,
+                                        bg='#FF9800', fg='white', 
+                                        font=('Arial', 10, 'bold'),
+                                        cursor='hand2',
+                                        state='disabled',
+                                        pady=12)
+        self.clear_slice_btn.pack(pady=5, padx=10, fill=tk.X)
+        
+        # Separator
+        ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
+        
         # Polygon info section
         info_label = ttk.Label(left_frame, text="Polygon Info:", 
                               font=('Arial', 12, 'bold'))
@@ -182,8 +244,15 @@ class PolygonViewer:
             self.side_btn.config(state='normal')
             self.clear_btn.config(state='normal')
             
-            # Clear selection
+            # Enable slicing controls
+            self.segments_spinbox.config(state='normal')
+            self.polar_slice_btn.config(state='normal')
+            self.side_slice_btn.config(state='normal')
+            self.clear_slice_btn.config(state='normal')
+            
+            # Clear selection and slicing
             self.selected_edges = set()
+            self.clear_slicing()
             
             # Update info
             self.update_info()
@@ -266,6 +335,16 @@ class PolygonViewer:
         
         for i in range(len(self.coords) - 1):
             info += f"Edge {i+1}: {self.edge_labels[i]}\n"
+        
+        # Add slicing info
+        if self.slice_vertices:
+            info += "\n" + "=" * 30 + "\n"
+            info += f"SLICING: {self.slice_mode.replace('_', ' ').title()}\n"
+            info += f"Segments: {self.num_segments}\n"
+            info += f"New Vertices: {len(self.slice_vertices)}\n"
+            info += "-" * 30 + "\n"
+            for vertex in self.slice_vertices:
+                info += f"V{vertex['number']}: {vertex['edge']} edge\n"
         
         self.info_text.insert('1.0', info)
         self.info_text.config(state='disabled')
@@ -355,13 +434,205 @@ class PolygonViewer:
         if self.selected_edges:
             selected_labels = [self.edge_labels[i] for i in sorted(self.selected_edges)]
             title += f'\nHighlighted: {", ".join(selected_labels)}'
+        if self.slice_vertices:
+            title += f'\n🍰 Slicing: {self.slice_mode.replace("_", " ").title()} - {self.num_segments} segments'
         
         self.ax.set_title(title, fontsize=14, fontweight='bold')
         self.ax.grid(True, alpha=0.3)
         self.ax.set_aspect('equal', adjustable='box')
         
+        # Draw slicing vertices if any
+        if self.slice_vertices:
+            for vertex in self.slice_vertices:
+                coords = vertex['coords']
+                number = vertex['number']
+                
+                # Draw vertex point
+                self.ax.plot(coords[0], coords[1], 'go', markersize=10, 
+                           markeredgecolor='darkgreen', markeredgewidth=2, zorder=5)
+                
+                # Draw vertex label with number
+                self.ax.annotate(f'V{number}', (coords[0], coords[1]), 
+                               xytext=(10, 10), textcoords='offset points',
+                               fontsize=11, fontweight='bold', color='darkgreen',
+                               bbox=dict(boxstyle='round,pad=0.3', 
+                                       facecolor='lightgreen', alpha=0.8))
+        
         # Refresh canvas
         self.canvas.draw()
+    
+    def slice_polar(self):
+        """Slice polygon using polar mode (divide Top and Bottom edges)"""
+        if not self.coords:
+            return
+        
+        self.slice_mode = 'polar'
+        self.num_segments = self.segments_var.get()
+        self.slice_vertices = []
+        
+        # Find Top and Bottom edges
+        top_edge_idx = None
+        bottom_edge_idx = None
+        
+        for i, label in self.edge_labels.items():
+            if label == 'Top':
+                top_edge_idx = i
+            elif label == 'Bottom':
+                bottom_edge_idx = i
+        
+        if top_edge_idx is None or bottom_edge_idx is None:
+            messagebox.showwarning("Slicing Error", "Could not find Top and Bottom edges!")
+            return
+        
+        # Get edge coordinates
+        top_p1 = self.coords[top_edge_idx]
+        top_p2 = self.coords[top_edge_idx + 1]
+        bottom_p1 = self.coords[bottom_edge_idx]
+        bottom_p2 = self.coords[bottom_edge_idx + 1]
+        
+        # Create vertices on top and bottom edges (left to right)
+        # For top edge, order from left to right
+        if top_p1[0] > top_p2[0]:  # if p1 is to the right, swap
+            top_p1, top_p2 = top_p2, top_p1
+        
+        # For bottom edge, order from left to right
+        if bottom_p1[0] > bottom_p2[0]:  # if p1 is to the right, swap
+            bottom_p1, bottom_p2 = bottom_p2, bottom_p1
+        
+        vertex_num = 1
+        
+        # Create vertices from left to right on top edge, then bottom edge
+        for i in range(1, self.num_segments):
+            t = i / self.num_segments
+            # Top edge vertex
+            top_vertex = [
+                top_p1[0] + t * (top_p2[0] - top_p1[0]),
+                top_p1[1] + t * (top_p2[1] - top_p1[1])
+            ]
+            self.slice_vertices.append({
+                'coords': top_vertex,
+                'number': vertex_num,
+                'edge': 'Top'
+            })
+            vertex_num += 1
+        
+        for i in range(1, self.num_segments):
+            t = i / self.num_segments
+            # Bottom edge vertex
+            bottom_vertex = [
+                bottom_p1[0] + t * (bottom_p2[0] - bottom_p1[0]),
+                bottom_p1[1] + t * (bottom_p2[1] - bottom_p1[1])
+            ]
+            self.slice_vertices.append({
+                'coords': bottom_vertex,
+                'number': vertex_num,
+                'edge': 'Bottom'
+            })
+            vertex_num += 1
+        
+        # Update status
+        self.status_label.config(
+            text=f"🌐 Polar Slicing: {self.num_segments} segments created ({len(self.slice_vertices)} new vertices)",
+            foreground='green'
+        )
+        
+        # Update info and redraw
+        self.update_info()
+        self.draw_polygon()
+    
+    def slice_side_to_side(self):
+        """Slice polygon using side-to-side mode (divide Left and Right edges)"""
+        if not self.coords:
+            return
+        
+        self.slice_mode = 'side_to_side'
+        self.num_segments = self.segments_var.get()
+        self.slice_vertices = []
+        
+        # Find Left and Right edges
+        left_edge_idx = None
+        right_edge_idx = None
+        
+        for i, label in self.edge_labels.items():
+            if label == 'Left':
+                left_edge_idx = i
+            elif label == 'Right':
+                right_edge_idx = i
+        
+        if left_edge_idx is None or right_edge_idx is None:
+            messagebox.showwarning("Slicing Error", "Could not find Left and Right edges!")
+            return
+        
+        # Get edge coordinates
+        left_p1 = self.coords[left_edge_idx]
+        left_p2 = self.coords[left_edge_idx + 1]
+        right_p1 = self.coords[right_edge_idx]
+        right_p2 = self.coords[right_edge_idx + 1]
+        
+        # Create vertices on left and right edges (top to bottom)
+        # For left edge, order from top to bottom
+        if left_p1[1] < left_p2[1]:  # if p1 is below, swap
+            left_p1, left_p2 = left_p2, left_p1
+        
+        # For right edge, order from top to bottom
+        if right_p1[1] < right_p2[1]:  # if p1 is below, swap
+            right_p1, right_p2 = right_p2, right_p1
+        
+        vertex_num = 1
+        
+        # Create vertices from top to bottom on left edge, then right edge
+        for i in range(1, self.num_segments):
+            t = i / self.num_segments
+            # Left edge vertex
+            left_vertex = [
+                left_p1[0] + t * (left_p2[0] - left_p1[0]),
+                left_p1[1] + t * (left_p2[1] - left_p1[1])
+            ]
+            self.slice_vertices.append({
+                'coords': left_vertex,
+                'number': vertex_num,
+                'edge': 'Left'
+            })
+            vertex_num += 1
+        
+        for i in range(1, self.num_segments):
+            t = i / self.num_segments
+            # Right edge vertex
+            right_vertex = [
+                right_p1[0] + t * (right_p2[0] - right_p1[0]),
+                right_p1[1] + t * (right_p2[1] - right_p1[1])
+            ]
+            self.slice_vertices.append({
+                'coords': right_vertex,
+                'number': vertex_num,
+                'edge': 'Right'
+            })
+            vertex_num += 1
+        
+        # Update status
+        self.status_label.config(
+            text=f"↔️ Side to Side Slicing: {self.num_segments} segments created ({len(self.slice_vertices)} new vertices)",
+            foreground='green'
+        )
+        
+        # Update info and redraw
+        self.update_info()
+        self.draw_polygon()
+    
+    def clear_slicing(self):
+        """Clear slicing vertices"""
+        self.slice_vertices = []
+        self.slice_mode = None
+        self.status_label.config(text="🔄 Slicing cleared", foreground='blue')
+        self.update_info()
+        self.draw_polygon()
+    
+    def update_slicing(self):
+        """Update slicing when segment number changes"""
+        if self.slice_mode == 'polar':
+            self.slice_polar()
+        elif self.slice_mode == 'side_to_side':
+            self.slice_side_to_side()
     
     def select_polar(self):
         """Select Top and Bottom edges"""
