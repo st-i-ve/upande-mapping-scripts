@@ -190,40 +190,6 @@ class PolygonViewer:
         # Separator
         ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
         
-        # Segment Selection Section
-        segment_select_label = ttk.Label(left_frame, text="📥 Download Individual Segment", 
-                                        font=('Arial', 12, 'bold'))
-        segment_select_label.pack(pady=(5, 10))
-        
-        # Segment selection dropdown
-        segment_select_frame = ttk.Frame(left_frame)
-        segment_select_frame.pack(pady=5, padx=10, fill=tk.X)
-        
-        ttk.Label(segment_select_frame, text="Select Segment:", 
-                 font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
-        
-        self.segment_var = tk.StringVar()
-        self.segment_dropdown = ttk.Combobox(segment_select_frame, 
-                                            textvariable=self.segment_var,
-                                            state='disabled',
-                                            width=15)
-        self.segment_dropdown.pack(side=tk.LEFT)
-        self.segment_dropdown.bind('<<ComboboxSelected>>', self.on_segment_selected)
-        
-        # Download button
-        self.download_btn = tk.Button(left_frame, 
-                                     text="💾 Download Selected Segment",
-                                     command=self.download_selected_segment,
-                                     bg='#00BCD4', fg='white', 
-                                     font=('Arial', 10, 'bold'),
-                                     cursor='hand2',
-                                     state='disabled',
-                                     pady=12)
-        self.download_btn.pack(pady=5, padx=10, fill=tk.X)
-        
-        # Separator
-        ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
-        
         # Segment info section
         info_label = ttk.Label(left_frame, text="Segment Information:", 
                               font=('Arial', 12, 'bold'))
@@ -246,9 +212,46 @@ class PolygonViewer:
         # === RIGHT PANEL ===
         
         # Create matplotlib figure
-        self.fig, self.ax = plt.subplots(figsize=(10, 9))
+        self.fig, self.ax = plt.subplots(figsize=(10, 8))
         self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        
+        # Download controls frame at bottom of right panel
+        download_frame = ttk.Frame(right_frame)
+        download_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Title for download section
+        download_title = ttk.Label(download_frame, text="📥 Download Individual Segment", 
+                                   font=('Arial', 12, 'bold'))
+        download_title.pack(pady=(0, 10))
+        
+        # Segment selection controls
+        segment_control_frame = ttk.Frame(download_frame)
+        segment_control_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(segment_control_frame, text="Select Segment:", 
+                 font=('Arial', 11)).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.segment_var = tk.StringVar()
+        self.segment_dropdown = ttk.Combobox(segment_control_frame, 
+                                            textvariable=self.segment_var,
+                                            state='disabled',
+                                            width=20,
+                                            font=('Arial', 10))
+        self.segment_dropdown.pack(side=tk.LEFT, padx=10)
+        self.segment_dropdown.bind('<<ComboboxSelected>>', self.on_segment_selected)
+        
+        # Download button
+        self.download_btn = tk.Button(segment_control_frame, 
+                                     text="💾 Download Selected Segment",
+                                     command=self.download_selected_segment,
+                                     bg='#00BCD4', fg='white', 
+                                     font=('Arial', 11, 'bold'),
+                                     cursor='hand2',
+                                     state='disabled',
+                                     padx=20,
+                                     pady=10)
+        self.download_btn.pack(side=tk.LEFT, padx=10)
     
     def load_geojson(self):
         """Load and process GeoJSON from text input"""

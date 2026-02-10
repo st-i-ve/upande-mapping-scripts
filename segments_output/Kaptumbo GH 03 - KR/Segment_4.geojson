@@ -1,0 +1,42 @@
+{
+  "type": "FeatureCollection",
+  "name": "Kaptumbo GH 03 - KR_Segment_4",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Kaptumbo GH 03 - KR_Segment_4",
+        "segment_number": 4,
+        "segment_type": "polar",
+        "vertex_pairs": "V3 to right"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              35.74957023810297,
+              0.09269923611387298
+            ],
+            [
+              35.749824892916195,
+              0.09278247269176632
+            ],
+            [
+              35.749645233533215,
+              0.09332145012884041
+            ],
+            [
+              35.74939057872001,
+              0.09323738942791238
+            ],
+            [
+              35.74957023810297,
+              0.09269923611387298
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
