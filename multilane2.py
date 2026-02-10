@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import json
 import numpy as np
+import os
 
 class PolygonViewer:
     def __init__(self, root):
@@ -22,6 +23,7 @@ class PolygonViewer:
         self.segments = []  # Store created segments
         self.slice_mode = None  # 'polar' or 'side_to_side'
         self.num_segments = 2
+        self.selected_segment = None  # Track selected segment for download
         
         # Create UI
         self.create_widgets()
@@ -174,9 +176,9 @@ class PolygonViewer:
                                         pady=12)
         self.clear_slice_btn.pack(pady=5, padx=10, fill=tk.X)
         
-        # Export Segments button
+        # Export All Segments button
         self.export_btn = tk.Button(left_frame, 
-                                   text="💾 Export Segments as GeoJSON",
+                                   text="💾 Export All Segments as GeoJSON",
                                    command=self.export_segments,
                                    bg='#607D8B', fg='white', 
                                    font=('Arial', 10, 'bold'),
@@ -184,6 +186,40 @@ class PolygonViewer:
                                    state='disabled',
                                    pady=12)
         self.export_btn.pack(pady=5, padx=10, fill=tk.X)
+        
+        # Separator
+        ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
+        
+        # Segment Selection Section
+        segment_select_label = ttk.Label(left_frame, text="📥 Download Individual Segment", 
+                                        font=('Arial', 12, 'bold'))
+        segment_select_label.pack(pady=(5, 10))
+        
+        # Segment selection dropdown
+        segment_select_frame = ttk.Frame(left_frame)
+        segment_select_frame.pack(pady=5, padx=10, fill=tk.X)
+        
+        ttk.Label(segment_select_frame, text="Select Segment:", 
+                 font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.segment_var = tk.StringVar()
+        self.segment_dropdown = ttk.Combobox(segment_select_frame, 
+                                            textvariable=self.segment_var,
+                                            state='disabled',
+                                            width=15)
+        self.segment_dropdown.pack(side=tk.LEFT)
+        self.segment_dropdown.bind('<<ComboboxSelected>>', self.on_segment_selected)
+        
+        # Download button
+        self.download_btn = tk.Button(left_frame, 
+                                     text="💾 Download Selected Segment",
+                                     command=self.download_selected_segment,
+                                     bg='#00BCD4', fg='white', 
+                                     font=('Arial', 10, 'bold'),
+                                     cursor='hand2',
+                                     state='disabled',
+                                     pady=12)
+        self.download_btn.pack(pady=5, padx=10, fill=tk.X)
         
         # Separator
         ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
@@ -199,7 +235,7 @@ class PolygonViewer:
         
         self.info_text = tk.Text(info_frame, 
                                 width=45, 
-                                height=10,
+                                height=8,
                                 wrap=tk.WORD,
                                 font=('Arial', 9),
                                 bg='#f9f9f9',
@@ -362,6 +398,14 @@ class PolygonViewer:
         self.info_text.insert('1.0', info)
         self.info_text.config(state='disabled')
     
+    def on_segment_selected(self, event):
+        """Handle segment selection from dropdown"""
+        selected = self.segment_var.get()
+        if selected:
+            # Extract segment number from "Segment 1" format
+            self.selected_segment = int(selected.split()[1]) - 1
+            self.draw_polygon()
+    
     def draw_polygon(self):
         """Draw the polygon and segments on the canvas"""
         self.ax.clear()
@@ -399,21 +443,31 @@ class PolygonViewer:
                 seg_x = [p[0] for p in seg_coords]
                 seg_y = [p[1] for p in seg_coords]
                 
+                # Check if this segment is selected
+                is_selected = (self.selected_segment == i)
+                
                 # Fill the segment
-                self.ax.fill(seg_x, seg_y, alpha=0.3, color=color)
+                alpha = 0.6 if is_selected else 0.3
+                self.ax.fill(seg_x, seg_y, alpha=alpha, color=color)
                 
                 # Draw segment outline
-                self.ax.plot(seg_x, seg_y, '-', color=color, linewidth=2)
+                linewidth = 3 if is_selected else 2
+                self.ax.plot(seg_x, seg_y, '-', color=color, linewidth=linewidth)
                 
                 # Calculate centroid for label
                 centroid_x = sum(seg_x[:-1]) / (len(seg_x) - 1)
                 centroid_y = sum(seg_y[:-1]) / (len(seg_y) - 1)
                 
                 # Add segment label
+                fontsize = 14 if is_selected else 12
+                fontweight = 'bold'
                 self.ax.annotate(f"Segment {i+1}", (centroid_x, centroid_y),
-                               fontsize=12, fontweight='bold', ha='center',
+                               fontsize=fontsize, fontweight=fontweight, ha='center',
                                bbox=dict(boxstyle='round,pad=0.5', 
-                                       facecolor='white', alpha=0.8))
+                                       facecolor='yellow' if is_selected else 'white', 
+                                       alpha=0.9 if is_selected else 0.8,
+                                       edgecolor='red' if is_selected else 'gray',
+                                       linewidth=2 if is_selected else 1))
         else:
             # If no segments, show original polygon filled
             self.ax.fill(x_coords, y_coords, alpha=0.1, color='lightgray')
@@ -475,6 +529,8 @@ class PolygonViewer:
         title = f'Polygon: {self.polygon_name}'
         if self.segments:
             title += f'\n🍰 Segments Created: {len(self.segments)} segments'
+            if self.selected_segment is not None:
+                title += f' (Selected: Segment {self.selected_segment + 1})'
         elif self.slice_vertices:
             title += f'\n✂️ Slice Points: {len(self.slice_vertices)} vertices added'
         
@@ -486,7 +542,7 @@ class PolygonViewer:
         self.canvas.draw()
     
     def create_polar_segments(self):
-        """Create segments by connecting opposite vertices in polar mode"""
+        """Create segments by connecting opposite vertices in polar mode - FIXED"""
         self.segments = []
         
         # Group vertices by their number (1T with 1B, 2T with 2B, etc.)
@@ -515,33 +571,43 @@ class PolygonViewer:
         right_p1 = self.coords[right_edge_idx]
         right_p2 = self.coords[right_edge_idx + 1]
         
-        # Order vertices from left to right
-        # Create list of all vertical boundaries
+        # CRITICAL FIX: Ensure correct ordering for left and right edges
+        # Left edge should go from bottom to top
+        if left_p1[1] > left_p2[1]:  # if p1 is above p2, swap
+            left_p1, left_p2 = left_p2, left_p1
+        
+        # Right edge should go from bottom to top
+        if right_p1[1] > right_p2[1]:  # if p1 is above p2, swap
+            right_p1, right_p2 = right_p2, right_p1
+        
+        # Create list of all vertical boundaries (left to right)
         boundaries = []
         
-        # Add left boundary
+        # Add left boundary (bottom to top)
         boundaries.append(('left', left_p1, left_p2))
         
         # Add intermediate boundaries from vertex pairs
         for num, group in sorted_groups:
             if group['T'] and group['B']:
-                boundaries.append((f'V{num}', group['T']['coords'], group['B']['coords']))
+                # Bottom to top ordering
+                boundaries.append((f'V{num}', group['B']['coords'], group['T']['coords']))
         
-        # Add right boundary
+        # Add right boundary (bottom to top)
         boundaries.append(('right', right_p1, right_p2))
         
         # Create segments between consecutive boundaries
         for i in range(len(boundaries) - 1):
-            left_name, left_top, left_bottom = boundaries[i]
-            right_name, right_top, right_bottom = boundaries[i + 1]
+            left_name, left_bottom, left_top = boundaries[i]
+            right_name, right_bottom, right_top = boundaries[i + 1]
             
-            # Create segment polygon (clockwise order)
+            # FIXED: Create segment polygon in correct order (counterclockwise)
+            # Start from bottom-left, go clockwise: bottom-left -> bottom-right -> top-right -> top-left -> close
             segment_coords = [
-                left_bottom,
-                right_bottom,
-                right_top,
-                left_top,
-                left_bottom  # Close the polygon
+                left_bottom,   # Bottom-left
+                right_bottom,  # Bottom-right
+                right_top,     # Top-right
+                left_top,      # Top-left
+                left_bottom    # Close the polygon
             ]
             
             # Create segment
@@ -554,7 +620,7 @@ class PolygonViewer:
             self.segments.append(segment)
     
     def create_side_to_side_segments(self):
-        """Create segments by connecting opposite vertices in side-to-side mode"""
+        """Create segments by connecting opposite vertices in side-to-side mode - FIXED"""
         self.segments = []
         
         # Group vertices by their number (1L with 1R, 2L with 2R, etc.)
@@ -583,19 +649,28 @@ class PolygonViewer:
         bottom_p1 = self.coords[bottom_edge_idx]
         bottom_p2 = self.coords[bottom_edge_idx + 1]
         
-        # Order vertices from top to bottom
-        # Create list of all horizontal boundaries
+        # CRITICAL FIX: Ensure correct ordering for top and bottom edges
+        # Top edge should go from left to right
+        if top_p1[0] > top_p2[0]:  # if p1 is to the right of p2, swap
+            top_p1, top_p2 = top_p2, top_p1
+        
+        # Bottom edge should go from left to right
+        if bottom_p1[0] > bottom_p2[0]:  # if p1 is to the right of p2, swap
+            bottom_p1, bottom_p2 = bottom_p2, bottom_p1
+        
+        # Create list of all horizontal boundaries (top to bottom)
         boundaries = []
         
-        # Add top boundary
+        # Add top boundary (left to right)
         boundaries.append(('top', top_p1, top_p2))
         
         # Add intermediate boundaries from vertex pairs
         for num, group in sorted_groups:
             if group['L'] and group['R']:
+                # Left to right ordering
                 boundaries.append((f'V{num}', group['L']['coords'], group['R']['coords']))
         
-        # Add bottom boundary
+        # Add bottom boundary (left to right)
         boundaries.append(('bottom', bottom_p1, bottom_p2))
         
         # Create segments between consecutive boundaries
@@ -603,13 +678,14 @@ class PolygonViewer:
             top_name, top_left, top_right = boundaries[i]
             bottom_name, bottom_left, bottom_right = boundaries[i + 1]
             
-            # Create segment polygon (clockwise order)
+            # FIXED: Create segment polygon in correct order (counterclockwise)
+            # Start from top-left, go clockwise: top-left -> top-right -> bottom-right -> bottom-left -> close
             segment_coords = [
-                top_left,
-                top_right,
-                bottom_right,
-                bottom_left,
-                top_left  # Close the polygon
+                top_left,       # Top-left
+                top_right,      # Top-right
+                bottom_right,   # Bottom-right
+                bottom_left,    # Bottom-left
+                top_left        # Close the polygon
             ]
             
             # Create segment
@@ -689,8 +765,9 @@ class PolygonViewer:
         # Create segments
         self.create_polar_segments()
         
-        # Enable export button
+        # Enable export button and segment selector
         self.export_btn.config(state='normal')
+        self.update_segment_dropdown()
         
         # Update status
         self.status_label.config(
@@ -770,8 +847,9 @@ class PolygonViewer:
         # Create segments
         self.create_side_to_side_segments()
         
-        # Enable export button
+        # Enable export button and segment selector
         self.export_btn.config(state='normal')
+        self.update_segment_dropdown()
         
         # Update status
         self.status_label.config(
@@ -783,12 +861,83 @@ class PolygonViewer:
         self.update_info()
         self.draw_polygon()
     
+    def update_segment_dropdown(self):
+        """Update the segment dropdown with available segments"""
+        if self.segments:
+            segment_names = [f"Segment {i+1}" for i in range(len(self.segments))]
+            self.segment_dropdown['values'] = segment_names
+            self.segment_dropdown.config(state='readonly')
+            self.download_btn.config(state='normal')
+        else:
+            self.segment_dropdown['values'] = []
+            self.segment_dropdown.config(state='disabled')
+            self.download_btn.config(state='disabled')
+            self.selected_segment = None
+    
+    def download_selected_segment(self):
+        """Download the selected segment as GeoJSON to segments_output folder"""
+        if self.selected_segment is None:
+            messagebox.showwarning("No Selection", "Please select a segment first!")
+            return
+        
+        try:
+            segment = self.segments[self.selected_segment]
+            segment_number = self.selected_segment + 1
+            
+            # Create output directory structure
+            base_dir = "segments_output"
+            polygon_dir = os.path.join(base_dir, self.polygon_name)
+            
+            # Create directories if they don't exist
+            os.makedirs(polygon_dir, exist_ok=True)
+            
+            # Create GeoJSON for this segment
+            feature = {
+                "type": "Feature",
+                "properties": {
+                    "id": f"{self.polygon_name}_Segment_{segment_number}",
+                    "segment_number": segment_number,
+                    "segment_type": segment['type'],
+                    "vertex_pairs": segment.get('vertex_pairs', '')
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [segment['coordinates']]
+                }
+            }
+            
+            geojson = {
+                "type": "FeatureCollection",
+                "name": f"{self.polygon_name}_Segment_{segment_number}",
+                "features": [feature]
+            }
+            
+            # Save to file
+            filename = f"Segment_{segment_number}.geojson"
+            filepath = os.path.join(polygon_dir, filename)
+            
+            with open(filepath, 'w') as f:
+                json.dump(geojson, f, indent=2)
+            
+            messagebox.showinfo("Download Success", 
+                              f"Segment {segment_number} saved to:\n{filepath}")
+            
+            self.status_label.config(
+                text=f"✅ Downloaded Segment {segment_number} to {filepath}",
+                foreground='green'
+            )
+            
+        except Exception as e:
+            messagebox.showerror("Download Error", f"Failed to download segment:\n{str(e)}")
+    
     def clear_slicing(self):
         """Clear slicing vertices and segments"""
         self.slice_vertices = []
         self.segments = []
         self.slice_mode = None
+        self.selected_segment = None
         self.export_btn.config(state='disabled')
+        self.update_segment_dropdown()
         self.status_label.config(text="🔄 Segments cleared", foreground='blue')
         self.update_info()
         self.draw_polygon()
@@ -801,7 +950,7 @@ class PolygonViewer:
             self.slice_side_to_side()
     
     def export_segments(self):
-        """Export segments as GeoJSON"""
+        """Export all segments as GeoJSON"""
         if not self.segments:
             messagebox.showwarning("No Segments", "No segments to export!")
             return
