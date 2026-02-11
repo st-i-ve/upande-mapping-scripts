@@ -94,17 +94,20 @@ class GreenhouseSegmentBedGenerator:
         # Separator
         ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
         
-        # === CONFIGURATION SECTION ===
-        config_label = ttk.Label(left_frame, text="⚙️ Bed Configuration", 
-                                font=('Arial', 12, 'bold'))
-        config_label.pack(pady=(5, 10))
+        # === STEP 1: SEGMENT CONFIGURATION ===
+        segment_config_label = ttk.Label(left_frame, text="📐 Step 1: Create Segments", 
+                                        font=('Arial', 12, 'bold'))
+        segment_config_label.pack(pady=(5, 10))
         
-        # Total number of beds
-        beds_frame = ttk.Frame(left_frame)
-        beds_frame.pack(pady=5, padx=10, fill=tk.X)
-        ttk.Label(beds_frame, text="Total Beds:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
-        self.total_beds_var = tk.IntVar(value=144)
-        ttk.Spinbox(beds_frame, from_=1, to=1000, textvariable=self.total_beds_var, width=10).pack(side=tk.LEFT)
+        # Segment splitting type
+        split_type_frame = ttk.Frame(left_frame)
+        split_type_frame.pack(pady=5, padx=10, fill=tk.X)
+        ttk.Label(split_type_frame, text="Splitting Type:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
+        self.split_type_var = tk.StringVar(value="side_to_side")
+        split_combo = ttk.Combobox(split_type_frame, textvariable=self.split_type_var,
+                                   state='readonly', width=18,
+                                   values=["side_to_side", "polar"])
+        split_combo.pack(side=tk.LEFT)
         
         # Number of segments
         segments_frame = ttk.Frame(left_frame)
@@ -113,40 +116,72 @@ class GreenhouseSegmentBedGenerator:
         self.num_segments_var = tk.IntVar(value=2)
         ttk.Spinbox(segments_frame, from_=2, to=10, textvariable=self.num_segments_var, width=10).pack(side=tk.LEFT)
         
+        # Create segments button
+        self.create_segments_btn = tk.Button(left_frame, 
+                                            text="✂️ Create Segments",
+                                            command=self.create_segments_display,
+                                            bg='#9C27B0', fg='white', 
+                                            font=('Arial', 11, 'bold'),
+                                            cursor='hand2',
+                                            state='disabled',
+                                            pady=12)
+        self.create_segments_btn.pack(pady=10, padx=10, fill=tk.X)
+        
+        # Separator
+        ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
+        
+        # === STEP 2: BED CONFIGURATION ===
+        bed_config_label = ttk.Label(left_frame, text="🌿 Step 2: Configure Beds", 
+                                     font=('Arial', 12, 'bold'))
+        bed_config_label.pack(pady=(5, 10))
+        
+        # Total number of beds
+        beds_frame = ttk.Frame(left_frame)
+        beds_frame.pack(pady=5, padx=10, fill=tk.X)
+        ttk.Label(beds_frame, text="Total Beds:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
+        self.total_beds_var = tk.IntVar(value=144)
+        self.beds_spinbox = ttk.Spinbox(beds_frame, from_=1, to=1000, textvariable=self.total_beds_var, 
+                   width=10, state='disabled')
+        self.beds_spinbox.pack(side=tk.LEFT)
+        
         # Zone length
         zone_frame = ttk.Frame(left_frame)
         zone_frame.pack(pady=5, padx=10, fill=tk.X)
         ttk.Label(zone_frame, text="Zone Length (m):", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
         self.zone_length_var = tk.DoubleVar(value=4.0)
-        ttk.Entry(zone_frame, textvariable=self.zone_length_var, width=10).pack(side=tk.LEFT)
+        self.zone_entry = ttk.Entry(zone_frame, textvariable=self.zone_length_var, 
+                                    width=10, state='disabled')
+        self.zone_entry.pack(side=tk.LEFT)
         
         # Buffer distance
         buffer_frame = ttk.Frame(left_frame)
         buffer_frame.pack(pady=5, padx=10, fill=tk.X)
         ttk.Label(buffer_frame, text="Buffer Distance (m):", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
         self.buffer_var = tk.DoubleVar(value=3.0)
-        ttk.Entry(buffer_frame, textvariable=self.buffer_var, width=10).pack(side=tk.LEFT)
+        self.buffer_entry = ttk.Entry(buffer_frame, textvariable=self.buffer_var, 
+                                      width=10, state='disabled')
+        self.buffer_entry.pack(side=tk.LEFT)
         
         # Bed direction
         direction_frame = ttk.Frame(left_frame)
         direction_frame.pack(pady=5, padx=10, fill=tk.X)
         ttk.Label(direction_frame, text="Bed Direction:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
         self.direction_var = tk.StringVar(value="left_to_right")
-        direction_combo = ttk.Combobox(direction_frame, textvariable=self.direction_var,
-                                      state='readonly', width=15,
-                                      values=["left_to_right", "right_to_left", 
-                                             "bottom_to_top", "top_to_bottom"])
-        direction_combo.pack(side=tk.LEFT)
+        self.direction_combo = ttk.Combobox(direction_frame, textvariable=self.direction_var,
+                                           state='disabled', width=15,
+                                           values=["left_to_right", "right_to_left", 
+                                                  "bottom_to_top", "top_to_bottom"])
+        self.direction_combo.pack(side=tk.LEFT)
         
         # Starting segment
         start_seg_frame = ttk.Frame(left_frame)
         start_seg_frame.pack(pady=5, padx=10, fill=tk.X)
         ttk.Label(start_seg_frame, text="Starting Segment:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 10))
         self.start_segment_var = tk.StringVar(value="First (1)")
-        start_combo = ttk.Combobox(start_seg_frame, textvariable=self.start_segment_var,
-                                   state='readonly', width=15,
-                                   values=["First (1)", "Last"])
-        start_combo.pack(side=tk.LEFT)
+        self.start_combo = ttk.Combobox(start_seg_frame, textvariable=self.start_segment_var,
+                                       state='disabled', width=15,
+                                       values=["First (1)", "Last"])
+        self.start_combo.pack(side=tk.LEFT)
         
         # Separator
         ttk.Separator(left_frame, orient='horizontal').pack(fill='x', pady=10)
@@ -231,8 +266,8 @@ class GreenhouseSegmentBedGenerator:
             # Calculate edge labels
             self.calculate_edge_labels()
             
-            # Enable process button
-            self.process_btn.config(state='normal')
+            # Enable segment creation button
+            self.create_segments_btn.config(state='normal')
             
             # Clear previous results
             self.bed_lines_gdf = None
@@ -293,15 +328,51 @@ class GreenhouseSegmentBedGenerator:
         else:
             return "Right" if x_rel > 0.5 else "Left"
     
+    def create_segments_display(self):
+        """Create and display segments - Step 1"""
+        try:
+            split_type = self.split_type_var.get()
+            num_segments = self.num_segments_var.get()
+            
+            # Create segments based on split type
+            if split_type == "side_to_side":
+                self.segments = self.create_side_to_side_segments(num_segments)
+            else:  # polar
+                self.segments = self.create_polar_segments(num_segments)
+            
+            # Enable bed configuration controls
+            self.total_beds_var.set(144)  # Reset to default
+            self.process_btn.config(state='normal')
+            
+            # Enable all bed config widgets
+            self.beds_spinbox.config(state='normal')
+            self.zone_entry.config(state='normal')
+            self.buffer_entry.config(state='normal')
+            self.direction_combo.config(state='readonly')
+            self.start_combo.config(state='readonly')
+            
+            # Update display
+            self.update_info()
+            self.draw_polygon()
+            
+            self.status_label.config(
+                text=f"✅ Created {len(self.segments)} {split_type} segments - Now configure beds",
+                foreground='green'
+            )
+            
+        except Exception as e:
+            messagebox.showerror("Segment Error", f"Failed to create segments:\n{str(e)}")
+            self.status_label.config(text=f"❌ Error: {str(e)}", foreground='red')
+    
     def create_segments(self):
-        """Create segments based on bed direction"""
-        direction = self.direction_var.get()
+        """Create segments based on bed direction (kept for compatibility)"""
+        split_type = self.split_type_var.get()
         num_segments = self.num_segments_var.get()
         
-        # Determine slicing mode from direction
-        if direction in ["left_to_right", "right_to_left"]:
+        # Use split type instead of bed direction
+        if split_type == "side_to_side":
             return self.create_side_to_side_segments(num_segments)
-        else:  # bottom_to_top or top_to_bottom
+        else:  # polar
             return self.create_polar_segments(num_segments)
     
     def create_polar_segments(self, num_segments):
@@ -471,11 +542,16 @@ class GreenhouseSegmentBedGenerator:
         return segments
     
     def process_beds(self):
-        """Main processing function - generates beds with winding pattern"""
+        """Main processing function - generates beds with winding pattern in existing segments"""
         try:
+            # Check if segments exist
+            if not self.segments:
+                messagebox.showwarning("No Segments", "Please create segments first!")
+                return
+            
             # Get parameters
             total_beds = self.total_beds_var.get()
-            num_segments = self.num_segments_var.get()
+            num_segments = len(self.segments)
             zone_length = self.zone_length_var.get()
             buffer_dist = self.buffer_var.get()
             direction = self.direction_var.get()
@@ -488,9 +564,6 @@ class GreenhouseSegmentBedGenerator:
                 return
             
             beds_per_segment = total_beds // num_segments
-            
-            # Create segments
-            self.segments = self.create_segments()
             
             # Determine starting segment
             if "First" in start_segment_str:
