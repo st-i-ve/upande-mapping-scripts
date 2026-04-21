@@ -5,14 +5,201 @@ const map = L.map("map", { zoomControl: true }).setView([0.0686, 35.7480], 16);
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 22,
   attribution: "&copy; OpenStreetMap",
-}).addTo(map);
+});
 
-const satellite = L.tileLayer(
+const esriSat = L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   { maxZoom: 22, attribution: "Esri World Imagery" },
 );
-L.control.layers({ OSM: osm, Satellite: satellite }, null,
-  { position: "topleft", collapsed: true }).addTo(map);
+
+const esriClarity = L.tileLayer(
+  "https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 22, attribution: "Esri Clarity (World Imagery)" },
+);
+
+const googleSat = L.tileLayer(
+  "https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+  { maxZoom: 22, subdomains: ["0", "1", "2", "3"], attribution: "&copy; Google" },
+).addTo(map);
+
+const googleHybrid = L.tileLayer(
+  "https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+  { maxZoom: 22, subdomains: ["0", "1", "2", "3"], attribution: "&copy; Google" },
+);
+
+const googleTerrain = L.tileLayer(
+  "https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
+  { maxZoom: 22, subdomains: ["0", "1", "2", "3"], attribution: "&copy; Google" },
+);
+
+const googleRoad = L.tileLayer(
+  "https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+  { maxZoom: 22, subdomains: ["0", "1", "2", "3"], attribution: "&copy; Google" },
+);
+
+const yandexSat = L.tileLayer(
+  "https://sat0{s}.maps.yandex.net/tiles?l=sat&v=3.456.0&x={x}&y={y}&z={z}",
+  { maxZoom: 19, subdomains: ["1", "2", "3", "4"], attribution: "&copy; Yandex" },
+);
+
+const esriTopo = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, attribution: "Esri World Topo" },
+);
+
+const esriStreet = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+  { maxZoom: 19, attribution: "Esri World Street" },
+);
+
+const openTopo = L.tileLayer(
+  "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+  { maxZoom: 17, attribution: "&copy; OpenTopoMap (CC-BY-SA)" },
+);
+
+const osmHot = L.tileLayer(
+  "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png",
+  { maxZoom: 20, attribution: "&copy; OSM HOT" },
+);
+
+const cartoLight = L.tileLayer(
+  "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+  { maxZoom: 20, subdomains: "abcd", attribution: "&copy; CARTO" },
+);
+
+const cartoDark = L.tileLayer(
+  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  { maxZoom: 20, subdomains: "abcd", attribution: "&copy; CARTO" },
+);
+
+// Bing Aerial — custom layer using quadkey tile addressing.
+const BingAerial = L.TileLayer.extend({
+  getTileUrl: function (coords) {
+    let q = "";
+    for (let i = coords.z; i > 0; i--) {
+      let d = 0;
+      const mask = 1 << (i - 1);
+      if ((coords.x & mask) !== 0) d++;
+      if ((coords.y & mask) !== 0) d += 2;
+      q += d;
+    }
+    const sub = this._getSubdomain(coords);
+    return `https://ecn.t${sub}.tiles.virtualearth.net/tiles/a${q}.jpeg?g=1`;
+  },
+});
+const bingAerial = new BingAerial("", {
+  maxZoom: 21,
+  subdomains: ["0", "1", "2", "3"],
+  attribution: "&copy; Microsoft Bing",
+});
+
+// NASA GIBS — MODIS/VIIRS true-color imagery from yesterday (literally latest pass).
+// Low resolution (max zoom 9) — regional/cloud context only.
+const gibsDate = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+const nasaViirs = L.tileLayer(
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
+  { maxZoom: 9, attribution: `NASA GIBS VIIRS ${gibsDate}` },
+);
+
+// Optional layers driven by API keys stored in localStorage.
+const mapboxKey = localStorage.getItem("mapboxKey") || "";
+const maptilerKey = localStorage.getItem("maptilerKey") || "";
+const stadiaKey = localStorage.getItem("stadiaKey") || "";
+
+const keyedLayers = {};
+if (mapboxKey) {
+  keyedLayers["Mapbox Satellite"] = L.tileLayer(
+    `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${mapboxKey}`,
+    { maxZoom: 22, tileSize: 512, zoomOffset: -1, attribution: "&copy; Mapbox" },
+  );
+  keyedLayers["Mapbox Satellite Streets"] = L.tileLayer(
+    `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxKey}`,
+    { maxZoom: 22, tileSize: 512, zoomOffset: -1, attribution: "&copy; Mapbox" },
+  );
+}
+if (maptilerKey) {
+  keyedLayers["MapTiler Satellite"] = L.tileLayer(
+    `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${maptilerKey}`,
+    { maxZoom: 22, attribution: "&copy; MapTiler" },
+  );
+  keyedLayers["MapTiler Hybrid"] = L.tileLayer(
+    `https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=${maptilerKey}`,
+    { maxZoom: 22, attribution: "&copy; MapTiler" },
+  );
+}
+if (stadiaKey) {
+  keyedLayers["Stadia Alidade Satellite"] = L.tileLayer(
+    `https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=${stadiaKey}`,
+    { maxZoom: 20, attribution: "&copy; Stadia Maps" },
+  );
+  keyedLayers["Stadia Outdoors"] = L.tileLayer(
+    `https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=${stadiaKey}`,
+    { maxZoom: 20, attribution: "&copy; Stadia Maps" },
+  );
+}
+
+const layerControl = L.control.layers(
+  {
+    "Google Satellite (latest)": googleSat,
+    "Google Hybrid": googleHybrid,
+    "Google Terrain": googleTerrain,
+    "Google Road": googleRoad,
+    "Yandex Satellite": yandexSat,
+    "Bing Aerial": bingAerial,
+    "Esri Clarity": esriClarity,
+    "Esri World Imagery": esriSat,
+    "Esri World Topo": esriTopo,
+    "Esri World Street": esriStreet,
+    "OpenTopoMap": openTopo,
+    "OSM Humanitarian": osmHot,
+    "Carto Light": cartoLight,
+    "Carto Dark": cartoDark,
+    [`NASA VIIRS (${gibsDate})`]: nasaViirs,
+    OSM: osm,
+    ...keyedLayers,
+  },
+  null,
+  { position: "topleft", collapsed: true },
+).addTo(map);
+
+// Esri Wayback — pick the freshest available release for any AOI. Fetched async.
+fetch("https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json")
+  .then((r) => r.json())
+  .then((cfg) => {
+    const releases = Object.keys(cfg)
+      .map(Number)
+      .sort((a, b) => b - a);
+    const latest = cfg[releases[0]];
+    const url = latest.itemURL
+      .replace("{level}", "{z}")
+      .replace("{row}", "{y}")
+      .replace("{col}", "{x}");
+    const waybackLayer = L.tileLayer(url, {
+      maxZoom: 22,
+      attribution: `Esri Wayback ${latest.itemReleaseName}`,
+    });
+    layerControl.addBaseLayer(waybackLayer, `Esri Wayback (${latest.itemReleaseName})`);
+  })
+  .catch(() => {
+    /* non-fatal — layer just won't appear */
+  });
+
+// API-key settings UI.
+for (const id of ["mapboxKey", "maptilerKey", "stadiaKey"]) {
+  const el = document.getElementById(id);
+  if (el) el.value = localStorage.getItem(id) || "";
+}
+const saveKeysBtn = document.getElementById("saveKeys");
+if (saveKeysBtn) {
+  saveKeysBtn.addEventListener("click", () => {
+    for (const id of ["mapboxKey", "maptilerKey", "stadiaKey"]) {
+      const v = (document.getElementById(id).value || "").trim();
+      if (v) localStorage.setItem(id, v);
+      else localStorage.removeItem(id);
+    }
+    location.reload();
+  });
+}
 
 const drawn = new L.FeatureGroup().addTo(map);
 const drawControl = new L.Control.Draw({

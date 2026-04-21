@@ -51,6 +51,15 @@
         <button id="refreshOutputs" class="secondary">Refresh</button>
         <ul id="outputs" class="outputs"></ul>
       </section>
+
+      <section>
+        <h2>5. Basemap API keys</h2>
+        <p class="hint">Saved in this browser only (localStorage). Leave blank to hide that layer.</p>
+        <label>Mapbox token <input id="mapboxKey" type="text" placeholder="pk.ey..." /></label>
+        <label>MapTiler key <input id="maptilerKey" type="text" placeholder="abc123..." /></label>
+        <label>Stadia key <input id="stadiaKey" type="text" placeholder="xxxx-xxxx-xxxx" /></label>
+        <button id="saveKeys" class="secondary">Save &amp; reload</button>
+      </section>
     </aside>
 
     <div id="map"></div>
