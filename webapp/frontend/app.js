@@ -378,8 +378,9 @@ loadOutputs();
 const gridLayer = L.layerGroup().addTo(map);
 
 let gridOrigin = null;       // {lat, lon} — SW corner of the source rectangle
-let gridSpanM = null;        // {w, h}     — rectangle size in metres
+let gridSpanM = null;        // {w, h}     — source rectangle size in metres
 let gridLocalPoints = [];    // [{row, col, x_m, y_m}] — unrotated local frame
+let gridAnchor = { x_m: 0, y_m: 0 }; // where R1·T1 lives; pinned on flow change
 let gridRotationDeg = 0;
 let gridPivotMode = "center";
 let gridPivotLocal = null;   // set when user clicks a point in "custom" mode
@@ -395,16 +396,30 @@ function metresToLatLon(x, y, lat0, lon0) {
   return { lat: lat0 + y / EARTH_M_PER_DEG_LAT, lon: lon0 + x / mPerDegLon(lat0) };
 }
 
+function gridExtents() {
+  if (!gridLocalPoints.length) return null;
+  let minX = +Infinity, maxX = -Infinity, minY = +Infinity, maxY = -Infinity;
+  for (const p of gridLocalPoints) {
+    if (p.x_m < minX) minX = p.x_m;
+    if (p.x_m > maxX) maxX = p.x_m;
+    if (p.y_m < minY) minY = p.y_m;
+    if (p.y_m > maxY) maxY = p.y_m;
+  }
+  return { minX, maxX, minY, maxY };
+}
+
 function pivotLocal() {
-  if (!gridSpanM) return null;
-  const { w, h } = gridSpanM;
+  const ex = gridExtents();
+  if (!ex) return null;
+  const { minX, maxX, minY, maxY } = ex;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
   switch (gridPivotMode) {
-    case "sw": return { x_m: 0,     y_m: 0     };
-    case "nw": return { x_m: 0,     y_m: h     };
-    case "ne": return { x_m: w,     y_m: h     };
-    case "se": return { x_m: w,     y_m: 0     };
-    case "custom": return gridPivotLocal ?? { x_m: w / 2, y_m: h / 2 };
-    default:   return { x_m: w / 2, y_m: h / 2 };
+    case "sw": return { x_m: minX, y_m: minY };
+    case "nw": return { x_m: minX, y_m: maxY };
+    case "ne": return { x_m: maxX, y_m: maxY };
+    case "se": return { x_m: maxX, y_m: minY };
+    case "custom": return gridPivotLocal ?? { x_m: cx, y_m: cy };
+    default:   return { x_m: cx, y_m: cy };
   }
 }
 
@@ -440,13 +455,15 @@ function renderPivotMarker() {
   pivotMarker.bindTooltip("Drag to move the grid · rotation pivot");
 
   // Drag: translate the whole grid by shifting gridOrigin so the pivot's
-  // local coord still maps to the marker's new world position.
+  // local coord still maps to the marker's new world position. The rotation
+  // handle moves with the pivot because it's offset from it.
   pivotMarker.on("drag", (e) => {
     const ll = e.target.getLatLng();
     const pvl = pivotLocal();
     gridOrigin.lat = ll.lat - pvl.y_m / EARTH_M_PER_DEG_LAT;
     gridOrigin.lon = ll.lng - pvl.x_m / mPerDegLon(gridOrigin.lat);
     renderGridDots();
+    updateRotationHandlePosition();
   });
 
   gridLayer.addLayer(pivotMarker);
@@ -471,17 +488,29 @@ function renderGridDots() {
       fillColor: "#0f6fd1",
       fillOpacity: 0.85,
       weight: 1,
+      // Stop clicks / dblclicks from also firing on the map (which would
+      // otherwise dblclick-zoom or re-fire the pivot click handler).
+      bubblingMouseEvents: false,
     });
     m.bindTooltip(`R${p.row}·T${p.col}`, { direction: "top" });
-    m.on("click", (e) => {
+    m.on("click", () => {
       if (!awaitingPivotClick) return;
-      L.DomEvent.stopPropagation(e);
       gridPivotLocal = { x_m: p.x_m, y_m: p.y_m };
       gridPivotMode = "custom";
       document.getElementById("gridPivot").value = "custom";
       awaitingPivotClick = false;
       document.getElementById("gridSummary").textContent =
         `Pivot set to R${p.row}·T${p.col}. Adjust rotation to see the effect.`;
+      renderGrid();
+    });
+    m.on("dblclick", () => {
+      // Double-click always sets the pivot, regardless of current mode.
+      gridPivotLocal = { x_m: p.x_m, y_m: p.y_m };
+      gridPivotMode = "custom";
+      document.getElementById("gridPivot").value = "custom";
+      awaitingPivotClick = false;
+      document.getElementById("gridSummary").textContent =
+        `Pivot set to R${p.row}·T${p.col} (double-click).`;
       renderGrid();
     });
     gridLayer.addLayer(m);
@@ -495,8 +524,60 @@ function renderGridDots() {
   }
 }
 
+// ---- Rotation gizmo -----------------------------------------------------
+let rotationHandleMarker = null;
+const ROT_HANDLE_OFFSET_M = 12; // metres from pivot; tweak for feel
+
+const ROT_HANDLE_ICON = L.divIcon({
+  className: "",
+  html:
+    '<div style="width:14px;height:14px;background:#10b981;' +
+    "border:2px solid #fff;border-radius:50%;" +
+    'box-shadow:0 0 0 1px #10b981;cursor:grab;"></div>',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+function rotationHandleLatLon() {
+  if (!gridOrigin) return null;
+  const pv = pivotLocal();
+  if (!pv) return null;
+  const theta = (gridRotationDeg * Math.PI) / 180;
+  const hx = pv.x_m + ROT_HANDLE_OFFSET_M * Math.cos(theta);
+  const hy = pv.y_m + ROT_HANDLE_OFFSET_M * Math.sin(theta);
+  return metresToLatLon(hx, hy, gridOrigin.lat, gridOrigin.lon);
+}
+
+function updateRotationHandlePosition() {
+  if (!rotationHandleMarker) return;
+  const ll = rotationHandleLatLon();
+  if (ll) rotationHandleMarker.setLatLng([ll.lat, ll.lon]);
+}
+
+function renderRotationHandle() {
+  if (rotationHandleMarker) {
+    gridLayer.removeLayer(rotationHandleMarker);
+    rotationHandleMarker = null;
+  }
+  if (!gridOrigin) return;
+  const ll = rotationHandleLatLon();
+  rotationHandleMarker = L.marker([ll.lat, ll.lon], {
+    draggable: false,
+    icon: ROT_HANDLE_ICON,
+    bubblingMouseEvents: false,
+  });
+  rotationHandleMarker.bindTooltip("Drag to rotate");
+  rotationHandleMarker.on("mousedown", (e) => {
+    // Start a rotation drag re-using the Shift-drag machinery below.
+    L.DomEvent.stopPropagation(e.originalEvent ?? e);
+    beginRotateDrag(e.latlng);
+  });
+  gridLayer.addLayer(rotationHandleMarker);
+}
+
 function renderGrid() {
   renderPivotMarker();
+  renderRotationHandle();
   renderGridDots();
 }
 
@@ -513,6 +594,115 @@ map.on("click", (e) => {
   renderGrid();
 });
 
+// Rotation drag — triggered either by Shift-drag anywhere on the map OR by
+// mousedown on the green rotation gizmo. Shared state + helpers below.
+const rotateDrag = { active: false, startAngle: 0, startRotation: 0 };
+
+function angleFromPivot(latLng) {
+  if (!gridOrigin) return 0;
+  const pvl = pivotLocal();
+  const pivotLL = metresToLatLon(pvl.x_m, pvl.y_m, gridOrigin.lat, gridOrigin.lon);
+  const { x, y } = latLonToMetres(latLng.lat, latLng.lng, pivotLL.lat, pivotLL.lon);
+  return Math.atan2(y, x); // radians, CCW from east
+}
+
+function beginRotateDrag(startLatLng) {
+  if (!gridOrigin || !gridLocalPoints.length) return;
+  rotateDrag.active = true;
+  rotateDrag.startAngle = angleFromPivot(startLatLng);
+  rotateDrag.startRotation = gridRotationDeg;
+  map.dragging.disable();
+  L.DomUtil.addClass(map.getContainer(), "grid-rotating");
+  // Let mousemove events fly through the handle so we keep rotating even
+  // when the cursor is on top of it.
+  const el = rotationHandleMarker && rotationHandleMarker.getElement();
+  if (el) el.style.pointerEvents = "none";
+}
+
+function endRotateDrag() {
+  if (!rotateDrag.active) return;
+  rotateDrag.active = false;
+  map.dragging.enable();
+  L.DomUtil.removeClass(map.getContainer(), "grid-rotating");
+  const el = rotationHandleMarker && rotationHandleMarker.getElement();
+  if (el) el.style.pointerEvents = "";
+  renderGrid();
+}
+
+map.on("mousedown", (e) => {
+  const o = e.originalEvent;
+  if (!(o.shiftKey || o.ctrlKey || o.metaKey)) return;
+  beginRotateDrag(e.latlng);
+});
+
+map.on("mousemove", (e) => {
+  if (!rotateDrag.active) return;
+  const delta = angleFromPivot(e.latlng) - rotateDrag.startAngle;
+  gridRotationDeg = rotateDrag.startRotation + (delta * 180) / Math.PI;
+  document.getElementById("gridRotation").value = gridRotationDeg.toFixed(1);
+  updateRotationHandlePosition();
+  renderGridDots();
+});
+
+map.on("mouseup", endRotateDrag);
+window.addEventListener("mouseup", endRotateDrag);
+
+function rebuildGridPoints() {
+  if (!gridOrigin || !gridSpanM) return;
+
+  const tree = parseFloat(document.getElementById("treeSpacing").value);
+  const row = parseFloat(document.getElementById("rowSpacing").value);
+  const axis = document.getElementById("majorEdge").value; // "EW" or "NS"
+  if (!(tree > 0 && row > 0)) return;
+
+  const rowsEl = document.getElementById("gridRows");
+  const colsEl = document.getElementById("gridCols");
+  const rowsIn = parseInt(rowsEl.value, 10);
+  const colsIn = parseInt(colsEl.value, 10);
+
+  // Auto-size from the source rectangle when the input is empty.
+  let nRows, nTrees;
+  if (axis === "EW") {
+    nTrees = Number.isFinite(colsIn) && colsIn > 0 ? colsIn : Math.floor(gridSpanM.w / tree) + 1;
+    nRows  = Number.isFinite(rowsIn) && rowsIn > 0 ? rowsIn : Math.floor(gridSpanM.h / row)  + 1;
+  } else {
+    nTrees = Number.isFinite(colsIn) && colsIn > 0 ? colsIn : Math.floor(gridSpanM.h / tree) + 1;
+    nRows  = Number.isFinite(rowsIn) && rowsIn > 0 ? rowsIn : Math.floor(gridSpanM.w / row)  + 1;
+  }
+  rowsEl.value = nRows;
+  colsEl.value = nTrees;
+
+  const dirX = document.getElementById("flowX").value === "rtl" ? -1 : 1;
+  const dirY = document.getElementById("flowY").value === "ttb" ? -1 : 1;
+
+  // Positions grow from gridAnchor outward along the flow direction. So when
+  // Rows/Trees-per-row are bumped, the new rows/trees appear on the "far" end
+  // (where R_N / T_N are) and the existing ones never move.
+  gridLocalPoints = [];
+  if (axis === "EW") {
+    for (let r = 0; r < nRows; r++) {
+      for (let c = 0; c < nTrees; c++) {
+        gridLocalPoints.push({
+          row: r + 1, col: c + 1,
+          x_m: gridAnchor.x_m + c * tree * dirX,
+          y_m: gridAnchor.y_m + r * row  * dirY,
+        });
+      }
+    }
+  } else {
+    // NS major: row index varies in x, col index varies in y.
+    for (let r = 0; r < nRows; r++) {
+      for (let c = 0; c < nTrees; c++) {
+        gridLocalPoints.push({
+          row: r + 1, col: c + 1,
+          x_m: gridAnchor.x_m + r * row  * dirX,
+          y_m: gridAnchor.y_m + c * tree * dirY,
+        });
+      }
+    }
+  }
+}
+
 document.getElementById("generateGrid").addEventListener("click", () => {
   const layers = drawn.getLayers();
   if (!layers.length) {
@@ -528,34 +718,22 @@ document.getElementById("generateGrid").addEventListener("click", () => {
   gridSpanM = { w: neM.x, h: neM.y };
 
   const tree = parseFloat(document.getElementById("treeSpacing").value);
-  const row = parseFloat(document.getElementById("rowSpacing").value);
-  const axis = document.getElementById("majorEdge").value; // "EW" or "NS"
-
+  const row  = parseFloat(document.getElementById("rowSpacing").value);
   if (!(tree > 0 && row > 0)) {
     alert("Tree and row spacing must both be > 0.");
     return;
   }
 
-  gridLocalPoints = [];
-  if (axis === "EW") {
-    // Rows run east–west: tree spacing is along E (x), row spacing along N (y).
-    const nTrees = Math.floor(gridSpanM.w / tree) + 1;
-    const nRows  = Math.floor(gridSpanM.h / row)  + 1;
-    for (let r = 0; r < nRows; r++) {
-      for (let c = 0; c < nTrees; c++) {
-        gridLocalPoints.push({ row: r + 1, col: c + 1, x_m: c * tree, y_m: r * row });
-      }
-    }
-  } else {
-    // Rows run north–south: tree spacing is along N (y), row spacing along E (x).
-    const nRows  = Math.floor(gridSpanM.w / row)  + 1;
-    const nTrees = Math.floor(gridSpanM.h / tree) + 1;
-    for (let r = 0; r < nRows; r++) {
-      for (let c = 0; c < nTrees; c++) {
-        gridLocalPoints.push({ row: r + 1, col: c + 1, x_m: r * row, y_m: c * tree });
-      }
-    }
-  }
+  // Seed gridAnchor at the rectangle corner that matches the current flow.
+  // ltr + btt  → SW, rtl + btt → SE, ltr + ttb → NW, rtl + ttb → NE.
+  const flipX = document.getElementById("flowX").value === "rtl";
+  const flipY = document.getElementById("flowY").value === "ttb";
+  gridAnchor = {
+    x_m: flipX ? gridSpanM.w : 0,
+    y_m: flipY ? gridSpanM.h : 0,
+  };
+
+  rebuildGridPoints();
 
   gridRotationDeg = parseFloat(document.getElementById("gridRotation").value) || 0;
   gridPivotMode = document.getElementById("gridPivot").value;
@@ -563,9 +741,43 @@ document.getElementById("generateGrid").addEventListener("click", () => {
   renderGrid();
 });
 
+// Live-update when counts, spacings, or major-edge change. These keep
+// gridAnchor fixed so new rows/trees extend in the current flow direction.
+for (const id of ["gridRows", "gridCols", "treeSpacing", "rowSpacing", "majorEdge"]) {
+  document.getElementById(id).addEventListener("change", () => {
+    if (!gridOrigin) return;
+    rebuildGridPoints();
+    renderGrid();
+  });
+}
+
+// Flow changes need an anchor update — otherwise flipping dirX/dirY alone
+// would mirror the whole grid around the old anchor and make it jump.
+// Instead, reseat the anchor at the current grid's extreme corner for the
+// new flow, so the visible grid stays put and only the labels flip.
+for (const id of ["flowX", "flowY"]) {
+  document.getElementById(id).addEventListener("change", () => {
+    if (!gridOrigin) return;
+    const ex = gridExtents();
+    if (ex) {
+      const flipX = document.getElementById("flowX").value === "rtl";
+      const flipY = document.getElementById("flowY").value === "ttb";
+      gridAnchor = {
+        x_m: flipX ? ex.maxX : ex.minX,
+        y_m: flipY ? ex.maxY : ex.minY,
+      };
+    }
+    rebuildGridPoints();
+    renderGrid();
+  });
+}
+
 document.getElementById("gridRotation").addEventListener("input", (e) => {
   gridRotationDeg = parseFloat(e.target.value) || 0;
-  if (gridLocalPoints.length) renderGrid();
+  if (gridLocalPoints.length) {
+    updateRotationHandlePosition();
+    renderGridDots();
+  }
 });
 
 document.getElementById("gridPivot").addEventListener("change", (e) => {
@@ -585,8 +797,11 @@ document.getElementById("clearGrid").addEventListener("click", () => {
   gridLocalPoints = [];
   gridOrigin = null;
   gridSpanM = null;
+  gridAnchor = { x_m: 0, y_m: 0 };
   gridPivotLocal = null;
   awaitingPivotClick = false;
+  pivotMarker = null;
+  rotationHandleMarker = null;
   document.getElementById("gridSummary").textContent = "";
 });
 

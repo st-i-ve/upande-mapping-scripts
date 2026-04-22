@@ -55,15 +55,40 @@
             <option value="NS">North–South (vertical)</option>
           </select>
         </label>
+        <div class="row">
+          <label style="flex:1;margin-bottom:0">Horizontal flow
+            <select id="flowX">
+              <option value="ltr" selected>L → R</option>
+              <option value="rtl">R → L</option>
+            </select>
+          </label>
+          <label style="flex:1;margin-bottom:0">Vertical flow
+            <select id="flowY">
+              <option value="btt" selected>B → T</option>
+              <option value="ttb">T → B</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint">L→R + B→T ⇒ R1·T1 in the SW corner. Flip either independently to move it.</p>
         <label>Tree spacing (m) — along rows
           <input id="treeSpacing" type="number" step="0.1" min="0.1" value="2.0" />
         </label>
         <label>Row spacing (m) — between rows
           <input id="rowSpacing" type="number" step="0.1" min="0.1" value="4.0" />
         </label>
+        <div class="row">
+          <label style="flex:1;margin-bottom:0">Rows
+            <input id="gridRows" type="number" step="1" min="1" placeholder="auto" />
+          </label>
+          <label style="flex:1;margin-bottom:0">Trees / row
+            <input id="gridCols" type="number" step="1" min="1" placeholder="auto" />
+          </label>
+        </div>
+        <p class="hint">Leave empty to fit the rectangle. Bump after Generate to grow the grid.</p>
         <label>Rotation (°)
           <input id="gridRotation" type="number" step="0.5" value="0" />
         </label>
+        <p class="hint">Hold <kbd>Shift</kbd> and drag on the map to rotate interactively.</p>
         <label>Pivot
           <select id="gridPivot">
             <option value="center" selected>Centre</option>
@@ -74,6 +99,7 @@
             <option value="custom">Click anywhere…</option>
           </select>
         </label>
+        <p class="hint">Double-click any tree to use it as the pivot.</p>
         <div class="row">
           <button id="generateGrid" class="primary">Generate grid</button>
         </div>
