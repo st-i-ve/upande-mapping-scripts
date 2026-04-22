@@ -2,6 +2,11 @@
 
 const map = L.map("map", { zoomControl: true }).setView([0.0686, 35.7480], 16);
 
+// Pane for the tree grid — z-index below overlayPane (400) so drawn shapes
+// always render on top of the grid dots.
+map.createPane("gridPane");
+map.getPane("gridPane").style.zIndex = 350;
+
 const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 22,
   attribution: "&copy; OpenStreetMap",
@@ -363,3 +368,253 @@ async function loadOutputs() {
 
 document.getElementById("refreshOutputs").addEventListener("click", loadOutputs);
 loadOutputs();
+
+// =========================================================================
+// Tree grid — draw a rectangle, generate a grid of points inside, rotate
+// around a chosen pivot. All maths is client-side, flat-earth anchored on
+// the rectangle's SW corner (fine for farm-scale AOIs near the equator).
+// =========================================================================
+
+const gridLayer = L.layerGroup().addTo(map);
+
+let gridOrigin = null;       // {lat, lon} — SW corner of the source rectangle
+let gridSpanM = null;        // {w, h}     — rectangle size in metres
+let gridLocalPoints = [];    // [{row, col, x_m, y_m}] — unrotated local frame
+let gridRotationDeg = 0;
+let gridPivotMode = "center";
+let gridPivotLocal = null;   // set when user clicks a point in "custom" mode
+let awaitingPivotClick = false;
+
+const EARTH_M_PER_DEG_LAT = 111320;
+const mPerDegLon = (lat) => EARTH_M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
+
+function latLonToMetres(lat, lon, lat0, lon0) {
+  return { x: (lon - lon0) * mPerDegLon(lat0), y: (lat - lat0) * EARTH_M_PER_DEG_LAT };
+}
+function metresToLatLon(x, y, lat0, lon0) {
+  return { lat: lat0 + y / EARTH_M_PER_DEG_LAT, lon: lon0 + x / mPerDegLon(lat0) };
+}
+
+function pivotLocal() {
+  if (!gridSpanM) return null;
+  const { w, h } = gridSpanM;
+  switch (gridPivotMode) {
+    case "sw": return { x_m: 0,     y_m: 0     };
+    case "nw": return { x_m: 0,     y_m: h     };
+    case "ne": return { x_m: w,     y_m: h     };
+    case "se": return { x_m: w,     y_m: 0     };
+    case "custom": return gridPivotLocal ?? { x_m: w / 2, y_m: h / 2 };
+    default:   return { x_m: w / 2, y_m: h / 2 };
+  }
+}
+
+function rotateAround(p, pivot, deg) {
+  const r = (deg * Math.PI) / 180;
+  const c = Math.cos(r), s = Math.sin(r);
+  const dx = p.x_m - pivot.x_m, dy = p.y_m - pivot.y_m;
+  return { x_m: pivot.x_m + dx * c - dy * s, y_m: pivot.y_m + dx * s + dy * c };
+}
+
+let pivotMarker = null;
+
+const PIVOT_ICON = L.divIcon({
+  className: "",
+  html:
+    '<div style="width:16px;height:16px;background:#ef4444;' +
+    "border:3px solid #fff;border-radius:50%;" +
+    'box-shadow:0 0 0 2px #ef4444;cursor:move;"></div>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
+function renderPivotMarker() {
+  if (pivotMarker) {
+    gridLayer.removeLayer(pivotMarker);
+    pivotMarker = null;
+  }
+  if (!gridOrigin) return;
+
+  const pv = pivotLocal();
+  const { lat, lon } = metresToLatLon(pv.x_m, pv.y_m, gridOrigin.lat, gridOrigin.lon);
+  pivotMarker = L.marker([lat, lon], { draggable: true, icon: PIVOT_ICON });
+  pivotMarker.bindTooltip("Drag to move the grid · rotation pivot");
+
+  // Drag: translate the whole grid by shifting gridOrigin so the pivot's
+  // local coord still maps to the marker's new world position.
+  pivotMarker.on("drag", (e) => {
+    const ll = e.target.getLatLng();
+    const pvl = pivotLocal();
+    gridOrigin.lat = ll.lat - pvl.y_m / EARTH_M_PER_DEG_LAT;
+    gridOrigin.lon = ll.lng - pvl.x_m / mPerDegLon(gridOrigin.lat);
+    renderGridDots();
+  });
+
+  gridLayer.addLayer(pivotMarker);
+}
+
+function renderGridDots() {
+  // Remove every layer in gridLayer except the pivot marker — rebuilding
+  // the marker mid-drag would yank focus and break the drag gesture.
+  gridLayer.eachLayer((l) => {
+    if (l !== pivotMarker) gridLayer.removeLayer(l);
+  });
+  if (!gridOrigin || !gridLocalPoints.length) return;
+
+  const pivot = pivotLocal();
+  for (const p of gridLocalPoints) {
+    const rot = rotateAround(p, pivot, gridRotationDeg);
+    const { lat, lon } = metresToLatLon(rot.x_m, rot.y_m, gridOrigin.lat, gridOrigin.lon);
+    const m = L.circleMarker([lat, lon], {
+      pane: "gridPane",
+      radius: 3,
+      color: "#0f6fd1",
+      fillColor: "#0f6fd1",
+      fillOpacity: 0.85,
+      weight: 1,
+    });
+    m.bindTooltip(`R${p.row}·T${p.col}`, { direction: "top" });
+    m.on("click", (e) => {
+      if (!awaitingPivotClick) return;
+      L.DomEvent.stopPropagation(e);
+      gridPivotLocal = { x_m: p.x_m, y_m: p.y_m };
+      gridPivotMode = "custom";
+      document.getElementById("gridPivot").value = "custom";
+      awaitingPivotClick = false;
+      document.getElementById("gridSummary").textContent =
+        `Pivot set to R${p.row}·T${p.col}. Adjust rotation to see the effect.`;
+      renderGrid();
+    });
+    gridLayer.addLayer(m);
+  }
+
+  const summary = document.getElementById("gridSummary");
+  if (!awaitingPivotClick) {
+    summary.textContent =
+      `${gridLocalPoints.length} trees · rotation ${gridRotationDeg}° · ` +
+      `pivot: ${gridPivotMode} · drag the red pin to move the grid`;
+  }
+}
+
+function renderGrid() {
+  renderPivotMarker();
+  renderGridDots();
+}
+
+// Clicking anywhere on the map (not on a grid point) sets the pivot to
+// that map coordinate when "custom" mode is armed.
+map.on("click", (e) => {
+  if (!awaitingPivotClick || !gridOrigin) return;
+  const pt = latLonToMetres(e.latlng.lat, e.latlng.lng, gridOrigin.lat, gridOrigin.lon);
+  gridPivotLocal = { x_m: pt.x, y_m: pt.y };
+  gridPivotMode = "custom";
+  awaitingPivotClick = false;
+  document.getElementById("gridSummary").textContent =
+    "Pivot set to map click. Adjust rotation to see the effect.";
+  renderGrid();
+});
+
+document.getElementById("generateGrid").addEventListener("click", () => {
+  const layers = drawn.getLayers();
+  if (!layers.length) {
+    alert("Draw a rectangle on the map first.");
+    return;
+  }
+  const bounds = layers[layers.length - 1].getBounds();
+  const sw = bounds.getSouthWest();
+  const ne = bounds.getNorthEast();
+
+  gridOrigin = { lat: sw.lat, lon: sw.lng };
+  const neM = latLonToMetres(ne.lat, ne.lng, sw.lat, sw.lng);
+  gridSpanM = { w: neM.x, h: neM.y };
+
+  const tree = parseFloat(document.getElementById("treeSpacing").value);
+  const row = parseFloat(document.getElementById("rowSpacing").value);
+  const axis = document.getElementById("majorEdge").value; // "EW" or "NS"
+
+  if (!(tree > 0 && row > 0)) {
+    alert("Tree and row spacing must both be > 0.");
+    return;
+  }
+
+  gridLocalPoints = [];
+  if (axis === "EW") {
+    // Rows run east–west: tree spacing is along E (x), row spacing along N (y).
+    const nTrees = Math.floor(gridSpanM.w / tree) + 1;
+    const nRows  = Math.floor(gridSpanM.h / row)  + 1;
+    for (let r = 0; r < nRows; r++) {
+      for (let c = 0; c < nTrees; c++) {
+        gridLocalPoints.push({ row: r + 1, col: c + 1, x_m: c * tree, y_m: r * row });
+      }
+    }
+  } else {
+    // Rows run north–south: tree spacing is along N (y), row spacing along E (x).
+    const nRows  = Math.floor(gridSpanM.w / row)  + 1;
+    const nTrees = Math.floor(gridSpanM.h / tree) + 1;
+    for (let r = 0; r < nRows; r++) {
+      for (let c = 0; c < nTrees; c++) {
+        gridLocalPoints.push({ row: r + 1, col: c + 1, x_m: r * row, y_m: c * tree });
+      }
+    }
+  }
+
+  gridRotationDeg = parseFloat(document.getElementById("gridRotation").value) || 0;
+  gridPivotMode = document.getElementById("gridPivot").value;
+  if (gridPivotMode !== "custom") gridPivotLocal = null;
+  renderGrid();
+});
+
+document.getElementById("gridRotation").addEventListener("input", (e) => {
+  gridRotationDeg = parseFloat(e.target.value) || 0;
+  if (gridLocalPoints.length) renderGrid();
+});
+
+document.getElementById("gridPivot").addEventListener("change", (e) => {
+  gridPivotMode = e.target.value;
+  if (gridPivotMode === "custom") {
+    awaitingPivotClick = true;
+    document.getElementById("gridSummary").textContent =
+      "Click anywhere — a grid point or a spot on the map — to set the rotation pivot.";
+    return;
+  }
+  awaitingPivotClick = false;
+  if (gridLocalPoints.length) renderGrid();
+});
+
+document.getElementById("clearGrid").addEventListener("click", () => {
+  gridLayer.clearLayers();
+  gridLocalPoints = [];
+  gridOrigin = null;
+  gridSpanM = null;
+  gridPivotLocal = null;
+  awaitingPivotClick = false;
+  document.getElementById("gridSummary").textContent = "";
+});
+
+document.getElementById("copyGridGeoJson").addEventListener("click", async () => {
+  if (!gridOrigin || !gridLocalPoints.length) {
+    alert("Generate a grid first.");
+    return;
+  }
+  const pivot = pivotLocal();
+  const features = gridLocalPoints.map((p) => {
+    const rot = rotateAround(p, pivot, gridRotationDeg);
+    const { lat, lon } = metresToLatLon(rot.x_m, rot.y_m, gridOrigin.lat, gridOrigin.lon);
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lon, lat] },
+      properties: { row: p.row, col: p.col, name: `ROW${p.row}_T${p.col}` },
+    };
+  });
+  const txt = JSON.stringify({ type: "FeatureCollection", features }, null, 2);
+  try {
+    await navigator.clipboard.writeText(txt);
+    document.getElementById("gridSummary").textContent =
+      `Copied ${features.length} points to clipboard.`;
+  } catch {
+    const blob = new Blob([txt], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "grid.geojson";
+    a.click();
+  }
+});

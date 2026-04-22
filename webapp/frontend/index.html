@@ -47,13 +47,51 @@
       </section>
 
       <section>
-        <h2>4. Saved outputs</h2>
+        <h2>4. Tree grid</h2>
+        <p class="hint">Draw a rectangle on the map, then generate a grid of tree points inside it.</p>
+        <label>Major edge (rows run parallel to this)
+          <select id="majorEdge">
+            <option value="EW" selected>East–West (horizontal)</option>
+            <option value="NS">North–South (vertical)</option>
+          </select>
+        </label>
+        <label>Tree spacing (m) — along rows
+          <input id="treeSpacing" type="number" step="0.1" min="0.1" value="2.0" />
+        </label>
+        <label>Row spacing (m) — between rows
+          <input id="rowSpacing" type="number" step="0.1" min="0.1" value="4.0" />
+        </label>
+        <label>Rotation (°)
+          <input id="gridRotation" type="number" step="0.5" value="0" />
+        </label>
+        <label>Pivot
+          <select id="gridPivot">
+            <option value="center" selected>Centre</option>
+            <option value="sw">SW corner</option>
+            <option value="nw">NW corner</option>
+            <option value="ne">NE corner</option>
+            <option value="se">SE corner</option>
+            <option value="custom">Click anywhere…</option>
+          </select>
+        </label>
+        <div class="row">
+          <button id="generateGrid" class="primary">Generate grid</button>
+        </div>
+        <div class="row">
+          <button id="clearGrid" class="secondary">Clear grid</button>
+          <button id="copyGridGeoJson" class="secondary">Copy GeoJSON</button>
+        </div>
+        <div id="gridSummary" class="summary"></div>
+      </section>
+
+      <section>
+        <h2>5. Saved outputs</h2>
         <button id="refreshOutputs" class="secondary">Refresh</button>
         <ul id="outputs" class="outputs"></ul>
       </section>
 
       <section>
-        <h2>5. Basemap API keys</h2>
+        <h2>6. Basemap API keys</h2>
         <p class="hint">Saved in this browser only (localStorage). Leave blank to hide that layer.</p>
         <label>Mapbox token <input id="mapboxKey" type="text" placeholder="pk.ey..." /></label>
         <label>MapTiler key <input id="maptilerKey" type="text" placeholder="abc123..." /></label>
