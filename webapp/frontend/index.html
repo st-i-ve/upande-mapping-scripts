@@ -103,10 +103,26 @@
         <div class="row">
           <button id="generateGrid" class="primary">Generate grid</button>
         </div>
+        <label>Block name
+          <input id="blockName" type="text" placeholder="e.g. KINYORO BLK 4 - KL" />
+        </label>
+        <p class="hint" id="blockPrefixHint">Prefix: <code>—</code></p>
         <div class="row">
           <button id="clearGrid" class="secondary">Clear grid</button>
           <button id="copyGridGeoJson" class="secondary">Copy GeoJSON</button>
+          <button id="downloadGridGeoJson" class="secondary">Download</button>
         </div>
+        <label>Mask type
+          <select id="maskPolarity">
+            <option value="positive" selected>Positive — keep inside (green)</option>
+            <option value="negative">Negative — remove inside (red)</option>
+          </select>
+        </label>
+        <div class="row">
+          <button id="drawFilter" class="secondary">Draw mask</button>
+          <button id="clearFilter" class="secondary">Clear all masks</button>
+        </div>
+        <p class="hint">Masks stack — apply several to iteratively clean up. Positive keeps points inside; negative removes points inside. Row/T numbers are renumbered after each run.</p>
         <div id="gridSummary" class="summary"></div>
       </section>
 

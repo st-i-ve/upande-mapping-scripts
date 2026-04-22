@@ -245,6 +245,17 @@ function setPolygon(geojson) {
 }
 
 map.on(L.Draw.Event.CREATED, (e) => {
+  // If the user armed "Draw mask", push this polygon onto the mask stack
+  // and re-run the full rebuild + apply-all-masks pipeline.
+  if (awaitingFilterDraw) {
+    awaitingFilterDraw = false;
+    const polygon = e.layer.toGeoJSON().geometry;
+    filterMasks.push({ polygon, polarity: pendingMaskPolarity });
+    filterLayer.addLayer(e.layer);
+    rebuildAndFilter();
+    renderGrid();
+    return;
+  }
   drawn.clearLayers();
   drawn.addLayer(e.layer);
   currentPolygon = e.layer.toGeoJSON().geometry;
@@ -386,6 +397,22 @@ let gridPivotMode = "center";
 let gridPivotLocal = null;   // set when user clicks a point in "custom" mode
 let awaitingPivotClick = false;
 
+// Mask stack — each mask is a GeoJSON Polygon plus a polarity.
+//   polarity "positive" = keep points inside, drop the rest
+//   polarity "negative" = remove points inside, keep the rest
+// On every rebuild masks are reapplied in order, so counts/flow changes
+// don't revive already-deleted points.
+let filterMasks = [];
+let awaitingFilterDraw = false;
+let pendingMaskPolarity = "positive";
+const filterLayer = L.layerGroup().addTo(map);
+const MASK_STYLE_POSITIVE = {
+  color: "#16a34a", weight: 2, dashArray: "6,6", fillOpacity: 0.05,
+};
+const MASK_STYLE_NEGATIVE = {
+  color: "#dc2626", weight: 2, dashArray: "6,6", fillOpacity: 0.05,
+};
+
 const EARTH_M_PER_DEG_LAT = 111320;
 const mPerDegLon = (lat) => EARTH_M_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180);
 
@@ -470,11 +497,16 @@ function renderPivotMarker() {
 }
 
 function renderGridDots() {
-  // Remove every layer in gridLayer except the pivot marker — rebuilding
-  // the marker mid-drag would yank focus and break the drag gesture.
-  gridLayer.eachLayer((l) => {
-    if (l !== pivotMarker) gridLayer.removeLayer(l);
-  });
+  // Snapshot first — mutating gridLayer during eachLayer() with
+  // Leaflet's for-in internals can skip siblings, leaving stale markers
+  // (and their stale tooltips) on the map. Also preserve the rotation
+  // gizmo; rebuilding it here would wipe the one renderGrid() just made.
+  const preserve = new Set();
+  if (pivotMarker) preserve.add(pivotMarker);
+  if (rotationHandleMarker) preserve.add(rotationHandleMarker);
+  const toRemove = [];
+  gridLayer.eachLayer((l) => { if (!preserve.has(l)) toRemove.push(l); });
+  for (const l of toRemove) gridLayer.removeLayer(l);
   if (!gridOrigin || !gridLocalPoints.length) return;
 
   const pivot = pivotLocal();
@@ -518,9 +550,14 @@ function renderGridDots() {
 
   const summary = document.getElementById("gridSummary");
   if (!awaitingPivotClick) {
+    const nRowsSurv = new Set(gridLocalPoints.map((p) => p.row)).size;
+    const maskTag = filterMasks.length
+      ? ` · ${filterMasks.length} mask${filterMasks.length === 1 ? "" : "s"}`
+      : "";
     summary.textContent =
-      `${gridLocalPoints.length} trees · rotation ${gridRotationDeg}° · ` +
-      `pivot: ${gridPivotMode} · drag the red pin to move the grid`;
+      `${gridLocalPoints.length} trees / ${nRowsSurv} rows · ` +
+      `rotation ${gridRotationDeg.toFixed(1)}° · pivot: ${gridPivotMode}` +
+      maskTag + ` · drag the red pin to move the grid`;
   }
 }
 
@@ -579,6 +616,64 @@ function renderGrid() {
   renderPivotMarker();
   renderRotationHandle();
   renderGridDots();
+}
+
+// ---- Filter by polygon --------------------------------------------------
+// Ray-casting point-in-polygon test on lat/lon (fine for farm-scale AOIs).
+function pointInPolygon(lon, lat, polygon) {
+  const ring = polygon.coordinates[0];
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const hit = ((yi > lat) !== (yj > lat)) &&
+                (lon < ((xj - xi) * (lat - yi)) / (yj - yi || 1e-18) + xi);
+    if (hit) inside = !inside;
+  }
+  return inside;
+}
+
+function applyMasks() {
+  if (!filterMasks.length || !gridOrigin || !gridLocalPoints.length) return;
+  const pivot = pivotLocal();
+  for (const mask of filterMasks) {
+    const survivors = [];
+    for (const p of gridLocalPoints) {
+      const r = rotateAround(p, pivot, gridRotationDeg);
+      const { lat, lon } = metresToLatLon(r.x_m, r.y_m, gridOrigin.lat, gridOrigin.lon);
+      const inside = pointInPolygon(lon, lat, mask.polygon);
+      const keep = mask.polarity === "positive" ? inside : !inside;
+      if (keep) survivors.push(p);
+    }
+    gridLocalPoints = survivors;
+  }
+  renumberAfterFilter();
+}
+
+function renumberAfterFilter() {
+  // Group by the old row number, renumber rows contiguously (1..N), and
+  // renumber trees within each row so the first survivor becomes T1.
+  const byRow = new Map();
+  for (const p of gridLocalPoints) {
+    if (!byRow.has(p.row)) byRow.set(p.row, []);
+    byRow.get(p.row).push(p);
+  }
+  const oldRowNums = [...byRow.keys()].sort((a, b) => a - b);
+  let newRow = 1;
+  for (const oldRow of oldRowNums) {
+    const pts = byRow.get(oldRow);
+    pts.sort((a, b) => a.col - b.col); // preserve flow order within row
+    pts.forEach((p, i) => {
+      p.row = newRow;
+      p.col = i + 1;
+    });
+    newRow++;
+  }
+}
+
+function rebuildAndFilter() {
+  rebuildGridPoints();
+  if (filterMasks.length) applyMasks();
 }
 
 // Clicking anywhere on the map (not on a grid point) sets the pivot to
@@ -746,7 +841,7 @@ document.getElementById("generateGrid").addEventListener("click", () => {
 for (const id of ["gridRows", "gridCols", "treeSpacing", "rowSpacing", "majorEdge"]) {
   document.getElementById(id).addEventListener("change", () => {
     if (!gridOrigin) return;
-    rebuildGridPoints();
+    rebuildAndFilter();
     renderGrid();
   });
 }
@@ -767,7 +862,7 @@ for (const id of ["flowX", "flowY"]) {
         y_m: flipY ? ex.maxY : ex.minY,
       };
     }
-    rebuildGridPoints();
+    rebuildAndFilter();
     renderGrid();
   });
 }
@@ -794,6 +889,7 @@ document.getElementById("gridPivot").addEventListener("change", (e) => {
 
 document.getElementById("clearGrid").addEventListener("click", () => {
   gridLayer.clearLayers();
+  filterLayer.clearLayers();
   gridLocalPoints = [];
   gridOrigin = null;
   gridSpanM = null;
@@ -802,34 +898,109 @@ document.getElementById("clearGrid").addEventListener("click", () => {
   awaitingPivotClick = false;
   pivotMarker = null;
   rotationHandleMarker = null;
+  filterMasks = [];
+  awaitingFilterDraw = false;
   document.getElementById("gridSummary").textContent = "";
 });
+
+document.getElementById("drawFilter").addEventListener("click", () => {
+  if (!gridLocalPoints.length) {
+    alert("Generate the grid first.");
+    return;
+  }
+  awaitingFilterDraw = true;
+  pendingMaskPolarity = document.getElementById("maskPolarity").value;
+  const style = pendingMaskPolarity === "positive" ? MASK_STYLE_POSITIVE : MASK_STYLE_NEGATIVE;
+  document.getElementById("gridSummary").textContent =
+    `Drawing ${pendingMaskPolarity} mask — click vertices, double-click (or click first vertex) to finish.`;
+  new L.Draw.Polygon(map, {
+    allowIntersection: false,
+    showArea: false,
+    shapeOptions: style,
+  }).enable();
+});
+
+document.getElementById("clearFilter").addEventListener("click", () => {
+  if (!filterMasks.length && !awaitingFilterDraw) return;
+  filterMasks = [];
+  awaitingFilterDraw = false;
+  filterLayer.clearLayers();
+  if (gridOrigin) {
+    rebuildGridPoints(); // rebuild WITHOUT any masks
+    renderGrid();
+  }
+});
+
+// Derive a feature-name prefix from a human block name.
+// "KINYORO BLK 4 - KL" -> split on " - " -> "KINYORO BLK 4" -> strip non-alphanum -> "KINYOROBLK4"
+function blockPrefix(blockName) {
+  const raw = (blockName || "").split(" - ")[0];
+  return raw.replace(/[^A-Za-z0-9]/g, "");
+}
+
+function refreshBlockPrefixHint() {
+  const name = document.getElementById("blockName").value;
+  const px = blockPrefix(name);
+  const hint = document.getElementById("blockPrefixHint");
+  hint.innerHTML = `Prefix: <code>${px || "—"}</code>` +
+    (px ? ` · Example: <code>${px}_ROW1_T1</code>` : "");
+}
+document.getElementById("blockName").addEventListener("input", refreshBlockPrefixHint);
+refreshBlockPrefixHint();
+
+function buildGridFeatureCollection() {
+  const pivot = pivotLocal();
+  const px = blockPrefix(document.getElementById("blockName").value);
+  const features = gridLocalPoints.map((p) => {
+    const rot = rotateAround(p, pivot, gridRotationDeg);
+    const { lat, lon } = metresToLatLon(rot.x_m, rot.y_m, gridOrigin.lat, gridOrigin.lon);
+    const name = px ? `${px}_ROW${p.row}_T${p.col}` : `ROW${p.row}_T${p.col}`;
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lon, lat] },
+      properties: { name },
+    };
+  });
+  return { type: "FeatureCollection", features };
+}
 
 document.getElementById("copyGridGeoJson").addEventListener("click", async () => {
   if (!gridOrigin || !gridLocalPoints.length) {
     alert("Generate a grid first.");
     return;
   }
-  const pivot = pivotLocal();
-  const features = gridLocalPoints.map((p) => {
-    const rot = rotateAround(p, pivot, gridRotationDeg);
-    const { lat, lon } = metresToLatLon(rot.x_m, rot.y_m, gridOrigin.lat, gridOrigin.lon);
-    return {
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [lon, lat] },
-      properties: { row: p.row, col: p.col, name: `ROW${p.row}_T${p.col}` },
-    };
-  });
-  const txt = JSON.stringify({ type: "FeatureCollection", features }, null, 2);
+  const fc = buildGridFeatureCollection();
+  const txt = JSON.stringify(fc, null, 2);
   try {
     await navigator.clipboard.writeText(txt);
     document.getElementById("gridSummary").textContent =
-      `Copied ${features.length} points to clipboard.`;
+      `Copied ${fc.features.length} points to clipboard.`;
   } catch {
-    const blob = new Blob([txt], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "grid.geojson";
-    a.click();
+    // Clipboard blocked (insecure context, permission denied) — fall back to download.
+    triggerDownload(txt);
   }
+});
+
+function triggerDownload(txt) {
+  const px = blockPrefix(document.getElementById("blockName").value);
+  const fname = (px || "grid") + "_trees.geojson";
+  const blob = new Blob([txt], { type: "application/geo+json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.getElementById("downloadGridGeoJson").addEventListener("click", () => {
+  if (!gridOrigin || !gridLocalPoints.length) {
+    alert("Generate a grid first.");
+    return;
+  }
+  const fc = buildGridFeatureCollection();
+  triggerDownload(JSON.stringify(fc, null, 2));
+  document.getElementById("gridSummary").textContent =
+    `Downloaded ${fc.features.length} points.`;
 });
