@@ -1,68 +1,324 @@
+/* Frappe 15-inspired minimalist theme.
+   Neutral grays, 1px borders, flat surfaces, compact 4px radii. */
+
+:root {
+  --bg: #ffffff;
+  --bg-subtle: #f8f8f8;
+  --border: #ededed;
+  --border-strong: #dcdcdc;
+  --text: #171717;
+  --text-muted: #525252;
+  --text-faint: #8d8d8d;
+  --accent: #2490ef;
+  --accent-hover: #1a7bd1;
+  --danger: #e24c4b;
+}
+
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c2733; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
 body { display: flex; flex-direction: column; height: 100vh; }
 
 header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 18px; background: #0f2b46; color: #f5f7fa;
-  border-bottom: 1px solid #0b2239;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
 }
-header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+header h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
 
-.status-idle   { color: #a8b7c7; }
-.status-busy   { color: #f7c948; }
-.status-ok     { color: #7ddf9a; }
-.status-error  { color: #ff8a8a; }
+#status { font-size: 12px; font-weight: 500; }
+.status-idle  { color: var(--text-faint); }
+.status-busy  { color: #d97706; }
+.status-ok    { color: #16a34a; }
+.status-error { color: var(--danger); }
 
 main { flex: 1; display: flex; min-height: 0; }
 
 #panel {
-  width: 340px; padding: 14px; overflow-y: auto; background: #f5f7fa;
-  border-right: 1px solid #d6dde5;
+  width: 340px;
+  padding: 14px;
+  overflow-y: auto;
+  background: var(--bg-subtle);
+  border-right: 1px solid var(--border);
 }
-#panel section { margin-bottom: 18px; }
-#panel h2 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #58677a; }
-#panel .hint { margin: 4px 0 8px; font-size: 12px; color: #667685; }
-#panel label { display: block; font-size: 13px; color: #2c3a4a; margin-bottom: 8px; }
-#panel label input, #panel label select {
-  display: block; width: 100%; margin-top: 2px; padding: 6px 8px;
-  border: 1px solid #c5cfda; border-radius: 4px; font-size: 13px;
+#panel section {
+  margin-bottom: 14px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
+#panel h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+#panel .hint {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.4;
+}
+#panel label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+#panel label input,
+#panel label select,
+#panel input[type="text"],
+#panel input[type="number"] {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  transition: border-color 0.15s;
+}
+#panel input:focus,
+#panel select:focus,
+#panel textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 #panel textarea {
-  width: 100%; height: 90px; font-family: ui-monospace, Menlo, monospace;
-  font-size: 12px; padding: 6px; border: 1px solid #c5cfda; border-radius: 4px;
+  width: 100%;
+  height: 76px;
+  margin-top: 6px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  padding: 6px 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
   resize: vertical;
 }
+
+/* Compact master-visibility toggle (checkbox + label). */
+label.toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 6px 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+label.toggle input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+label.toggle span { user-select: none; }
+
+label.slider {
+  display: block;
+  margin-bottom: 10px;
+  padding: 6px 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+label.slider .slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+label.slider input[type="range"] {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  background: transparent;
+  border: 0;
+}
+
 .row { display: flex; gap: 6px; margin-top: 6px; }
 
 button {
-  padding: 8px 12px; border-radius: 4px; font-size: 13px; border: 1px solid transparent;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
-button.primary { background: #0f6fd1; color: white; width: 100%; font-weight: 600; }
-button.primary:hover { background: #0d5fb2; }
-button.secondary { background: #ffffff; border-color: #c5cfda; color: #2c3a4a; }
-button.secondary:hover { background: #eef2f7; }
+button:hover { background: var(--bg-subtle); }
+
+button.primary {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+  width: 100%;
+  font-weight: 500;
+}
+button.primary:hover {
+  background: #000;
+  border-color: #000;
+}
+button.secondary { background: var(--bg); color: var(--text-muted); }
+button.secondary:hover { background: var(--bg-subtle); color: var(--text); }
 
 .summary {
-  margin-top: 10px; padding: 8px; background: #eef6ff;
-  border: 1px solid #c7dfff; border-radius: 4px; font-size: 12px;
-  white-space: pre-wrap; min-height: 14px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  min-height: 14px;
+  line-height: 1.45;
 }
 
-.outputs { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12px; }
+.outputs {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
 .outputs li {
-  display: flex; justify-content: space-between; gap: 6px;
-  padding: 4px 6px; border-bottom: 1px solid #e3e8ef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
 }
-.outputs a { color: #0f6fd1; text-decoration: none; }
-.outputs a:hover { text-decoration: underline; }
+.outputs li:last-child { border-bottom: 0; }
+.outputs a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+}
+.outputs a:hover { color: var(--accent-hover); text-decoration: underline; }
 
-#map { flex: 1; }
+.color-swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.color-swatch::-webkit-color-swatch { border: none; border-radius: 2px; }
+.color-swatch::-moz-color-swatch { border: none; border-radius: 2px; }
+
+.pass-through-control a {
+  display: block;
+  padding: 5px 10px;
+  font: 500 12px/18px -apple-system, "Segoe UI", sans-serif;
+  background: #fff;
+  color: #1f2937;
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: 4px;
+}
+.pass-through-control a:hover { background: #f3f4f6; text-decoration: none; }
+.pass-through-control a.active {
+  background: #fbbf24;
+  color: #1f2937;
+  font-weight: 600;
+}
+.pass-through-control a.active:hover { background: #f59e0b; }
+
+#map { flex: 1; background: var(--bg-subtle); }
 #map.grid-rotating { cursor: grabbing; }
 #map.grid-rotating .leaflet-interactive { pointer-events: none; }
+
 kbd {
-  display: inline-block; padding: 1px 5px; font: 11px/1 ui-monospace, Menlo, monospace;
-  background: #eef2f7; border: 1px solid #c5cfda; border-bottom-width: 2px;
-  border-radius: 3px; color: #2c3a4a;
+  display: inline-block;
+  padding: 1px 5px;
+  font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-muted);
+}
+
+/* Leaflet chrome overrides for the minimalist theme. */
+.leaflet-control-layers,
+.leaflet-bar {
+  border: 1px solid var(--border-strong) !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+.leaflet-bar a {
+  background-color: #ffffff !important;
+  color: var(--text) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.leaflet-bar a:hover { background-color: var(--bg-subtle) !important; }
+/* Leaflet-draw toolbar — keep the sprite icons (black) visible on the
+   white button background. The spritesheet ships with the leaflet-draw
+   package and is referenced by relative URL, so we don't need to redefine
+   background-image here; we only have to make sure our background-color
+   override doesn't blow it away (which the `background:` shorthand did). */
+.leaflet-draw-toolbar a {
+  background-color: #ffffff !important;
+}
+.leaflet-draw-toolbar a:hover {
+  background-color: #f3f4f6 !important;
+}
+.leaflet-control-layers-expanded {
+  padding: 8px 10px !important;
+  background: var(--bg) !important;
+  font-size: 12px !important;
 }

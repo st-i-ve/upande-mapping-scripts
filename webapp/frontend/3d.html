@@ -1,0 +1,988 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lokitela 3D</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #panel {
+      position: absolute; top: 12px; left: 12px; z-index: 5;
+      background: #ffffffee; border: 1px solid #d4d4d8; border-radius: 6px;
+      padding: 10px 12px; font-size: 12px; min-width: 240px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    #panel h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+    #panel a { color: #2563eb; text-decoration: none; }
+    #panel a:hover { text-decoration: underline; }
+    #panel label { display: block; margin: 6px 0 2px; color: #525252; }
+    #panel input[type="range"] { width: 100%; }
+    #panel button {
+      margin-top: 6px; padding: 6px 10px; border: 1px solid #d4d4d8;
+      border-radius: 4px; background: #ffffff; cursor: pointer; font-size: 12px;
+    }
+    #panel button:hover { background: #f3f4f6; }
+    #status { margin-top: 6px; color: #6b7280; font-size: 11px; }
+    .hint { color: #6b7280; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <h1>Lokitela — 3D preview</h1>
+    <a href="/">← back to 2D mapper</a>
+    <div class="hint" style="margin-top:6px">
+      Zoom out (scroll down / press <code>−</code>) to see the globe.
+    </div>
+    <button id="flyToLokitela">Fly to Lokitela</button>
+    <label>Pitch <span id="pitchVal">60°</span></label>
+    <input id="pitch" type="range" min="0" max="85" step="1" value="60" />
+    <label>Tile opacity <span id="opVal">100%</span></label>
+    <input id="opacity" type="range" min="0" max="100" step="1" value="100" />
+    <label><input id="terrainToggle" type="checkbox" /> Terrain (AWS open data)</label>
+    <label>Exaggeration <span id="exagVal">1.5×</span></label>
+    <input id="exag" type="range" min="1" max="5" step="0.1" value="1.5" />
+    <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
+    <strong style="font-size:12px">Trees</strong>
+    <label>Load GeoJSON points (pick many)
+      <input id="treesFile" type="file" multiple accept=".geojson,.json,application/geo+json,application/json" />
+    </label>
+    <div class="hint">Select several .geojson files at once — they get merged into one InstancedMesh.</div>
+    <label>Trunk height (m) <input id="trunkH" type="number" step="0.1" value="1.5" /></label>
+    <label>Canopy height (m) <input id="canopyH" type="number" step="0.1" value="2.5" /></label>
+    <label>Canopy radius (m) <input id="canopyR" type="number" step="0.1" value="1.2" /></label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button id="previewTrees">Preview trees</button>
+      <button id="rebuildTrees">Rebuild</button>
+      <button id="clearTrees">Clear</button>
+      <button id="flyToTrees">Fly to trees</button>
+    </div>
+    <label class="toggle" style="display:flex;align-items:center;gap:6px;margin-top:8px">
+      <input id="topDownToggle" type="checkbox" />
+      <span>Top-down view</span>
+    </label>
+    <label class="toggle" style="display:flex;align-items:center;gap:6px;margin-top:4px">
+      <input id="rowArrowsToggle" type="checkbox" />
+      <span>Row direction arrows</span>
+    </label>
+    <div style="margin-top:6px">
+      <strong style="font-size:12px">Scout path</strong>
+      <div class="hint">Pencil mode: drag on the map to sketch a freeform path, then Snap to trees.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        <button id="pencilToggle">Pencil mode</button>
+        <button id="pathSnap">Snap to trees</button>
+        <button id="pathClear">Clear path</button>
+      </div>
+      <label>Snap radius (m) <input id="snapRadius" type="number" step="0.5" min="0.5" value="3" /></label>
+      <div id="pathStatus" class="hint" style="margin-top:4px"></div>
+    </div>
+    <div id="treesStatus" class="hint" style="margin-top:6px"></div>
+    <div id="fps" class="hint" style="margin-top:2px"></div>
+    <div id="status"></div>
+    <div class="hint" style="margin-top:8px">
+      Basemap © OpenFreeMap / OpenMapTiles (OSM, ODbL).
+      Terrain © Mapzen / AWS Open Terrain Tiles.
+    </div>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+  <script type="module">
+    import * as THREE from "three";
+
+    // Tile bounds derived from the on-disk pyramid at /tiles/lokitela/lokitela/.
+    const TILE_BOUNDS = [34.8486, 0.9777, 34.8761, 0.9997]; // [west, south, east, north]
+    const CENTER = [34.8624, 0.9887];
+
+    const map = new maplibregl.Map({
+      container: "map",
+      // OpenFreeMap — free, commercial-OK, no key. "liberty" is the streets style.
+      style: "https://tiles.openfreemap.org/styles/liberty",
+      center: CENTER,
+      zoom: 15,
+      pitch: 60,
+      bearing: 0,
+      hash: true,
+    });
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+    const setStatus = (m) => { document.getElementById("status").textContent = m || ""; };
+
+    map.on("style.load", () => {
+      // Globe projection — vertical-perspective sphere at low zoom that
+      // smoothly transitions to mercator as you zoom in. Has to be set
+      // *after* the style URL loads, since the loaded style replaces any
+      // projection set in the constructor.
+      map.setProjection({ type: "globe" });
+
+      // Drape the local Lokitela orthomosaic on top of the OpenFreeMap basemap.
+      map.addSource("lokitela", {
+        type: "raster",
+        tiles: [location.origin + "/tiles/lokitela/lokitela/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        minzoom: 12,
+        maxzoom: 16,
+        bounds: TILE_BOUNDS,
+        attribution: "Lokitela imagery",
+      });
+      map.addLayer({ id: "lokitela", type: "raster", source: "lokitela" });
+
+      // AWS Open Terrain Tiles (Mapzen-style terrarium-encoded DEM, public bucket).
+      map.addSource("terrain-dem", {
+        type: "raster-dem",
+        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        encoding: "terrarium",
+        maxzoom: 15,
+        attribution: "© Mapzen, AWS Open Terrain Tiles",
+      });
+
+      // Atmospheric look for the globe view.
+      map.setSky({
+        "sky-color": "#7ab1ff",
+        "sky-horizon-blend": 0.5,
+        "horizon-color": "#dfe8f5",
+        "horizon-fog-blend": 0.5,
+        "fog-color": "#ffffff",
+        "fog-ground-blend": 0.5,
+      });
+    });
+
+    // ---- Controls --------------------------------------------------------
+
+    const pitch = document.getElementById("pitch");
+    const pitchVal = document.getElementById("pitchVal");
+    pitch.addEventListener("input", () => {
+      const v = parseFloat(pitch.value);
+      pitchVal.textContent = v + "°";
+      map.easeTo({ pitch: v, duration: 100 });
+    });
+    map.on("pitch", () => {
+      const v = Math.round(map.getPitch());
+      pitch.value = String(v);
+      pitchVal.textContent = v + "°";
+    });
+
+    const op = document.getElementById("opacity");
+    const opVal = document.getElementById("opVal");
+    op.addEventListener("input", () => {
+      const v = parseInt(op.value, 10) / 100;
+      opVal.textContent = op.value + "%";
+      if (map.getLayer("lokitela")) {
+        map.setPaintProperty("lokitela", "raster-opacity", v);
+      }
+    });
+
+    const terrainToggle = document.getElementById("terrainToggle");
+    const exag = document.getElementById("exag");
+    const exagVal = document.getElementById("exagVal");
+    function applyTerrain() {
+      if (!map.getSource("terrain-dem")) return;
+      if (terrainToggle.checked) {
+        map.setTerrain({ source: "terrain-dem", exaggeration: parseFloat(exag.value) });
+      } else {
+        map.setTerrain(null);
+      }
+    }
+    terrainToggle.addEventListener("change", applyTerrain);
+    exag.addEventListener("input", () => {
+      exagVal.textContent = exag.value + "×";
+      if (terrainToggle.checked) applyTerrain();
+    });
+
+    document.getElementById("flyToLokitela").addEventListener("click", () => {
+      map.flyTo({
+        center: CENTER,
+        zoom: 15,
+        pitch: 60,
+        bearing: 0,
+        speed: 0.9,
+        curve: 1.6,
+        essential: true,
+      });
+    });
+
+    // Lightweight FPS counter — useful when stress-testing tree counts.
+    (() => {
+      const out = document.getElementById("fps");
+      let frames = 0, last = performance.now();
+      function tick(now) {
+        frames++;
+        if (now - last >= 500) {
+          const fps = (frames * 1000) / (now - last);
+          out.textContent = `~${fps.toFixed(0)} fps`;
+          frames = 0; last = now;
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    })();
+
+    map.on("error", (e) => {
+      const msg = e && e.error && e.error.message ? e.error.message : "map error";
+      console.warn(msg);
+      setStatus(msg);
+    });
+
+    // =====================================================================
+    // Tree instancing — three.js InstancedMesh inside a MapLibre custom layer.
+    // One trunk geometry + one canopy geometry, N transforms each, one draw
+    // call per mesh. Comfortable up to ~100k trees on a laptop.
+    // =====================================================================
+
+    class TreesLayer {
+      constructor(features, opts = {}) {
+        this.id = "trees";
+        this.type = "custom";
+        this.renderingMode = "3d";
+        this.features = features;
+        this.trunkH = opts.trunkH ?? 1.5;
+        this.canopyH = opts.canopyH ?? 2.5;
+        this.canopyR = opts.canopyR ?? 1.2;
+      }
+
+      onAdd(map, gl) {
+        console.log("[TreesLayer] onAdd, count =", this.features.length);
+        this.map = map;
+        this.camera = new THREE.Camera();
+        this.scene = new THREE.Scene();
+
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+        sun.position.set(0.4, 1, 0.6);
+        this.scene.add(sun);
+
+        // Anchor: first feature's coord. All other trees are positioned
+        // relative to it in metres, then the world matrix scales metres into
+        // mercator units in render().
+        const [lng0, lat0] = this.features[0].geometry.coordinates;
+        this.anchor = maplibregl.MercatorCoordinate.fromLngLat([lng0, lat0], 0);
+
+        // Trunk: cylinder with base at y=0 (so the bottom sits on the ground).
+        const trunkGeo = new THREE.CylinderGeometry(
+          0.12, 0.16, this.trunkH, 8,
+        );
+        trunkGeo.translate(0, this.trunkH / 2, 0);
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b3f1e });
+        const trunkMesh = new THREE.InstancedMesh(
+          trunkGeo, trunkMat, this.features.length,
+        );
+
+        // Canopy: cone sitting on top of the trunk.
+        const canopyGeo = new THREE.ConeGeometry(
+          this.canopyR, this.canopyH, 12,
+        );
+        canopyGeo.translate(0, this.trunkH + this.canopyH / 2, 0);
+        const canopyMat = new THREE.MeshLambertMaterial({ color: 0x2a8a2a });
+        const canopyMesh = new THREE.InstancedMesh(
+          canopyGeo, canopyMat, this.features.length,
+        );
+
+        const meter = this.anchor.meterInMercatorCoordinateUnits();
+        const tmp = new THREE.Matrix4();
+        for (let i = 0; i < this.features.length; i++) {
+          const [lng, lat] = this.features[i].geometry.coordinates;
+          const m = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
+          // Three.js local coords are in metres; the world matrix takes care
+          // of metres→mercator. (mercator.x - anchor.x)/meter = east offset.
+          const dx = (m.x - this.anchor.x) / meter;
+          const dz = (m.y - this.anchor.y) / meter; // +z = south after world transform
+          tmp.makeTranslation(dx, 0, dz);
+          trunkMesh.setMatrixAt(i, tmp);
+          canopyMesh.setMatrixAt(i, tmp);
+        }
+        trunkMesh.instanceMatrix.needsUpdate = true;
+        canopyMesh.instanceMatrix.needsUpdate = true;
+        this.scene.add(trunkMesh);
+        this.scene.add(canopyMesh);
+
+        // Share MapLibre's WebGL context so depth/blend stay consistent.
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+        });
+        this.renderer.autoClear = false;
+      }
+
+      render(gl, args) {
+        // MapLibre v5 changed the second arg from a raw matrix to a
+        // CustomRenderMethodInput object with `defaultProjectionData.mainMatrix`.
+        // Earlier versions pass the matrix directly. Accept either.
+        let matrix = args;
+        if (args && !Array.isArray(args) && typeof args !== "function") {
+          matrix =
+            (args.defaultProjectionData &&
+              (args.defaultProjectionData.mainMatrix ||
+                args.defaultProjectionData.matrix)) ||
+            args.matrix ||
+            args;
+        }
+        if (!matrix || matrix.length !== 16) {
+          if (!this._warnedMatrix) {
+            console.warn("[TreesLayer] no usable matrix in render args", args);
+            this._warnedMatrix = true;
+          }
+          return;
+        }
+
+        const meter = this.anchor.meterInMercatorCoordinateUnits();
+        // Rotate three.js Y-up to mercator Z-up, scale metres→mercator
+        // (Y flipped — mercator y grows southward), translate to the anchor.
+        const rotX = new THREE.Matrix4().makeRotationAxis(
+          new THREE.Vector3(1, 0, 0), Math.PI / 2,
+        );
+        const world = new THREE.Matrix4()
+          .makeTranslation(this.anchor.x, this.anchor.y, this.anchor.z)
+          .scale(new THREE.Vector3(meter, -meter, meter))
+          .multiply(rotX);
+
+        const mvp = new THREE.Matrix4().fromArray(matrix).multiply(world);
+        this.camera.projectionMatrix = mvp;
+
+        this.renderer.resetState();
+        this.renderer.render(this.scene, this.camera);
+        this.map.triggerRepaint();
+      }
+
+      onRemove() {
+        this.scene.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) o.material.dispose();
+        });
+      }
+    }
+
+    function extractPointFeatures(geojson) {
+      const out = [];
+      const visit = (f) => {
+        if (!f || !f.geometry) return;
+        if (f.geometry.type === "Point") out.push(f);
+      };
+      if (geojson.type === "FeatureCollection") {
+        (geojson.features || []).forEach(visit);
+      } else if (geojson.type === "Feature") {
+        visit(geojson);
+      } else if (geojson.type === "Point") {
+        out.push({ type: "Feature", geometry: geojson, properties: {} });
+      }
+      return out;
+    }
+
+    let activeTrees = null;
+    let lastFeatures = null;
+
+    function buildTrees(features) {
+      if (!features.length) {
+        document.getElementById("treesStatus").textContent = "No points found.";
+        return;
+      }
+      if (activeTrees && map.getLayer("trees")) map.removeLayer("trees");
+      activeTrees = new TreesLayer(features, {
+        trunkH: parseFloat(document.getElementById("trunkH").value) || 1.5,
+        canopyH: parseFloat(document.getElementById("canopyH").value) || 2.5,
+        canopyR: parseFloat(document.getElementById("canopyR").value) || 1.2,
+      });
+      map.addLayer(activeTrees);
+      document.getElementById("treesStatus").textContent =
+        `${features.length} trees instanced.`;
+      if (document.getElementById("rowArrowsToggle").checked) showRowArrows();
+    }
+
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+        r.readAsText(file);
+      });
+    }
+
+    document.getElementById("treesFile").addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      document.getElementById("treesStatus").textContent =
+        `Reading ${files.length} file${files.length === 1 ? "" : "s"}…`;
+
+      const t0 = performance.now();
+      const merged = [];
+      const breakdown = [];
+      const errors = [];
+      const results = await Promise.all(
+        files.map((f) => readFileAsText(f).catch((err) => ({ __err: err, name: f.name }))),
+      );
+      for (let i = 0; i < files.length; i++) {
+        const res = results[i];
+        if (res && res.__err) {
+          errors.push(`${files[i].name}: ${res.__err.message || res.__err}`);
+          continue;
+        }
+        try {
+          const gj = JSON.parse(res);
+          const pts = extractPointFeatures(gj);
+          breakdown.push(`${files[i].name}: ${pts.length}`);
+          for (const p of pts) merged.push(p);
+        } catch (err) {
+          errors.push(`${files[i].name}: ${err.message}`);
+        }
+      }
+      const tParse = (performance.now() - t0).toFixed(0);
+
+      lastFeatures = merged;
+      const status = document.getElementById("treesStatus");
+      if (!merged.length) {
+        status.textContent = "No points found. " + errors.join(" | ");
+        return;
+      }
+
+      const t1 = performance.now();
+      buildTrees(merged);
+      const tBuild = (performance.now() - t1).toFixed(0);
+
+      status.textContent =
+        `${files.length} files · ${merged.length.toLocaleString()} trees · ` +
+        `parse ${tParse} ms · build ${tBuild} ms` +
+        (errors.length ? ` · ${errors.length} error(s)` : "");
+      if (errors.length) console.warn("Tree load errors:", errors);
+      flyToTrees();
+    });
+
+    document.getElementById("rebuildTrees").addEventListener("click", () => {
+      if (lastFeatures && lastFeatures.length) buildTrees(lastFeatures);
+    });
+
+    document.getElementById("clearTrees").addEventListener("click", () => {
+      if (map.getLayer("trees")) map.removeLayer("trees");
+      activeTrees = null;
+      clearPath();
+      hideRowArrows();
+      document.getElementById("rowArrowsToggle").checked = false;
+      document.getElementById("treesStatus").textContent = "Cleared.";
+    });
+
+    document.getElementById("previewTrees").addEventListener("click", () => {
+      // 5×4 grid of points centred on Lokitela, ~5 m spacing.
+      const COLS = 5, ROWS = 4;
+      const dLat = 5 / 111320;                                // 5 m in degrees lat
+      const dLon = 5 / (111320 * Math.cos(CENTER[1] * Math.PI / 180));
+      const features = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const lng = CENTER[0] + (c - (COLS - 1) / 2) * dLon;
+          const lat = CENTER[1] + (r - (ROWS - 1) / 2) * dLat;
+          features.push({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [lng, lat] },
+            properties: { name: `SAMPLE_R${r + 1}_T${c + 1}` },
+          });
+        }
+      }
+      lastFeatures = features;
+      buildTrees(features);
+      flyToTrees();
+    });
+
+    function flyToTrees() {
+      if (!lastFeatures || !lastFeatures.length) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const f of lastFeatures) {
+        const [x, y] = f.geometry.coordinates;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+      map.fitBounds([[minX, minY], [maxX, maxY]], {
+        padding: 60, pitch: 60, duration: 1200,
+      });
+    }
+    document.getElementById("flyToTrees").addEventListener("click", flyToTrees);
+
+    // ---- Top-down toggle -----------------------------------------------
+    // Plan view at pitch=0 — closest MapLibre comes to orthographic without
+    // a camera swap. Toggling restores the previously-active pitch so the
+    // user can pop in/out of plan view without losing their angle.
+    let savedPitch = 60;
+    let savedBearing = 0;
+    document.getElementById("topDownToggle").addEventListener("change", (e) => {
+      if (e.target.checked) {
+        savedPitch = map.getPitch();
+        savedBearing = map.getBearing();
+        map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+      } else {
+        map.easeTo({ pitch: savedPitch, bearing: savedBearing, duration: 600 });
+      }
+    });
+    // Sync the checkbox if the user changes pitch via the nav control / drag.
+    map.on("pitchend", () => {
+      const cb = document.getElementById("topDownToggle");
+      const isFlat = map.getPitch() < 1;
+      if (cb.checked !== isFlat) cb.checked = isFlat;
+    });
+
+    // ---- Click-to-name --------------------------------------------------
+    // Brute-force pixel-distance lookup against the projected feature set.
+    // Fast enough up to ~100k trees because we only run on click, not per frame.
+    function nearestTreeAt(point, maxPx = 25) {
+      if (!lastFeatures || !lastFeatures.length) return null;
+      const px = point.x, py = point.y;
+      let best = null, bestD = Infinity;
+      for (const f of lastFeatures) {
+        const p = map.project(f.geometry.coordinates);
+        const d = (p.x - px) ** 2 + (p.y - py) ** 2;
+        if (d < bestD) { bestD = d; best = f; }
+      }
+      if (best && bestD < maxPx * maxPx) return best;
+      return null;
+    }
+
+    map.on("click", (e) => {
+      // Pencil mode owns the canvas pointer events; suppress popups there.
+      if (pencilActive) return;
+      const f = nearestTreeAt(e.point, 25);
+      if (!f) return;
+      const name = (f.properties && f.properties.name) || "(unnamed)";
+      new maplibregl.Popup({ closeOnClick: true })
+        .setLngLat(f.geometry.coordinates)
+        .setText(name)
+        .addTo(map);
+    });
+    map.on("mousemove", (e) => {
+      if (!lastFeatures || !lastFeatures.length) {
+        map.getCanvas().style.cursor = "";
+        return;
+      }
+      const px = e.point.x, py = e.point.y;
+      let near = false;
+      // Sample-stride: at very high counts we don't need to inspect every
+      // tree on every mouse move — every Nth keeps cursor responsive.
+      const stride = Math.max(1, Math.floor(lastFeatures.length / 5000));
+      for (let i = 0; i < lastFeatures.length; i += stride) {
+        const f = lastFeatures[i];
+        const p = map.project(f.geometry.coordinates);
+        const d = (p.x - px) ** 2 + (p.y - py) ** 2;
+        if (d < 25 * 25) { near = true; break; }
+      }
+      map.getCanvas().style.cursor = near ? "pointer" : "";
+    });
+
+    // ---- Scout path (pencil + snap-to-trees-along-the-line) ------------
+    // Workflow: user toggles Pencil mode → drag on the map to sketch a
+    // freeform polyline (rough-path layer). Then Snap → for every tree
+    // within `snapRadius` metres of the drawn polyline, mark it covered;
+    // order matches by progression along the line so the resulting scout
+    // path walks tree-to-tree in the order they were swept.
+    let pencilActive = false;
+    let isDrawing = false;
+    let rawPath = [];          // [[lng, lat], ...] freeform sketch
+    let snappedFeatures = [];  // ordered list of trees within radius
+    const pathStatus = document.getElementById("pathStatus");
+
+    function setPencilMode(on) {
+      pencilActive = on;
+      const btn = document.getElementById("pencilToggle");
+      if (on) {
+        // Disable map gestures so dragging draws instead of pans.
+        map.dragPan.disable();
+        map.boxZoom.disable();
+        map.doubleClickZoom.disable();
+        map.touchZoomRotate.disable();
+        map.getCanvas().style.cursor = "crosshair";
+        btn.textContent = "Exit pencil";
+        pathStatus.textContent = "Drag on the map to draw, release to stop.";
+      } else {
+        map.dragPan.enable();
+        map.boxZoom.enable();
+        map.doubleClickZoom.enable();
+        map.touchZoomRotate.enable();
+        map.getCanvas().style.cursor = "";
+        btn.textContent = "Pencil mode";
+        isDrawing = false;
+      }
+    }
+
+    document.getElementById("pencilToggle").addEventListener("click", () => {
+      setPencilMode(!pencilActive);
+    });
+
+    // Pencil events — pointer events let us catch mouse + touch + pen.
+    const canvasEl = map.getCanvas();
+    canvasEl.addEventListener("pointerdown", (e) => {
+      if (!pencilActive) return;
+      isDrawing = true;
+      rawPath = [];
+      const ll = map.unproject([e.offsetX, e.offsetY]);
+      rawPath.push([ll.lng, ll.lat]);
+      refreshRoughPath();
+      try { canvasEl.setPointerCapture(e.pointerId); } catch {}
+    });
+    canvasEl.addEventListener("pointermove", (e) => {
+      if (!pencilActive || !isDrawing) return;
+      const ll = map.unproject([e.offsetX, e.offsetY]);
+      // Skip near-duplicate samples to keep the polyline reasonable.
+      const last = rawPath[rawPath.length - 1];
+      if (last) {
+        const dx = (ll.lng - last[0]) * 111320 * Math.cos(ll.lat * Math.PI / 180);
+        const dy = (ll.lat - last[1]) * 111320;
+        if (Math.hypot(dx, dy) < 0.5) return; // < 0.5 m — skip
+      }
+      rawPath.push([ll.lng, ll.lat]);
+      refreshRoughPath();
+    });
+    canvasEl.addEventListener("pointerup", () => {
+      if (!pencilActive) return;
+      isDrawing = false;
+      pathStatus.textContent =
+        `Drew ${rawPath.length} samples. Hit Snap to round onto trees.`;
+    });
+    canvasEl.addEventListener("pointerleave", () => {
+      isDrawing = false;
+    });
+
+    function refreshRoughPath() {
+      const data = {
+        type: "FeatureCollection",
+        features: rawPath.length >= 2 ? [{
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: rawPath },
+          properties: {},
+        }] : [],
+      };
+      if (!map.getSource("rough-path")) {
+        map.addSource("rough-path", { type: "geojson", data });
+        map.addLayer({
+          id: "rough-path",
+          type: "line",
+          source: "rough-path",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#3b82f6",
+            "line-width": 2,
+            "line-dasharray": [2, 2],
+            "line-opacity": 0.7,
+          },
+        });
+      } else {
+        map.getSource("rough-path").setData(data);
+      }
+    }
+
+    function refreshSnappedPath() {
+      const coords = snappedFeatures.map((f) => f.geometry.coordinates);
+      const lineData = {
+        type: "FeatureCollection",
+        features: coords.length >= 2 ? [{
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: coords },
+          properties: {},
+        }] : [],
+      };
+      const ptData = {
+        type: "FeatureCollection",
+        features: snappedFeatures.map((f, i) => ({
+          type: "Feature",
+          geometry: f.geometry,
+          properties: {
+            seq: i + 1,
+            name: (f.properties && f.properties.name) || "",
+          },
+        })),
+      };
+      if (!map.getSource("scout-path")) {
+        map.addSource("scout-path", { type: "geojson", data: lineData });
+        map.addLayer({
+          id: "scout-path",
+          type: "line",
+          source: "scout-path",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#ff6b00",
+            "line-width": 3,
+            "line-opacity": 0.9,
+          },
+        });
+      } else {
+        map.getSource("scout-path").setData(lineData);
+      }
+      if (!map.getSource("scout-path-pts")) {
+        map.addSource("scout-path-pts", { type: "geojson", data: ptData });
+        map.addLayer({
+          id: "scout-path-pts",
+          type: "circle",
+          source: "scout-path-pts",
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#ff6b00",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 1.5,
+          },
+        });
+        map.addLayer({
+          id: "scout-path-labels",
+          type: "symbol",
+          source: "scout-path-pts",
+          layout: {
+            "text-field": ["to-string", ["get", "seq"]],
+            "text-size": 11,
+            "text-offset": [0, -1.0],
+            "text-anchor": "bottom",
+          },
+          paint: {
+            "text-color": "#1f2937",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5,
+          },
+        });
+      } else {
+        map.getSource("scout-path-pts").setData(ptData);
+      }
+    }
+
+    // For each tree, compute the closest-point distance to the drawn
+    // polyline (in metres) AND the cumulative arc-length parameter where
+    // that closest point lands. Trees within `radius` are kept; sorting
+    // by arc length gives the order the scout encountered them.
+    function snapPathToTrees() {
+      if (rawPath.length < 2) {
+        pathStatus.textContent = "Draw a path first (toggle Pencil mode and drag).";
+        return;
+      }
+      if (!lastFeatures || !lastFeatures.length) {
+        pathStatus.textContent = "Load or preview trees first.";
+        return;
+      }
+      const radius = parseFloat(document.getElementById("snapRadius").value) || 3;
+
+      // Local equirectangular metres frame anchored at the path origin.
+      // Plenty accurate at farm scale (errors << 1 cm over 1 km).
+      const origin = rawPath[0];
+      const M_PER_DEG_LAT = 111320;
+      const cosLat = Math.cos(origin[1] * Math.PI / 180);
+      const M_PER_DEG_LON = M_PER_DEG_LAT * cosLat;
+      const toM = (p) => [(p[0] - origin[0]) * M_PER_DEG_LON, (p[1] - origin[1]) * M_PER_DEG_LAT];
+
+      // Build segments in metres with cumulative arc length.
+      const segs = [];
+      let cum = 0;
+      let prev = toM(rawPath[0]);
+      for (let i = 1; i < rawPath.length; i++) {
+        const cur = toM(rawPath[i]);
+        const dx = cur[0] - prev[0], dy = cur[1] - prev[1];
+        const len = Math.hypot(dx, dy);
+        if (len > 1e-3) {
+          segs.push({ ax: prev[0], ay: prev[1], dx, dy, len, len2: len * len, start: cum });
+          cum += len;
+        }
+        prev = cur;
+      }
+      const totalLen = cum;
+      if (!segs.length) {
+        pathStatus.textContent = "Path is too short.";
+        return;
+      }
+
+      const t0 = performance.now();
+      const r2 = radius * radius;
+      const matches = [];
+      for (const f of lastFeatures) {
+        const pm = toM(f.geometry.coordinates);
+        let bestD2 = Infinity, bestT = 0;
+        for (const seg of segs) {
+          let t = ((pm[0] - seg.ax) * seg.dx + (pm[1] - seg.ay) * seg.dy) / seg.len2;
+          if (t < 0) t = 0; else if (t > 1) t = 1;
+          const cx = seg.ax + t * seg.dx, cy = seg.ay + t * seg.dy;
+          const ddx = pm[0] - cx, ddy = pm[1] - cy;
+          const d2 = ddx * ddx + ddy * ddy;
+          if (d2 < bestD2) {
+            bestD2 = d2;
+            bestT = seg.start + t * seg.len;
+          }
+        }
+        if (bestD2 <= r2) matches.push({ f, t: bestT });
+      }
+      matches.sort((a, b) => a.t - b.t);
+      snappedFeatures = matches.map((m) => m.f);
+      const dt = (performance.now() - t0).toFixed(0);
+      refreshSnappedPath();
+      pathStatus.textContent =
+        `Covered ${snappedFeatures.length}/${lastFeatures.length} trees ` +
+        `along ${totalLen.toFixed(1)} m of path (radius ${radius} m, ${dt} ms).`;
+    }
+    document.getElementById("pathSnap").addEventListener("click", snapPathToTrees);
+
+    // ---- Row direction arrows ------------------------------------------
+    // Parse names matching ROW{r}_T{t}, group by row, compute bearing from
+    // the smallest T to the largest T, and drop a single arrow at the row
+    // start oriented along that bearing. Renders as a symbol layer of "↑"
+    // glyphs rotated to the row's compass bearing.
+    function bearingDeg(a, b) {
+      const lat1 = a[1] * Math.PI / 180;
+      const lat2 = b[1] * Math.PI / 180;
+      const dLon = (b[0] - a[0]) * Math.PI / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) -
+                Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    // One arrow per block. Block prefix = everything before `_ROW{n}_T{n}`,
+    // so "WESABLK9_ROW9_T16" → block "WESABLK9", row 9. Within each block we
+    // pick the centroid of the lowest-numbered row as the tail and the
+    // centroid of the highest as the head.
+    function blockRowCentroids(features) {
+      const re = /^(.+)_ROW(\d+)_T\d+$/i;
+      const blocks = new Map(); // block -> Map<row, {sx, sy, n}>
+      for (const f of features) {
+        const name = f.properties && f.properties.name;
+        const m = name && name.match(re);
+        if (!m) continue;
+        const block = m[1];
+        const r = parseInt(m[2], 10);
+        if (!blocks.has(block)) blocks.set(block, new Map());
+        const rows = blocks.get(block);
+        if (!rows.has(r)) rows.set(r, { sx: 0, sy: 0, n: 0 });
+        const acc = rows.get(r);
+        acc.sx += f.geometry.coordinates[0];
+        acc.sy += f.geometry.coordinates[1];
+        acc.n += 1;
+      }
+      const out = [];
+      for (const [block, rows] of blocks) {
+        const cs = [];
+        for (const [r, acc] of rows) {
+          cs.push({ r, c: [acc.sx / acc.n, acc.sy / acc.n] });
+        }
+        cs.sort((a, b) => a.r - b.r);
+        out.push({ block, centroids: cs });
+      }
+      return out;
+    }
+
+    function buildRowFlowData(features) {
+      const blocks = blockRowCentroids(features);
+      const lineFeats = [];
+      const ptFeats = [];
+      for (const { block, centroids } of blocks) {
+        if (centroids.length < 2) continue;
+        const start = centroids[0];
+        const end = centroids[centroids.length - 1];
+        const bearing = bearingDeg(start.c, end.c);
+        lineFeats.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: [start.c, end.c] },
+          properties: { block },
+        });
+        ptFeats.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: end.c },
+          properties: { bearing, label: `${block} R${end.r}` },
+        });
+        ptFeats.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: start.c },
+          properties: { bearing, label: `${block} R${start.r}`, isStart: true },
+        });
+      }
+      return {
+        line: { type: "FeatureCollection", features: lineFeats },
+        head: { type: "FeatureCollection", features: ptFeats },
+      };
+    }
+
+    function showRowArrows() {
+      if (!lastFeatures || !lastFeatures.length) return;
+      const data = buildRowFlowData(lastFeatures);
+      if (!map.getSource("row-flow-line")) {
+        map.addSource("row-flow-line", { type: "geojson", data: data.line });
+        map.addSource("row-flow-pts", { type: "geojson", data: data.head });
+        map.addLayer({
+          id: "row-flow-line",
+          type: "line",
+          source: "row-flow-line",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#1d4ed8",
+            "line-width": 3,
+            "line-opacity": 0.9,
+            "line-dasharray": [2, 1.5],
+          },
+        });
+        // Big arrowhead at the high-row end (filtered isStart != true).
+        map.addLayer({
+          id: "row-flow-head",
+          type: "symbol",
+          source: "row-flow-pts",
+          filter: ["!=", ["get", "isStart"], true],
+          layout: {
+            "text-field": "▲",
+            "text-size": 28,
+            "text-rotate": ["get", "bearing"],
+            "text-rotation-alignment": "map",
+            "text-pitch-alignment": "map",
+            "text-allow-overlap": true,
+            "text-anchor": "center",
+          },
+          paint: {
+            "text-color": "#1d4ed8",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 2,
+          },
+        });
+        // Small labels at both ends.
+        map.addLayer({
+          id: "row-flow-labels",
+          type: "symbol",
+          source: "row-flow-pts",
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 12,
+            "text-offset": [0.9, 0.9],
+            "text-anchor": "top-left",
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": "#1d4ed8",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5,
+          },
+        });
+      } else {
+        map.getSource("row-flow-line").setData(data.line);
+        map.getSource("row-flow-pts").setData(data.head);
+      }
+    }
+    function hideRowArrows() {
+      for (const id of ["row-flow-labels", "row-flow-head", "row-flow-line"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      for (const id of ["row-flow-pts", "row-flow-line"]) {
+        if (map.getSource(id)) map.removeSource(id);
+      }
+    }
+    document.getElementById("rowArrowsToggle").addEventListener("change", (e) => {
+      if (e.target.checked) showRowArrows();
+      else hideRowArrows();
+    });
+
+    function clearPath() {
+      rawPath = [];
+      snappedFeatures = [];
+      for (const id of ["scout-path-labels", "scout-path-pts", "scout-path", "rough-path"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      for (const id of ["scout-path-pts", "scout-path", "rough-path"]) {
+        if (map.getSource(id)) map.removeSource(id);
+      }
+      pathStatus.textContent = "";
+    }
+    document.getElementById("pathClear").addEventListener("click", clearPath);
+  </script>
+</body>
+</html>

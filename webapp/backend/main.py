@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 STORAGE = ROOT / "storage"
 STORAGE.mkdir(parents=True, exist_ok=True)
+TILES = ROOT.parent / "tiles"
 
 app = FastAPI(title="Upande Bed & Zone Mapper")
 
@@ -89,6 +90,9 @@ def get_output(filename: str):
 def health() -> dict:
     return {"ok": True}
 
+
+if TILES.is_dir():
+    app.mount("/tiles", StaticFiles(directory=str(TILES)), name="tiles")
 
 # Static frontend (mounted last so /api/* routes above take precedence).
 app.mount("/", StaticFiles(directory=str(FRONTEND), html=True), name="frontend")

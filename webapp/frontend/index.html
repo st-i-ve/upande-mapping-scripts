@@ -17,17 +17,82 @@
   <main>
     <aside id="panel">
       <section>
-        <h2>1. Polygon</h2>
+        <h2>1. Reference points</h2>
+        <p class="hint">Named points (A, B, C…) that stick. Saved in this browser. Click the map to capture, or type coordinates.</p>
+        <label class="toggle">
+          <input id="refVisibleToggle" type="checkbox" />
+          <span>Show on map</span>
+        </label>
+        <label class="slider">
+          <span class="slider-label">Opacity <span id="refOpacityVal">60%</span></span>
+          <input id="refOpacity" type="range" min="0" max="100" step="1" value="60" />
+        </label>
+        <div class="row">
+          <label style="flex:0 0 70px;margin-bottom:0">Name
+            <input id="refName" type="text" placeholder="A" />
+          </label>
+          <label style="flex:1;margin-bottom:0">Lat
+            <input id="refLat" type="number" step="0.0000001" placeholder="0.0686" />
+          </label>
+          <label style="flex:1;margin-bottom:0">Lon
+            <input id="refLon" type="number" step="0.0000001" placeholder="35.748" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="refAdd" class="primary">Add point</button>
+          <button id="refPick" class="secondary">Pick on map</button>
+        </div>
+        <textarea id="refGeoJson" placeholder='Paste a Point / Feature / FeatureCollection, e.g. {"type":"Point","coordinates":[35.748,0.0686]}'></textarea>
+        <div class="row">
+          <button id="refLoadGeoJson" class="secondary">Add from GeoJSON</button>
+        </div>
+        <ul id="refList" class="outputs"></ul>
+        <div class="row">
+          <button id="refClear" class="secondary">Clear all</button>
+          <button id="refCopy" class="secondary">Copy GeoJSON</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. Saved shapes</h2>
+        <p class="hint">Save the shape currently drawn on the map, or paste GeoJSON. Stays in this browser. Toggle visibility to use any shape as an overlay.</p>
+        <label class="toggle">
+          <input id="shapeVisibleToggle" type="checkbox" />
+          <span>Show overlays on map</span>
+        </label>
+        <label class="slider">
+          <span class="slider-label">Opacity <span id="shapeOpacityVal">40%</span></span>
+          <input id="shapeOpacity" type="range" min="0" max="100" step="1" value="40" />
+        </label>
+        <label>Name <input id="shapeName" type="text" placeholder="e.g. Block A outline" /></label>
+        <div class="row">
+          <button id="shapeSaveCurrent" class="primary">Save current shape</button>
+        </div>
+        <textarea id="shapeGeoJson" placeholder='Paste a Polygon / Feature / FeatureCollection'></textarea>
+        <div class="row">
+          <button id="shapeLoadGeoJson" class="secondary">Add from GeoJSON</button>
+        </div>
+        <ul id="shapeList" class="outputs"></ul>
+        <div class="row">
+          <button id="shapeHideAll" class="secondary">Hide all</button>
+          <button id="shapeShowAll" class="secondary">Show all</button>
+          <button id="shapeDownloadAll" class="secondary">Download all</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. Polygon</h2>
         <p class="hint">Draw on the map, or paste a GeoJSON Polygon / FeatureCollection below.</p>
         <textarea id="geojsonInput" placeholder='{"type":"Polygon","coordinates":[[[lon,lat],...]]}'></textarea>
         <div class="row">
           <button id="loadGeoJson" class="secondary">Load pasted GeoJSON</button>
+          <button id="downloadPolygon" class="secondary">Download</button>
           <button id="clearPolygon" class="secondary">Clear</button>
         </div>
       </section>
 
       <section>
-        <h2>2. Parameters</h2>
+        <h2>4. Parameters</h2>
         <label>Plot name <input id="name" type="text" placeholder="e.g. Kapkolia GH 18" /></label>
         <label>Bed spacing (m) <input id="bedSpacing" type="number" step="0.1" min="0.1" value="1.5" /></label>
         <label>Zone length (m) <input id="zoneLength" type="number" step="0.5" min="0.5" value="10" /></label>
@@ -41,13 +106,13 @@
       </section>
 
       <section>
-        <h2>3. Generate</h2>
+        <h2>5. Generate</h2>
         <button id="generate" class="primary">Generate beds &amp; zones</button>
         <div id="summary" class="summary"></div>
       </section>
 
       <section>
-        <h2>4. Tree grid</h2>
+        <h2>6. Tree grid</h2>
         <p class="hint">Draw a rectangle on the map, then generate a grid of tree points inside it.</p>
         <label>Major edge (rows run parallel to this)
           <select id="majorEdge">
@@ -127,13 +192,13 @@
       </section>
 
       <section>
-        <h2>5. Saved outputs</h2>
+        <h2>7. Saved outputs</h2>
         <button id="refreshOutputs" class="secondary">Refresh</button>
         <ul id="outputs" class="outputs"></ul>
       </section>
 
       <section>
-        <h2>6. Basemap API keys</h2>
+        <h2>8. Basemap API keys</h2>
         <p class="hint">Saved in this browser only (localStorage). Leave blank to hide that layer.</p>
         <label>Mapbox token <input id="mapboxKey" type="text" placeholder="pk.ey..." /></label>
         <label>MapTiler key <input id="maptilerKey" type="text" placeholder="abc123..." /></label>
