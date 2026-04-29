@@ -91,7 +91,8 @@
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
       <button id="generateBlocks">Generate</button>
       <button id="viewBlocks">View</button>
-      <button id="exportBlocks">Export GeoJSON</button>
+      <button id="exportBlocks">Export combined</button>
+      <button id="exportBlocksEach">Export each</button>
     </div>
     <label>Pad (m) <input id="blockPad" type="number" step="0.5" value="2" /></label>
     <div id="blocksStatus" class="hint" style="margin-top:4px"></div>
@@ -298,12 +299,38 @@
           trunkGeo, trunkMat, this.features.length,
         );
 
-        // Canopy: cone sitting on top of the trunk.
-        const canopyGeo = new THREE.ConeGeometry(
-          this.canopyR, this.canopyH, 12,
-        );
+        // Canopy: low-poly perturbed icosahedron — looks leafy & organic
+        // without the per-frame cost of a real sphere. detail=1 = 80 tris.
+        // Vertices are jittered by a hash of their position so duplicate
+        // vertices (icosahedron is non-indexed for flat shading) get the
+        // SAME offset and adjacent faces still meet cleanly.
+        const canopyGeo = new THREE.IcosahedronGeometry(this.canopyR, 1);
+        // Stretch into a slight oval — canopy is `canopyH` tall, 2*canopyR wide.
+        canopyGeo.scale(1, this.canopyH / (2 * this.canopyR), 1);
+        const cpos = canopyGeo.attributes.position;
+        const cTmp = new THREE.Vector3();
+        const cOffsets = new Map();
+        const jitter = this.canopyR * 0.20;
+        for (let i = 0; i < cpos.count; i++) {
+          cTmp.fromBufferAttribute(cpos, i);
+          const key =
+            cTmp.x.toFixed(4) + "_" + cTmp.y.toFixed(4) + "_" + cTmp.z.toFixed(4);
+          let o = cOffsets.get(key);
+          if (!o) {
+            const seed = Math.abs(cTmp.x * 12.9 + cTmp.y * 78.2 + cTmp.z * 37.7) + 1;
+            const f = (k) => ((Math.sin(seed * k) * 43758.5453) % 1 - 0) * jitter;
+            o = [f(1.1), f(2.7), f(4.3)];
+            cOffsets.set(key, o);
+          }
+          cpos.setXYZ(i, cTmp.x + o[0], cTmp.y + o[1], cTmp.z + o[2]);
+        }
+        cpos.needsUpdate = true;
+        canopyGeo.computeVertexNormals();
         canopyGeo.translate(0, this.trunkH + this.canopyH / 2, 0);
-        const canopyMat = new THREE.MeshLambertMaterial({ color: 0x2a8a2a });
+        const canopyMat = new THREE.MeshLambertMaterial({
+          color: 0x2a8a2a,
+          flatShading: true,
+        });
         const canopyMesh = new THREE.InstancedMesh(
           canopyGeo, canopyMat, this.features.length,
         );
@@ -1418,13 +1445,13 @@
           id: "blocks-fill",
           type: "fill",
           source: "blocks",
-          paint: { "fill-color": "#22c55e", "fill-opacity": 0.15 },
+          paint: { "fill-color": "#f59e0b", "fill-opacity": 0.18 },
         });
         map.addLayer({
           id: "blocks-outline",
           type: "line",
           source: "blocks",
-          paint: { "line-color": "#15803d", "line-width": 2.5 },
+          paint: { "line-color": "#b45309", "line-width": 2.5 },
         });
         map.addLayer({
           id: "blocks-labels",
@@ -1436,7 +1463,7 @@
             "text-allow-overlap": false,
           },
           paint: {
-            "text-color": "#14532d",
+            "text-color": "#78350f",
             "text-halo-color": "#ffffff",
             "text-halo-width": 1.8,
           },
@@ -1486,6 +1513,19 @@
       if (blocksVisible) refreshBlocksLayer(); else hideBlocksLayer();
     });
 
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }
+
     document.getElementById("exportBlocks").addEventListener("click", () => {
       if (!blocksGeoJSON || !blocksGeoJSON.features.length) {
         blocksStatus.textContent = "Generate blocks first.";
@@ -1494,16 +1534,31 @@
       const blob = new Blob([JSON.stringify(blocksGeoJSON, null, 2)], {
         type: "application/geo+json",
       });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "block_boundaries.geojson";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
+      downloadBlob(blob, "block_boundaries.geojson");
+    });
+
+    // One file per block. Browsers will usually prompt the user to allow
+    // multiple downloads from the site the first time — that's expected.
+    document.getElementById("exportBlocksEach").addEventListener("click", async () => {
+      if (!blocksGeoJSON || !blocksGeoJSON.features.length) {
+        blocksStatus.textContent = "Generate blocks first.";
+        return;
+      }
+      const feats = blocksGeoJSON.features;
+      for (let i = 0; i < feats.length; i++) {
+        const f = feats[i];
+        const fc = { type: "FeatureCollection", features: [f] };
+        const blob = new Blob([JSON.stringify(fc, null, 2)], {
+          type: "application/geo+json",
+        });
+        const safe = String(f.properties.block || `block_${i + 1}`)
+          .replace(/[^A-Za-z0-9_-]/g, "_");
+        downloadBlob(blob, `${safe}.geojson`);
+        // Stagger so the browser doesn't dedupe / cancel concurrent downloads.
+        await new Promise((r) => setTimeout(r, 180));
+      }
+      blocksStatus.textContent =
+        `Exported ${feats.length} file${feats.length === 1 ? "" : "s"}.`;
     });
 
     function clearPath() {
