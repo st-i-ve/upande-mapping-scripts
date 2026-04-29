@@ -97,6 +97,8 @@
     <label>Pad (m) <input id="blockPad" type="number" step="0.5" value="2" /></label>
     <label>Max edge (m) <input id="blockMaxEdge" type="number" step="0.5" value="8" /></label>
     <div class="hint">Triangle edges longer than Max edge get cut — pinches into concavities. 0 = auto.</div>
+    <label>Name suffix <input id="blockSuffix" type="text" value=" - KL" placeholder=" - KL" /></label>
+    <div class="hint">e.g. <code>MIMABLK10</code> → <code>MIMA BLK 10 - KL</code>.</div>
     <div id="blocksStatus" class="hint" style="margin-top:4px"></div>
     <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
     <strong style="font-size:12px">Irrigation valves</strong>
@@ -1488,7 +1490,19 @@
       return m ? m[1] : null;
     }
 
-    function computeBlockBoundaries(features, pad, maxEdgeOpt) {
+    // Pretty-format a raw block code: split <LETTERS>BLK<NUM> into
+    // "<LETTERS> BLK <NUM>", then append the user-supplied suffix.
+    // Falls back to the raw code if the pattern doesn't match.
+    function prettyBlockName(code, suffix) {
+      const m = String(code).match(/^([A-Za-z]+?)BLK(\d+)([A-Za-z0-9]*)$/);
+      let base = code;
+      if (m) {
+        base = `${m[1].toUpperCase()} BLK ${m[2]}` + (m[3] ? ` ${m[3].toUpperCase()}` : "");
+      }
+      return base + (suffix || "");
+    }
+
+    function computeBlockBoundaries(features, pad, maxEdgeOpt, suffix) {
       const groups = new Map();
       for (const f of features) {
         const block = blockNameOf(f);
@@ -1552,7 +1566,8 @@
           type: "Feature",
           geometry: { type: "Polygon", coordinates: [ring] },
           properties: {
-            block,
+            block: prettyBlockName(block, suffix),
+            block_code: block,
             tree_count: feats.length,
             vertex_count: expanded.length,
             area_m2: Math.round(area),
@@ -1622,8 +1637,9 @@
       const padVal = Number.isFinite(pad) ? pad : 2;
       const me = parseFloat(document.getElementById("blockMaxEdge").value);
       const meVal = Number.isFinite(me) ? me : 0;
+      const suffix = document.getElementById("blockSuffix").value || "";
       const t0 = performance.now();
-      blocksGeoJSON = computeBlockBoundaries(lastFeatures, padVal, meVal);
+      blocksGeoJSON = computeBlockBoundaries(lastFeatures, padVal, meVal, suffix);
       const dt = (performance.now() - t0).toFixed(0);
       const n = blocksGeoJSON.features.length;
       if (!n) {
