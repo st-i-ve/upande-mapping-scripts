@@ -86,6 +86,16 @@
     </div>
     <div id="treesStatus" class="hint" style="margin-top:6px"></div>
     <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
+    <strong style="font-size:12px">Block boundaries</strong>
+    <div class="hint">Rectangular boundary per block, oriented to the row direction (4 straight edges).</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+      <button id="generateBlocks">Generate</button>
+      <button id="viewBlocks">View</button>
+      <button id="exportBlocks">Export GeoJSON</button>
+    </div>
+    <label>Pad (m) <input id="blockPad" type="number" step="0.5" value="2" /></label>
+    <div id="blocksStatus" class="hint" style="margin-top:4px"></div>
+    <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
     <strong style="font-size:12px">Irrigation valves</strong>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
       <button id="previewValves">Preview valves</button>
@@ -1227,6 +1237,273 @@
     document.getElementById("rowArrowsToggle").addEventListener("change", (e) => {
       if (e.target.checked) showRowArrows();
       else hideRowArrows();
+    });
+
+    // ---- Block boundaries ----------------------------------------------
+    // Group trees by the prefix of their name (everything before _ROW{n}_T{n}),
+    // compute a convex hull per block in a local metres frame, simplify
+    // near-collinear vertices (Douglas-Peucker style), then offset outward
+    // by `pad` metres so the polygon sits a little outside the outermost trees.
+    function convexHull(points) {
+      const pts = points.map((p) => [p[0], p[1]])
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      if (pts.length < 3) return pts;
+      const cross = (o, a, b) =>
+        (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const lower = [];
+      for (const p of pts) {
+        while (lower.length >= 2 &&
+               cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+        lower.push(p);
+      }
+      const upper = [];
+      for (let i = pts.length - 1; i >= 0; i--) {
+        const p = pts[i];
+        while (upper.length >= 2 &&
+               cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+        upper.push(p);
+      }
+      lower.pop(); upper.pop();
+      return lower.concat(upper); // CCW
+    }
+
+    function pointSegDist(p, a, b) {
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1e-12) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+      let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+    }
+
+    // Iteratively drop vertices whose perpendicular distance from the line
+    // through their neighbours is below `tol` metres — this absorbs trees
+    // that bulge a hair past the otherwise-straight edge into one segment.
+    function simplifyRing(ring, tol) {
+      let result = ring.slice();
+      let changed = true;
+      while (changed && result.length > 3) {
+        changed = false;
+        const n = result.length;
+        const drop = new Array(n).fill(false);
+        for (let i = 0; i < n; i++) {
+          if (drop[(i - 1 + n) % n]) continue; // don't drop adjacents in same pass
+          const d = pointSegDist(result[i], result[(i - 1 + n) % n], result[(i + 1) % n]);
+          if (d < tol) { drop[i] = true; changed = true; }
+        }
+        if (changed) {
+          const next = result.filter((_, i) => !drop[i]);
+          if (next.length >= 3) result = next; else break;
+        }
+      }
+      return result;
+    }
+
+    function lineIntersect(p1, p2, p3, p4) {
+      const x1 = p1[0], y1 = p1[1], x2 = p2[0], y2 = p2[1];
+      const x3 = p3[0], y3 = p3[1], x4 = p4[0], y4 = p4[1];
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(denom) < 1e-9) return null;
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+    }
+
+    // Outward offset of a CCW ring: shift each edge by `pad` along its outward
+    // normal, then intersect adjacent shifted edges to recover vertices.
+    function offsetRing(ring, pad) {
+      const n = ring.length;
+      const edges = [];
+      for (let i = 0; i < n; i++) {
+        const a = ring[i], b = ring[(i + 1) % n];
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-9) continue;
+        // CCW ring → outward normal is (dy, -dx)/len.
+        const nx = dy / len, ny = -dx / len;
+        edges.push({ a: [a[0] + nx * pad, a[1] + ny * pad],
+                     b: [b[0] + nx * pad, b[1] + ny * pad] });
+      }
+      const out = [];
+      const m = edges.length;
+      for (let i = 0; i < m; i++) {
+        const e1 = edges[(i - 1 + m) % m];
+        const e2 = edges[i];
+        const p = lineIntersect(e1.a, e1.b, e2.a, e2.b);
+        out.push(p || e2.a);
+      }
+      return out;
+    }
+
+    function blockNameOf(feature) {
+      const name = feature.properties && feature.properties.name;
+      if (!name) return null;
+      const m = name.match(/^(.+?)_ROW\d+_T\d+$/i);
+      return m ? m[1] : null;
+    }
+
+    function computeBlockBoundaries(features, pad) {
+      const groups = new Map();
+      for (const f of features) {
+        const block = blockNameOf(f);
+        if (!block) continue;
+        if (!groups.has(block)) groups.set(block, []);
+        groups.get(block).push(f);
+      }
+      const out = [];
+      for (const [block, feats] of groups) {
+        if (feats.length < 3) continue;
+
+        // Local metres frame anchored at the first tree of this block.
+        const origin = feats[0].geometry.coordinates;
+        const M_PER_DEG_LAT = 111320;
+        const cosLat = Math.cos(origin[1] * Math.PI / 180);
+        const M_PER_DEG_LON = M_PER_DEG_LAT * cosLat;
+        const toM = (lng, lat) => [
+          (lng - origin[0]) * M_PER_DEG_LON,
+          (lat - origin[1]) * M_PER_DEG_LAT,
+        ];
+        const toLngLat = (x, y) => [
+          origin[0] + x / M_PER_DEG_LON,
+          origin[1] + y / M_PER_DEG_LAT,
+        ];
+
+        const ptsM = feats.map((f) => toM(f.geometry.coordinates[0], f.geometry.coordinates[1]));
+        let hull = convexHull(ptsM);
+        if (hull.length < 3) continue; // degenerate (collinear / too few)
+
+        // Simplification tolerance scales with pad — a tight border deserves
+        // tighter tolerance, a loose one swallows more wobble.
+        const tol = Math.max(0.3, pad * 0.6);
+        hull = simplifyRing(hull, tol);
+
+        const expanded = pad > 0 ? offsetRing(hull, pad) : hull;
+
+        const ring = expanded.map(([x, y]) => toLngLat(x, y));
+        ring.push(ring[0]); // close
+
+        // Polygon area in metres² via shoelace, on the offset (metres) ring.
+        let area2 = 0;
+        for (let i = 0; i < expanded.length; i++) {
+          const a = expanded[i];
+          const b = expanded[(i + 1) % expanded.length];
+          area2 += a[0] * b[1] - b[0] * a[1];
+        }
+        const area = Math.abs(area2) / 2;
+
+        out.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [ring] },
+          properties: {
+            block,
+            tree_count: feats.length,
+            vertex_count: expanded.length,
+            area_m2: Math.round(area),
+            pad_m: pad,
+          },
+        });
+      }
+      return { type: "FeatureCollection", features: out };
+    }
+
+    let blocksGeoJSON = null;
+    let blocksVisible = false;
+    const blocksStatus = document.getElementById("blocksStatus");
+    const viewBlocksBtn = document.getElementById("viewBlocks");
+
+    function refreshBlocksLayer() {
+      if (!blocksGeoJSON) return;
+      if (!map.getSource("blocks")) {
+        map.addSource("blocks", { type: "geojson", data: blocksGeoJSON });
+        map.addLayer({
+          id: "blocks-fill",
+          type: "fill",
+          source: "blocks",
+          paint: { "fill-color": "#22c55e", "fill-opacity": 0.15 },
+        });
+        map.addLayer({
+          id: "blocks-outline",
+          type: "line",
+          source: "blocks",
+          paint: { "line-color": "#15803d", "line-width": 2.5 },
+        });
+        map.addLayer({
+          id: "blocks-labels",
+          type: "symbol",
+          source: "blocks",
+          layout: {
+            "text-field": ["get", "block"],
+            "text-size": 14,
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#14532d",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.8,
+          },
+        });
+      } else {
+        map.getSource("blocks").setData(blocksGeoJSON);
+      }
+    }
+
+    function hideBlocksLayer() {
+      for (const id of ["blocks-labels", "blocks-outline", "blocks-fill"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      if (map.getSource("blocks")) map.removeSource("blocks");
+    }
+
+    document.getElementById("generateBlocks").addEventListener("click", () => {
+      if (!lastFeatures || !lastFeatures.length) {
+        blocksStatus.textContent = "Load or preview trees first.";
+        return;
+      }
+      const pad = parseFloat(document.getElementById("blockPad").value);
+      const padVal = Number.isFinite(pad) ? pad : 2;
+      const t0 = performance.now();
+      blocksGeoJSON = computeBlockBoundaries(lastFeatures, padVal);
+      const dt = (performance.now() - t0).toFixed(0);
+      const n = blocksGeoJSON.features.length;
+      if (!n) {
+        blocksStatus.textContent =
+          "No blocks found. Tree names need to match BLOCK_ROW{n}_T{n}.";
+        return;
+      }
+      const totalVerts = blocksGeoJSON.features
+        .reduce((s, f) => s + (f.properties.vertex_count || 0), 0);
+      blocksStatus.textContent =
+        `${n} block${n === 1 ? "" : "s"} · ${totalVerts} vertices · pad ${padVal} m · ${dt} ms.`;
+      if (blocksVisible) refreshBlocksLayer();
+    });
+
+    viewBlocksBtn.addEventListener("click", () => {
+      if (!blocksGeoJSON || !blocksGeoJSON.features.length) {
+        blocksStatus.textContent = "Generate blocks first.";
+        return;
+      }
+      blocksVisible = !blocksVisible;
+      viewBlocksBtn.textContent = blocksVisible ? "Hide" : "View";
+      if (blocksVisible) refreshBlocksLayer(); else hideBlocksLayer();
+    });
+
+    document.getElementById("exportBlocks").addEventListener("click", () => {
+      if (!blocksGeoJSON || !blocksGeoJSON.features.length) {
+        blocksStatus.textContent = "Generate blocks first.";
+        return;
+      }
+      const blob = new Blob([JSON.stringify(blocksGeoJSON, null, 2)], {
+        type: "application/geo+json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "block_boundaries.geojson";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
     });
 
     function clearPath() {
