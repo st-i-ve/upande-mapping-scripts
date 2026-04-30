@@ -297,6 +297,7 @@ let terraceState = {
   blockStartCorners: null,   // list of NW/NE/SW/SE | null per block (from grouping)
 };
 let awaitingTerracePick = false;
+let awaitingCornerPick = false;
 
 let currentPolygon = null; // GeoJSON geometry
 
@@ -554,23 +555,106 @@ document.getElementById("pickTerraceEdge").addEventListener("click", () => {
 document.getElementById("clearTerrace").addEventListener("click", clearTerraceMode);
 
 map.on("click", async (e) => {
-  if (!awaitingTerracePick) return;
-  awaitingTerracePick = false;
-  document.getElementById("map").style.cursor = "";
-  const ring = getOuterRingForTerrace(currentPolygon);
-  if (!ring) {
-    setTerraceStatus("Polygon has no usable ring.");
+  if (awaitingTerracePick) {
+    awaitingTerracePick = false;
+    document.getElementById("map").style.cursor = "";
+    const ring = getOuterRingForTerrace(currentPolygon);
+    if (!ring) {
+      setTerraceStatus("Polygon has no usable ring.");
+      return;
+    }
+    const idx = nearestEdgeIdx(ring, e.latlng);
+    if (idx == null) {
+      setTerraceStatus("Click was too far from any edge — try again.");
+      return;
+    }
+    terraceState.startEdgeIdx = idx;
+    setTerraceStatus(`Edge ${idx} picked, computing sections…`);
+    await refreshTerrace(null);
     return;
   }
-  const idx = nearestEdgeIdx(ring, e.latlng);
-  if (idx == null) {
-    setTerraceStatus("Click was too far from any edge — try again.");
+  if (awaitingCornerPick) {
+    awaitingCornerPick = false;
+    document.getElementById("map").style.cursor = "";
+    const meta = terraceState.rawSections?.metadata;
+    if (!meta?.block_corners?.length) {
+      setTerraceStatus("Preview blocks first, then pick a corner.");
+      return;
+    }
+    const hit = findClosestBlockCorner(e.latlng);
+    if (!hit) {
+      setTerraceStatus("Click was too far from any block corner — try again.");
+      return;
+    }
+    if (!setBlockCornerOverride(hit.block_id, hit.corner)) {
+      setTerraceStatus(
+        `Could not match ${hit.block_id} to a group in the grouping.`,
+      );
+      return;
+    }
+    setTerraceStatus(`Set ${hit.block_id} → @${hit.corner}.`);
     return;
   }
-  terraceState.startEdgeIdx = idx;
-  setTerraceStatus(`Edge ${idx} picked, computing sections…`);
-  await refreshTerrace(null);
 });
+
+function findClosestBlockCorner(latlng) {
+  const meta = terraceState.rawSections?.metadata;
+  if (!meta?.block_corners?.length) return null;
+  const click = map.latLngToLayerPoint(latlng);
+  let best = null;
+  let bestDist = Infinity;
+  for (const blk of meta.block_corners) {
+    for (const corner of ["NW", "NE", "SW", "SE"]) {
+      const c = blk[corner];
+      if (!c) continue;
+      const pt = map.latLngToLayerPoint(L.latLng(c.lat, c.lon));
+      const d = pt.distanceTo(click);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { block_id: blk.block_id, corner };
+      }
+    }
+  }
+  return bestDist < 60 ? best : null; // 60 px tolerance
+}
+
+function setBlockCornerOverride(blockId, corner) {
+  // Map block_id → group index (0-based). "P02a" / "P02b" / "P02" all map
+  // to group #2 → index 1; the override applies to the group's first sub-block.
+  const m = /^P0*(\d+)/.exec(blockId);
+  if (!m) return false;
+  const groupIdx = parseInt(m[1], 10) - 1;
+  if (groupIdx < 0) return false;
+
+  const input = document.getElementById("terraceGrouping");
+  const parts = splitGroupingTopLevel(input.value)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (groupIdx >= parts.length) return false;
+
+  parts[groupIdx] =
+    parts[groupIdx].replace(/\s*@\s*(NW|NE|SW|SE)\s*$/i, "") + `@${corner}`;
+  input.value = parts.join(", ");
+  refreshTerrace(input.value);
+  renderEndBedsReadout();
+  return true;
+}
+
+document
+  .getElementById("pickBlockCorner")
+  .addEventListener("click", () => {
+    if (
+      !terraceState.rawSections ||
+      !(terraceState.rawSections.metadata?.block_corners?.length)
+    ) {
+      alert("Preview blocks first, then pick a corner.");
+      return;
+    }
+    awaitingCornerPick = true;
+    awaitingTerracePick = false; // mutually exclusive
+    setTerraceStatus("Click any corner of any block on the map…");
+    document.getElementById("map").style.cursor = "crosshair";
+  });
 
 async function refreshTerrace(grouping) {
   if (terraceState.startEdgeIdx == null || !currentPolygon) return;
@@ -713,6 +797,9 @@ function renderTerrace(fc) {
     const splitTag = b.properties.split
       ? `, ${b.properties.split.n}x ${b.properties.split.axis}`
       : "";
+    const overrideTag = b.properties.corner_override
+      ? `, @${b.properties.corner_override}`
+      : "";
     L.geoJSON(b, {
       style: {
         color: "#7c3aed",
@@ -724,10 +811,28 @@ function renderTerrace(fc) {
       },
     })
       .bindTooltip(
-        `${b.properties.block_id} (S${b.properties.sections.join(",")}${splitTag}, ${b.properties.area_m2} m²)`,
+        `${b.properties.block_id} (S${b.properties.sections.join(",")}${splitTag}${overrideTag}, ${b.properties.area_m2} m²)`,
         { sticky: true, direction: "center" },
       )
       .addTo(terraceLayer);
+  }
+
+  // Block-corner click targets — small dots at each block's 4 corners so
+  // "Pick block corner" knows where to aim.
+  const cornerMeta = fc.metadata?.block_corners || [];
+  for (const blk of cornerMeta) {
+    for (const corner of ["NW", "NE", "SW", "SE"]) {
+      const c = blk[corner];
+      if (!c) continue;
+      L.circleMarker([c.lat, c.lon], {
+        radius: 4,
+        color: "#7c3aed",
+        fillColor: "#ffffff",
+        fillOpacity: 1,
+        weight: 1.5,
+        interactive: false,
+      }).addTo(terraceLayer);
+    }
   }
 }
 

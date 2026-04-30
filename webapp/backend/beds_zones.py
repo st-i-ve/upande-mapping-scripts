@@ -229,6 +229,29 @@ def _should_alternate(split_axis: str) -> bool:
 
 # ---------- preview anchor helpers -----------------------------------------
 
+def _block_corners_wgs(
+    block_utm: Polygon,
+    parent_angle: float,
+    parent_origin,
+    to_wgs: Transformer,
+) -> dict:
+    """Return the four corners (NW, NE, SW, SE) of `block_utm`'s rotated
+    long-axis bounding box, projected back to WGS84 lat/lon."""
+    rotated = rotate(block_utm, -parent_angle, origin=parent_origin)
+    minx, miny, maxx, maxy = rotated.bounds
+    out: dict[str, dict] = {}
+    for label, xy in [
+        ("NW", (minx, maxy)),
+        ("NE", (maxx, maxy)),
+        ("SW", (minx, miny)),
+        ("SE", (maxx, miny)),
+    ]:
+        pt = rotate(Point(xy), parent_angle, origin=parent_origin)
+        wgs = _project(pt, to_wgs)
+        out[label] = {"lat": wgs.y, "lon": wgs.x}
+    return out
+
+
 def _first_bed_endpoints(
     block_utm: Polygon,
     parent_angle: float,
@@ -742,6 +765,7 @@ def terrace_sections(
 
     blocks_geojson: list[dict] = []
     block_start_corners: list[str | None] = []
+    block_corners_meta: list[dict] = []
     first_a: Point | None = None
     first_b: Point | None = None
     if grouping is not None and sections:
@@ -819,6 +843,12 @@ def terrace_sections(
                         effective_override or start_corner,
                         buffer_m=buffer_m,
                     )
+                # Per-block corner coords for the click-to-pick UI.
+                corners = _block_corners_wgs(
+                    poly_utm, parent_angle, parent_origin, to_wgs
+                )
+                corners["block_id"] = block_id
+                block_corners_meta.append(corners)
 
     a_wgs = _project(first_a, to_wgs) if first_a is not None else None
     b_wgs = _project(first_b, to_wgs) if first_b is not None else None
@@ -833,6 +863,7 @@ def terrace_sections(
             "grouping": grouping,
             "start_corner": start_corner,
             "block_start_corners": block_start_corners,
+            "block_corners": block_corners_meta,
             "first_bed_a": (
                 {"lat": a_wgs.y, "lon": a_wgs.x} if a_wgs is not None else None
             ),
