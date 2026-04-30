@@ -167,8 +167,10 @@
         </div>
         <div class="row">
           <button id="clearResults" class="secondary">Clear results</button>
+          <button id="copyFrappeLatest" class="secondary" disabled>Copy for Frappe</button>
+          <button id="downloadFrappeLatest" class="secondary" disabled>Download for Frappe</button>
         </div>
-        <p class="hint">Clear results wipes the generated beds/zones but keeps your polygon — handy when zones came out wrong and you want to tweak parameters and try again.</p>
+        <p class="hint">Clear results wipes the generated beds/zones but keeps your polygon. <strong>Copy for Frappe</strong> puts the latest output into your clipboard in the format the <code>Bed And Zone Automation</code> doctype's <em>Zones Geojson</em> textarea expects (one FeatureCollection per line, zones only, with <code>fid</code>/<code>line_id</code>/<code>segment_id</code>/<code>zone_id</code>).</p>
         <div id="summary" class="summary"></div>
       </section>
 

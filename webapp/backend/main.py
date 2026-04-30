@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -148,6 +148,64 @@ def get_output(filename: str):
     if not path.is_file():
         raise HTTPException(404, "Not found")
     return FileResponse(path, media_type="application/geo+json", filename=filename)
+
+
+_DIGIT_RE = re.compile(r"\d+")
+
+
+def _to_frappe_ndjson(fc: dict) -> str:
+    """Convert a generate_beds_zones result into the textarea format used by
+    the Frappe `Bed And Zone Automation` doctype: one FeatureCollection per
+    line, each FC holding exactly one zone LineString feature with int
+    `fid` / `line_id` / `segment_id` / `zone_id` properties.
+    """
+    lines: list[str] = []
+    fid = 0
+    counter_by_bed: dict[int, int] = {}
+    for f in fc.get("features", []):
+        props = f.get("properties", {}) or {}
+        if props.get("kind") != "zone":
+            continue
+        bed_id = props.get("bed_id", "")
+        block_id = props.get("block_id", "") or ""
+        m_line = _DIGIT_RE.search(bed_id)
+        line_id = int(m_line.group()) if m_line else 0
+        m_seg = _DIGIT_RE.search(block_id)
+        segment_id = int(m_seg.group()) if m_seg else 1
+        # Per-bed running zone counter so multi-fragment beds (B0050-F1-Z01,
+        # B0050-F2-Z01) don't collide on (greenhouse, bed, zone).
+        counter_by_bed[line_id] = counter_by_bed.get(line_id, 0) + 1
+        zone_id = counter_by_bed[line_id]
+        fid += 1
+        feature = {
+            "type": "Feature",
+            "properties": {
+                "fid": fid,
+                "line_id": line_id,
+                "segment_id": segment_id,
+                "zone_id": zone_id,
+            },
+            "geometry": f.get("geometry"),
+        }
+        lines.append(
+            json.dumps({"type": "FeatureCollection", "features": [feature]})
+        )
+    return "\n".join(lines)
+
+
+@app.get("/api/outputs/{filename}/frappe")
+def get_output_frappe(filename: str):
+    if "/" in filename or ".." in filename:
+        raise HTTPException(400, "Invalid filename")
+    path = STORAGE / filename
+    if not path.is_file():
+        raise HTTPException(404, "Not found")
+    try:
+        fc = json.loads(path.read_text())
+    except Exception as e:
+        raise HTTPException(400, f"Could not parse stored result: {e}")
+    text = _to_frappe_ndjson(fc)
+    return Response(content=text, media_type="text/plain")
 
 
 @app.get("/api/health")

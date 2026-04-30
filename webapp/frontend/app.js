@@ -1077,11 +1077,56 @@ function clearResults() {
 }
 
 let generateController = null;
+let latestFilename = null;
 
 function setGenerateBusy(busy) {
   document.getElementById("generate").disabled = busy;
   document.getElementById("cancelGenerate").disabled = !busy;
 }
+
+function setFrappeButtons(filename) {
+  latestFilename = filename;
+  const enabled = !!filename;
+  document.getElementById("copyFrappeLatest").disabled = !enabled;
+  document.getElementById("downloadFrappeLatest").disabled = !enabled;
+}
+
+async function fetchFrappeText(filename) {
+  const res = await fetch(`/api/outputs/${encodeURIComponent(filename)}/frappe`);
+  if (!res.ok) throw new Error("Failed to fetch Frappe text");
+  return await res.text();
+}
+
+async function copyFrappeFor(filename) {
+  try {
+    const text = await fetchFrappeText(filename);
+    await navigator.clipboard.writeText(text);
+    setStatus("copied for Frappe", "ok");
+  } catch (e) {
+    alert("Copy failed: " + e.message);
+  }
+}
+
+function downloadFrappeFor(filename) {
+  const url = `/api/outputs/${encodeURIComponent(filename)}/frappe`;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename.replace(/\.geojson$/, "") + ".frappe.txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+document
+  .getElementById("copyFrappeLatest")
+  .addEventListener("click", () => {
+    if (latestFilename) copyFrappeFor(latestFilename);
+  });
+document
+  .getElementById("downloadFrappeLatest")
+  .addEventListener("click", () => {
+    if (latestFilename) downloadFrappeFor(latestFilename);
+  });
 
 document.getElementById("clearResults").addEventListener("click", () => {
   clearResults();
@@ -1180,6 +1225,7 @@ document.getElementById("generate").addEventListener("click", async () => {
       `Start corner: ${m.start_corner}   Area: ${m.area_m2} m²\n` +
       `Saved: ${data.filename}`;
     setStatus("done", "ok");
+    setFrappeButtons(data.filename);
     loadOutputs();
   } catch (e) {
     if (e.name === "AbortError") {
@@ -1215,8 +1261,22 @@ async function loadOutputs() {
       const r = await fetch("/api/outputs/" + encodeURIComponent(o.filename));
       if (r.ok) renderResult(await r.json());
     });
+    const frappeCopy = document.createElement("a");
+    frappeCopy.href = "#";
+    frappeCopy.textContent = "copy frappe";
+    frappeCopy.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      copyFrappeFor(o.filename);
+    });
+    const frappeDl = document.createElement("a");
+    frappeDl.href = "/api/outputs/" + encodeURIComponent(o.filename) + "/frappe";
+    frappeDl.textContent = "frappe.txt";
+    frappeDl.download =
+      o.filename.replace(/\.geojson$/, "") + ".frappe.txt";
     li.appendChild(a);
     li.appendChild(view);
+    li.appendChild(frappeCopy);
+    li.appendChild(frappeDl);
     ul.appendChild(li);
   }
 }
