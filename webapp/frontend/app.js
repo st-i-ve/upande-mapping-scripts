@@ -279,6 +279,24 @@ map.addControl(drawControl);
 
 const bedsLayer = L.layerGroup().addTo(map);
 const zonesLayer = L.layerGroup().addTo(map);
+const blocksLayer = L.layerGroup().addTo(map);
+const cornerLayer = L.layerGroup().addTo(map);
+const previewLayer = L.layerGroup().addTo(map);
+const terraceLayer = L.layerGroup().addTo(map);
+const anchorLayer = L.layerGroup().addTo(map);
+
+const SECTION_COLOURS = [
+  "#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444",
+  "#8b5cf6", "#14b8a6", "#f97316", "#84cc16", "#ec4899",
+];
+
+let terraceState = {
+  startEdgeIdx: null,
+  rawSections: null,         // FeatureCollection from /api/terrace_sections
+  blockGeoJson: null,        // list of GeoJSON polygons after grouping is applied
+  blockStartCorners: null,   // list of NW/NE/SW/SE | null per block (from grouping)
+};
+let awaitingTerracePick = false;
 
 let currentPolygon = null; // GeoJSON geometry
 
@@ -318,14 +336,17 @@ map.on(L.Draw.Event.CREATED, (e) => {
   drawn.clearLayers();
   drawn.addLayer(e.layer);
   currentPolygon = e.layer.toGeoJSON().geometry;
+  schedulePreview();
 });
 map.on(L.Draw.Event.EDITED, () => {
   // Re-grab geometry from whatever is in `drawn`.
   const layers = drawn.getLayers();
   if (layers.length) currentPolygon = layers[0].toGeoJSON().geometry;
+  schedulePreview();
 });
 map.on(L.Draw.Event.DELETED, () => {
   currentPolygon = null;
+  previewLayer.clearLayers();
 });
 
 document.getElementById("loadGeoJson").addEventListener("click", () => {
@@ -339,21 +360,533 @@ document.getElementById("loadGeoJson").addEventListener("click", () => {
     return;
   }
   setPolygon(parsed);
+  schedulePreview();
 });
 
 document.getElementById("clearPolygon").addEventListener("click", () => {
   drawn.clearLayers();
   bedsLayer.clearLayers();
   zonesLayer.clearLayers();
+  blocksLayer.clearLayers();
+  cornerLayer.clearLayers();
+  previewLayer.clearLayers();
+  anchorLayer.clearLayers();
+  clearTerraceMode();
   currentPolygon = null;
   document.getElementById("summary").textContent = "";
   setStatus("ready", "idle");
 });
 
+// ---- live cut-line preview ------------------------------------------------
+let previewTimer = null;
+let previewController = null;
+
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(runPreview, 200);
+}
+
+async function runPreview() {
+  if (!currentPolygon) {
+    previewLayer.clearLayers();
+    return;
+  }
+  const n = parseInt(document.getElementById("splitParts").value, 10) || 1;
+  const axis = document.getElementById("splitAxis").value;
+  if (n <= 1 || axis === "none") {
+    previewLayer.clearLayers();
+    return;
+  }
+  if (previewController) previewController.abort();
+  previewController = new AbortController();
+  const signal = previewController.signal;
+  try {
+    const res = await fetch("/api/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        polygon: currentPolygon,
+        direction: document.getElementById("direction").value,
+        n_blocks: n,
+        split_axis: axis,
+        start_corner: document.getElementById("startCorner").value,
+        buffer_m: parseFloat(document.getElementById("bufferM").value) || 0,
+      }),
+      signal,
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderPreview(data);
+    renderBedAnchors(data.metadata);
+  } catch (e) {
+    // Quiet — preview is non-essential, AbortError is expected.
+  }
+}
+
+function renderPreview(fc) {
+  previewLayer.clearLayers();
+  const blocks = fc.features.filter((f) => f.properties.kind === "block");
+  const cuts = fc.features.filter((f) => f.properties.kind === "cut");
+
+  L.geoJSON(
+    { type: "FeatureCollection", features: blocks },
+    {
+      style: {
+        color: "#7c3aed",
+        weight: 1,
+        opacity: 0.4,
+        fillColor: "#7c3aed",
+        fillOpacity: 0.05,
+      },
+      interactive: false,
+    },
+  ).addTo(previewLayer);
+
+  L.geoJSON(
+    { type: "FeatureCollection", features: cuts },
+    {
+      style: { color: "#dc2626", weight: 3, opacity: 0.85, dashArray: "8 5" },
+      interactive: false,
+    },
+  ).addTo(previewLayer);
+}
+
+["splitParts", "splitAxis", "direction", "startCorner", "bufferM"].forEach(
+  (id) => {
+    const el = document.getElementById(id);
+    el.addEventListener("input", () => {
+      schedulePreview();
+      scheduleTerraceRefresh();
+    });
+    el.addEventListener("change", () => {
+      schedulePreview();
+      scheduleTerraceRefresh();
+    });
+  },
+);
+
+let terraceRefreshTimer = null;
+function scheduleTerraceRefresh() {
+  if (terraceState.startEdgeIdx == null) return;
+  clearTimeout(terraceRefreshTimer);
+  terraceRefreshTimer = setTimeout(() => {
+    const grouping = document.getElementById("terraceGrouping").value.trim();
+    refreshTerrace(grouping || null);
+  }, 220);
+}
+
+// ---- terrace mode ---------------------------------------------------------
+function getOuterRingForTerrace(geom) {
+  if (!geom) return null;
+  if (geom.type === "Feature") return getOuterRingForTerrace(geom.geometry);
+  if (geom.type === "Polygon") return geom.coordinates[0];
+  if (geom.type === "MultiPolygon") {
+    // Largest part by Shoelace area on the exterior ring.
+    let best = null;
+    let bestArea = -1;
+    for (const poly of geom.coordinates) {
+      const ring = poly[0];
+      let area = 0;
+      for (let i = 0; i < ring.length - 1; i++) {
+        area += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+      }
+      area = Math.abs(area / 2);
+      if (area > bestArea) {
+        bestArea = area;
+        best = ring;
+      }
+    }
+    return best;
+  }
+  return null;
+}
+
+function nearestEdgeIdx(ring, latlng) {
+  // ring is [[lon,lat], ...] with closing duplicate. Returns the index i
+  // such that the edge from ring[i] to ring[i+1] is closest to latlng.
+  if (!ring || ring.length < 2) return null;
+  const click = map.latLngToLayerPoint(latlng);
+  let bestI = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const a = map.latLngToLayerPoint(L.latLng(ring[i][1], ring[i][0]));
+    const b = map.latLngToLayerPoint(L.latLng(ring[i + 1][1], ring[i + 1][0]));
+    const d = L.LineUtil.pointToSegmentDistance(click, a, b);
+    if (d < bestD) {
+      bestD = d;
+      bestI = i;
+    }
+  }
+  return bestD < 30 ? bestI : null; // 30 px tolerance
+}
+
+function setTerraceStatus(text) {
+  document.getElementById("terraceStatus").textContent = text;
+}
+
+function clearTerraceOverlays() {
+  terraceLayer.clearLayers();
+}
+
+function clearTerraceMode() {
+  terraceState = {
+    startEdgeIdx: null,
+    rawSections: null,
+    blockGeoJson: null,
+    blockStartCorners: null,
+  };
+  clearTerraceOverlays();
+  anchorLayer.clearLayers();
+  setTerraceStatus("No edge picked.");
+  if (typeof renderEndBedsReadout === "function") renderEndBedsReadout();
+}
+
+document.getElementById("pickTerraceEdge").addEventListener("click", () => {
+  if (!currentPolygon) {
+    alert("Draw or paste a polygon first.");
+    return;
+  }
+  awaitingTerracePick = true;
+  setTerraceStatus("Click any stepped edge of the polygon…");
+  document.getElementById("map").style.cursor = "crosshair";
+});
+
+document.getElementById("clearTerrace").addEventListener("click", clearTerraceMode);
+
+map.on("click", async (e) => {
+  if (!awaitingTerracePick) return;
+  awaitingTerracePick = false;
+  document.getElementById("map").style.cursor = "";
+  const ring = getOuterRingForTerrace(currentPolygon);
+  if (!ring) {
+    setTerraceStatus("Polygon has no usable ring.");
+    return;
+  }
+  const idx = nearestEdgeIdx(ring, e.latlng);
+  if (idx == null) {
+    setTerraceStatus("Click was too far from any edge — try again.");
+    return;
+  }
+  terraceState.startEdgeIdx = idx;
+  setTerraceStatus(`Edge ${idx} picked, computing sections…`);
+  await refreshTerrace(null);
+});
+
+async function refreshTerrace(grouping) {
+  if (terraceState.startEdgeIdx == null || !currentPolygon) return;
+  try {
+    const res = await fetch("/api/terrace_sections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        polygon: currentPolygon,
+        start_edge_idx: terraceState.startEdgeIdx,
+        grouping: grouping || null,
+        start_corner: document.getElementById("startCorner").value,
+        buffer_m: parseFloat(document.getElementById("bufferM").value) || 0,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || "terrace failed");
+    }
+    const data = await res.json();
+    terraceState.rawSections = data;
+    terraceState.blockGeoJson = data.block_geojson || null;
+    terraceState.blockStartCorners = data.metadata.block_start_corners || null;
+    renderTerrace(data);
+    renderBedAnchors(data.metadata);
+    renderEndBedsReadout();
+    const m = data.metadata;
+    const blockBit =
+      m.block_count > 0 ? `, ${m.block_count} blocks` : "";
+    setTerraceStatus(
+      `Edge ${m.chain_edges?.[0] ?? "?"}+chain ${m.chain_edges?.length ?? 0}, treads ${m.tread_edges?.length ?? 0}, sections ${m.section_count}${blockBit}.`,
+    );
+  } catch (err) {
+    setTerraceStatus("Terrace error: " + err.message);
+  }
+}
+
+function renderBedAnchors(meta) {
+  anchorLayer.clearLayers();
+  if (!meta || !meta.first_bed_a || !meta.first_bed_b) return;
+  const a = [meta.first_bed_a.lat, meta.first_bed_a.lon];
+  const b = [meta.first_bed_b.lat, meta.first_bed_b.lon];
+  // Thick purple arrow A → B
+  L.polyline([a, b], {
+    color: "#7c3aed",
+    weight: 6,
+    opacity: 0.9,
+    lineCap: "round",
+  }).addTo(anchorLayer);
+  // Arrowhead at B
+  const dy = b[0] - a[0];
+  const dx = b[1] - a[1];
+  const headBearing = (Math.atan2(dy, dx) * 180) / Math.PI;
+  L.marker(b, {
+    icon: L.divIcon({
+      className: "bed-arrow-head",
+      html: `<div style="transform: rotate(${-headBearing}deg);">▶</div>`,
+      iconSize: [22, 22],
+    }),
+    interactive: false,
+  }).addTo(anchorLayer);
+  // A and B labels
+  for (const [pt, label, cls] of [
+    [a, "A", "bed-anchor-a"],
+    [b, "B", "bed-anchor-b"],
+  ]) {
+    L.circleMarker(pt, {
+      radius: 8,
+      color: "#4338ca",
+      fillColor: "#a78bfa",
+      fillOpacity: 1,
+      weight: 2,
+    })
+      .bindTooltip(label, {
+        permanent: true,
+        direction: "top",
+        offset: [0, -10],
+        className: cls,
+      })
+      .addTo(anchorLayer);
+  }
+}
+
+function renderTerrace(fc) {
+  clearTerraceOverlays();
+
+  const chain = fc.features.filter((f) => f.properties.kind === "chain_edge");
+  const cuts = fc.features.filter((f) => f.properties.kind === "cut");
+  const sections = fc.features.filter((f) => f.properties.kind === "section");
+  const blocks = fc.features.filter((f) => f.properties.kind === "block");
+
+  // Sections — coloured fills with labels.
+  for (const s of sections) {
+    const colour = SECTION_COLOURS[(s.properties.i - 1) % SECTION_COLOURS.length];
+    L.geoJSON(s, {
+      style: {
+        color: colour,
+        weight: 1,
+        opacity: 0.8,
+        fillColor: colour,
+        fillOpacity: 0.18,
+      },
+    }).addTo(terraceLayer);
+    const c = L.geoJSON(s).getBounds().getCenter();
+    L.marker(c, {
+      icon: L.divIcon({
+        className: "section-label",
+        html: s.properties.section_id,
+        iconSize: [40, 18],
+      }),
+      interactive: false,
+    }).addTo(terraceLayer);
+  }
+
+  // Chain edges — highlight, treads thicker.
+  for (const c of chain) {
+    L.geoJSON(c, {
+      style: {
+        color: c.properties.is_tread ? "#dc2626" : "#fb923c",
+        weight: c.properties.is_tread ? 5 : 3,
+        opacity: 0.9,
+      },
+    }).addTo(terraceLayer);
+  }
+
+  // Cuts — dashed.
+  for (const c of cuts) {
+    L.geoJSON(c, {
+      style: {
+        color: "#dc2626",
+        weight: 2,
+        opacity: 0.9,
+        dashArray: "8 5",
+      },
+    }).addTo(terraceLayer);
+  }
+
+  // Block previews — thick purple outlines on top.
+  for (const b of blocks) {
+    const splitTag = b.properties.split
+      ? `, ${b.properties.split.n}x ${b.properties.split.axis}`
+      : "";
+    L.geoJSON(b, {
+      style: {
+        color: "#7c3aed",
+        weight: 3,
+        opacity: 0.95,
+        fillColor: "#7c3aed",
+        fillOpacity: 0.08,
+        dashArray: "10 4",
+      },
+    })
+      .bindTooltip(
+        `${b.properties.block_id} (S${b.properties.sections.join(",")}${splitTag}, ${b.properties.area_m2} m²)`,
+        { sticky: true, direction: "center" },
+      )
+      .addTo(terraceLayer);
+  }
+}
+
+document
+  .getElementById("previewTerraceBlocks")
+  .addEventListener("click", () => {
+    const grouping = document.getElementById("terraceGrouping").value.trim();
+    if (!grouping) {
+      alert("Type a grouping first, e.g. '1-2, 3, 4-5'.");
+      return;
+    }
+    if (terraceState.startEdgeIdx == null) {
+      alert("Pick a stepped edge on the map first.");
+      return;
+    }
+    refreshTerrace(grouping);
+  });
+
+// Split a grouping string on commas at the top level — commas inside [...]
+// annotations stay with their group.
+function splitGroupingTopLevel(s) {
+  const parts = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of s) {
+    if (ch === "[") {
+      depth++;
+      cur += ch;
+    } else if (ch === "]") {
+      depth = Math.max(0, depth - 1);
+      cur += ch;
+    } else if (ch === "," && depth === 0) {
+      parts.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur) parts.push(cur);
+  return parts;
+}
+
+// ---- live "last bed in block" readout ------------------------------------
+function expectedBlockIds() {
+  // Terrace mode wins — its block_geojson dictates the block list / IDs.
+  if (terraceState.blockGeoJson && terraceState.blockGeoJson.length > 0) {
+    return terraceState.rawSections.features
+      .filter((f) => f.properties.kind === "block")
+      .map((f) => f.properties.block_id);
+  }
+  const n =
+    parseInt(document.getElementById("splitParts").value, 10) || 1;
+  const axis = document.getElementById("splitAxis").value;
+  const count = axis === "none" || n <= 1 ? 1 : n;
+  return Array.from({ length: count }, (_, i) =>
+    `P${(i + 1).toString().padStart(2, "0")}`,
+  );
+}
+
+function parseEndBeds(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return { nums: [], error: null };
+  const nums = trimmed
+    .split(/[,\s]+/)
+    .filter(Boolean)
+    .map((v) => Number(v));
+  if (nums.some((v) => !Number.isInteger(v) || v <= 0)) {
+    return { nums: [], error: "Each entry must be a positive integer." };
+  }
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] <= nums[i - 1]) {
+      return {
+        nums: [],
+        error: `Numbers must strictly increase — got ${nums[i - 1]} then ${nums[i]}.`,
+      };
+    }
+  }
+  return { nums, error: null };
+}
+
+function renderEndBedsReadout() {
+  const out = document.getElementById("endBedsReadout");
+  out.className = "readout";
+  const text = document.getElementById("blockEndBeds").value;
+  const ids = expectedBlockIds();
+  const { nums, error } = parseEndBeds(text);
+
+  if (error) {
+    out.classList.add("error");
+    out.textContent = error;
+    return;
+  }
+  if (nums.length === 0) {
+    out.textContent =
+      ids.length > 1
+        ? `Expecting ${ids.length} numbers (one per block: ${ids.join(", ")}). Empty falls back to fixed bed spacing.`
+        : `Expecting 1 number (one per block: ${ids[0]}). Empty falls back to fixed bed spacing.`;
+    return;
+  }
+
+  const lines = [];
+  let prev = 0;
+  for (let i = 0; i < nums.length; i++) {
+    const id = ids[i] ?? `P${(i + 1).toString().padStart(2, "0")}`;
+    const start = prev + 1;
+    const end = nums[i];
+    const count = end - prev;
+    const idStr = `B${start.toString().padStart(4, "0")} → B${end.toString().padStart(4, "0")}`;
+    lines.push(`${id}: ${idStr} (${count} bed${count === 1 ? "" : "s"})`);
+    prev = end;
+  }
+  out.textContent = lines.join("\n");
+  if (nums.length !== ids.length) {
+    out.classList.add("warn");
+    out.textContent =
+      `${out.textContent}\n⚠ ${nums.length} number${nums.length === 1 ? "" : "s"} given but ${ids.length} block${ids.length === 1 ? "" : "s"} configured (${ids.join(", ")}).`;
+  }
+}
+
+document
+  .getElementById("blockEndBeds")
+  .addEventListener("input", renderEndBedsReadout);
+// Re-render when the block layout changes so expected count stays accurate.
+[
+  "splitParts",
+  "splitAxis",
+  "direction",
+  "startCorner",
+  "terraceGrouping",
+].forEach((id) => {
+  document.getElementById(id).addEventListener("input", renderEndBedsReadout);
+  document.getElementById(id).addEventListener("change", renderEndBedsReadout);
+});
+renderEndBedsReadout();
+
+document
+  .getElementById("reverseTerraceBlocks")
+  .addEventListener("click", () => {
+    const input = document.getElementById("terraceGrouping");
+    const raw = input.value.trim();
+    if (!raw) {
+      alert("Type a grouping first.");
+      return;
+    }
+    const parts = splitGroupingTopLevel(raw).map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) return; // nothing to reverse
+    input.value = parts.reverse().join(", ");
+    if (terraceState.startEdgeIdx != null) {
+      refreshTerrace(input.value);
+    }
+  });
+
 // ---- generation -----------------------------------------------------------
 function renderResult(fc) {
   bedsLayer.clearLayers();
   zonesLayer.clearLayers();
+  blocksLayer.clearLayers();
+  cornerLayer.clearLayers();
+  previewLayer.clearLayers();
 
   const beds = {
     type: "FeatureCollection",
@@ -363,11 +896,60 @@ function renderResult(fc) {
     type: "FeatureCollection",
     features: fc.features.filter((f) => f.properties.kind === "zone"),
   };
+  const blockFeatures = fc.features.filter(
+    (f) => f.properties.kind === "block",
+  );
+
+  L.geoJSON(
+    {
+      type: "FeatureCollection",
+      features: blockFeatures,
+    },
+    {
+      style: {
+        color: "#7c3aed",
+        weight: 2,
+        opacity: 0.85,
+        fillColor: "#7c3aed",
+        fillOpacity: 0.06,
+        dashArray: "6 4",
+      },
+      onEachFeature: (f, l) =>
+        l.bindTooltip(`${f.properties.block_id} (${f.properties.area_m2} m²)`, {
+          sticky: true,
+          direction: "center",
+        }),
+    },
+  ).addTo(blocksLayer);
+
+  // Per-block start-corner markers — show the user where bed #1 of each block
+  // lives, and the corner used (which alternates between blocks for the U-turn).
+  for (const bf of blockFeatures) {
+    const p = bf.properties;
+    if (p.start_corner_lat == null || p.start_corner_lon == null) continue;
+    const m = L.circleMarker([p.start_corner_lat, p.start_corner_lon], {
+      radius: 6,
+      color: "#dc2626",
+      fillColor: "#fef2f2",
+      fillOpacity: 1,
+      weight: 2,
+    });
+    m.bindTooltip(`${p.block_id} • bed #1 (${p.start_corner})`, {
+      permanent: true,
+      direction: "top",
+      offset: [0, -8],
+      className: "corner-tip",
+    });
+    m.addTo(cornerLayer);
+  }
 
   L.geoJSON(beds, {
     style: { color: "#1f9d55", weight: 3, opacity: 0.9 },
     onEachFeature: (f, l) =>
-      l.bindTooltip(f.properties.bed_id, { sticky: true, direction: "center" }),
+      l.bindTooltip(
+        `${f.properties.bed_id} (${f.properties.block_id})`,
+        { sticky: true, direction: "center" },
+      ),
   }).addTo(bedsLayer);
 
   L.geoJSON(zones, {
@@ -380,26 +962,96 @@ function renderResult(fc) {
   }).addTo(zonesLayer);
 }
 
+function clearResults() {
+  bedsLayer.clearLayers();
+  zonesLayer.clearLayers();
+  blocksLayer.clearLayers();
+  cornerLayer.clearLayers();
+  anchorLayer.clearLayers();
+  document.getElementById("summary").textContent = "";
+}
+
+let generateController = null;
+
+function setGenerateBusy(busy) {
+  document.getElementById("generate").disabled = busy;
+  document.getElementById("cancelGenerate").disabled = !busy;
+}
+
+document.getElementById("clearResults").addEventListener("click", () => {
+  clearResults();
+  setStatus("ready", "idle");
+});
+
+document.getElementById("cancelGenerate").addEventListener("click", () => {
+  if (generateController) {
+    generateController.abort();
+  }
+});
+
 document.getElementById("generate").addEventListener("click", async () => {
   if (!currentPolygon) {
     alert("Draw or paste a polygon first.");
     return;
   }
+  // Wipe the previous result immediately so the user sees a clean canvas
+  // while the new run is computing — avoids stale beds layered on the new ones.
+  clearResults();
+
+  const endBedsRaw = document.getElementById("blockEndBeds").value.trim();
+  let block_end_beds = null;
+  if (endBedsRaw) {
+    const nums = endBedsRaw
+      .split(/[,\s]+/)
+      .filter(Boolean)
+      .map((v) => parseInt(v, 10));
+    if (nums.some((n) => !Number.isFinite(n) || n <= 0)) {
+      alert(
+        "End-bed numbers must be positive integers, e.g. '50, 95'.",
+      );
+      return;
+    }
+    for (let i = 1; i < nums.length; i++) {
+      if (nums[i] <= nums[i - 1]) {
+        alert(
+          "End-bed numbers must be strictly increasing — each block ends at a higher bed than the previous.",
+        );
+        return;
+      }
+    }
+    block_end_beds = nums;
+  }
+
   const body = {
     polygon: currentPolygon,
-    bed_spacing: parseFloat(document.getElementById("bedSpacing").value),
+    bed_spacing: parseFloat(document.getElementById("bedSpacing").value) || 1.5,
     zone_length: parseFloat(document.getElementById("zoneLength").value),
     buffer_m: parseFloat(document.getElementById("bufferM").value),
     direction: document.getElementById("direction").value,
+    n_blocks: parseInt(document.getElementById("splitParts").value, 10) || 1,
+    split_axis: document.getElementById("splitAxis").value,
+    start_corner: document.getElementById("startCorner").value,
+    block_end_beds,
+    custom_blocks: terraceState.blockGeoJson || null,
+    block_start_corners: terraceState.blockGeoJson
+      ? terraceState.blockStartCorners
+      : null,
     name: document.getElementById("name").value || null,
   };
 
+  // Abort any prior in-flight generation before starting a new one.
+  if (generateController) generateController.abort();
+  generateController = new AbortController();
+  const signal = generateController.signal;
+
+  setGenerateBusy(true);
   setStatus("generating…", "busy");
   try {
     const res = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -408,15 +1060,32 @@ document.getElementById("generate").addEventListener("click", async () => {
     const data = await res.json();
     renderResult(data.result);
     const m = data.result.metadata;
+    const splitLine =
+      m.split_axis && m.split_axis !== "none"
+        ? `Blocks: ${m.block_count} (split across ${m.split_axis} edge)\n`
+        : "";
+    const modeLine =
+      m.mode === "count"
+        ? `Mode: count   Per block: ${(m.block_counts || []).join(", ")}\n`
+        : `Mode: spacing (${m.bed_spacing_m} m)\n`;
     document.getElementById("summary").textContent =
       `Beds: ${m.bed_count}   Zones: ${m.zone_count}\n` +
-      `Area: ${m.area_m2} m²\n` +
+      splitLine +
+      modeLine +
+      `Start corner: ${m.start_corner}   Area: ${m.area_m2} m²\n` +
       `Saved: ${data.filename}`;
     setStatus("done", "ok");
     loadOutputs();
   } catch (e) {
-    setStatus("error", "error");
-    alert("Generation failed: " + e.message);
+    if (e.name === "AbortError") {
+      setStatus("cancelled", "idle");
+    } else {
+      setStatus("error", "error");
+      alert("Generation failed: " + e.message);
+    }
+  } finally {
+    setGenerateBusy(false);
+    generateController = null;
   }
 });
 

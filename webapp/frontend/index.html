@@ -94,20 +94,79 @@
       <section>
         <h2>4. Parameters</h2>
         <label>Plot name <input id="name" type="text" placeholder="e.g. Kapkolia GH 18" /></label>
-        <label>Bed spacing (m) <input id="bedSpacing" type="number" step="0.1" min="0.1" value="1.5" /></label>
-        <label>Zone length (m) <input id="zoneLength" type="number" step="0.5" min="0.5" value="10" /></label>
-        <label>Inward buffer (m) <input id="bufferM" type="number" step="0.05" min="0" value="0.1" /></label>
-        <label>Bed direction
+
+        <p class="hint section-divider">Layout — independent knobs for splitting and orienting the greenhouse.</p>
+        <div class="row">
+          <label style="flex:0 0 90px;margin-bottom:0">Blocks
+            <input id="splitParts" type="number" min="1" max="20" step="1" value="1" />
+          </label>
+          <label style="flex:1;margin-bottom:0">Cut across
+            <select id="splitAxis">
+              <option value="none" selected>No split</option>
+              <option value="longest">Longest edge (cuts ⟂ long axis)</option>
+              <option value="shortest">Shortest edge (cuts ∥ long axis)</option>
+            </select>
+          </label>
+        </div>
+        <label>Bed orientation
           <select id="direction">
             <option value="along_long_axis" selected>Along long axis (default)</option>
             <option value="across_long_axis">Across long axis</option>
           </select>
         </label>
+        <label>Bed-flow start corner
+          <select id="startCorner">
+            <option value="NW" selected>NW — top-left of long-axis frame</option>
+            <option value="NE">NE — top-right</option>
+            <option value="SW">SW — bottom-left</option>
+            <option value="SE">SE — bottom-right</option>
+          </select>
+        </label>
+        <p class="hint">Bed #1 sits at this corner; Z01 of every bed lands on the chosen side. Corners are in the rotated long-axis frame (shown on the map after Generate). Beds U-turn between blocks when the cut crosses the bed direction.</p>
+
+        <details>
+          <summary class="hint">Terrace mode (overrides equal split)</summary>
+          <p class="hint">For staircase-shaped greenhouses: pick any one of the stepped edges, the system auto-finds the rest of the chain, projects each tread inward, and slices the polygon into numbered sections. Group sections into blocks with a list like <code>1-3, 4, 5-7</code>. Append <code>[Nx longest]</code> or <code>[Nx shortest]</code> to a group to <em>further</em> equal-partition that block — sub-blocks get IDs P01a, P01b…</p>
+          <div class="row">
+            <button id="pickTerraceEdge" class="secondary">Pick stepped edge on map</button>
+            <button id="clearTerrace" class="secondary">Clear terrace</button>
+          </div>
+          <p class="hint" id="terraceStatus">No edge picked.</p>
+          <label>Block grouping
+            <input id="terraceGrouping" type="text" placeholder="e.g. 1-2, 3, 4-5[3x longest]" />
+          </label>
+          <p class="hint">Examples — <code>1-2, 3</code> (two blocks). <code>1-2, 3[3x longest]</code> (block 2 split into 3 along long axis → P02a/b/c). <code>1[2xL], 2-3</code> (shorthand: <code>L</code>=longest, <code>S</code>=shortest). The <em>order</em> you list groups in is the bed-flow order — block 1 is where the snake starts. Append <code>@NW</code>/<code>@NE</code>/<code>@SW</code>/<code>@SE</code> to force a specific corner for that block — <code>1, 2@SE, 3</code> overrides P02 to start at SE; the next blocks alternate from there.</p>
+          <div class="row">
+            <button id="previewTerraceBlocks" class="secondary">Preview blocks</button>
+            <button id="reverseTerraceBlocks" class="secondary">Reverse order</button>
+          </div>
+        </details>
+
+        <p class="hint section-divider">Beds and zones.</p>
+        <label>End bed of each block (cumulative)
+          <input id="blockEndBeds" type="text" placeholder="e.g. 50, 95" />
+        </label>
+        <p class="hint">One number per block, comma-separated, listing the <em>last</em> bed in each block. <code>50, 95</code> means block 1 ends at B0050 (50 beds) and block 2 ends at B0095 (45 beds). Beds are spread evenly inside the inward buffer of each block. Leave empty to fall back to fixed spacing.</p>
+        <div id="endBedsReadout" class="readout"></div>
+        <label>Inward buffer (m) <input id="bufferM" type="number" step="0.05" min="0" value="1" /></label>
+        <label>Zone length (m) <input id="zoneLength" type="number" step="0.5" min="0.5" value="4" /></label>
+        <details>
+          <summary class="hint">Fallback: fixed bed spacing</summary>
+          <label>Bed spacing (m) <input id="bedSpacing" type="number" step="0.1" min="0.1" value="1.5" /></label>
+          <p class="hint">Used only when the end-bed list above is empty. Fragments under notches each become their own bed in this mode.</p>
+        </details>
       </section>
 
       <section>
         <h2>5. Generate</h2>
-        <button id="generate" class="primary">Generate beds &amp; zones</button>
+        <div class="row">
+          <button id="generate" class="primary">Generate beds &amp; zones</button>
+          <button id="cancelGenerate" class="secondary" disabled>Cancel</button>
+        </div>
+        <div class="row">
+          <button id="clearResults" class="secondary">Clear results</button>
+        </div>
+        <p class="hint">Clear results wipes the generated beds/zones but keeps your polygon — handy when zones came out wrong and you want to tweak parameters and try again.</p>
         <div id="summary" class="summary"></div>
       </section>
 
