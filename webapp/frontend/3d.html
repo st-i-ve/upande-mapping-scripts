@@ -294,43 +294,23 @@
         const [lng0, lat0] = this.features[0].geometry.coordinates;
         this.anchor = maplibregl.MercatorCoordinate.fromLngLat([lng0, lat0], 0);
 
-        // Trunk: cylinder with base at y=0 (so the bottom sits on the ground).
-        const trunkGeo = new THREE.CylinderGeometry(
-          0.12, 0.16, this.trunkH, 8,
-        );
+        // Trunk: a thin square prism (Roblox-style). BoxGeometry = 12 tris,
+        // base at y=0 so it sits on the ground.
+        const trunkGeo = new THREE.BoxGeometry(0.2, this.trunkH, 0.2);
         trunkGeo.translate(0, this.trunkH / 2, 0);
         const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b3f1e });
         const trunkMesh = new THREE.InstancedMesh(
           trunkGeo, trunkMat, this.features.length,
         );
 
-        // Canopy: low-poly perturbed icosahedron — looks leafy & organic
-        // without the per-frame cost of a real sphere. detail=1 = 80 tris.
-        // Vertices are jittered by a hash of their position so duplicate
-        // vertices (icosahedron is non-indexed for flat shading) get the
-        // SAME offset and adjacent faces still meet cleanly.
-        const canopyGeo = new THREE.IcosahedronGeometry(this.canopyR, 1);
-        // Stretch into a slight oval — canopy is `canopyH` tall, 2*canopyR wide.
-        canopyGeo.scale(1, this.canopyH / (2 * this.canopyR), 1);
-        const cpos = canopyGeo.attributes.position;
-        const cTmp = new THREE.Vector3();
-        const cOffsets = new Map();
-        const jitter = this.canopyR * 0.20;
-        for (let i = 0; i < cpos.count; i++) {
-          cTmp.fromBufferAttribute(cpos, i);
-          const key =
-            cTmp.x.toFixed(4) + "_" + cTmp.y.toFixed(4) + "_" + cTmp.z.toFixed(4);
-          let o = cOffsets.get(key);
-          if (!o) {
-            const seed = Math.abs(cTmp.x * 12.9 + cTmp.y * 78.2 + cTmp.z * 37.7) + 1;
-            const f = (k) => ((Math.sin(seed * k) * 43758.5453) % 1 - 0) * jitter;
-            o = [f(1.1), f(2.7), f(4.3)];
-            cOffsets.set(key, o);
-          }
-          cpos.setXYZ(i, cTmp.x + o[0], cTmp.y + o[1], cTmp.z + o[2]);
-        }
-        cpos.needsUpdate = true;
-        canopyGeo.computeVertexNormals();
+        // Canopy: a single chunky box stacked on the trunk. 12 tris per
+        // flower — same family of poly cost as a Roblox part. No jitter,
+        // no smoothing, flat shading sells the blocky look.
+        const canopyGeo = new THREE.BoxGeometry(
+          this.canopyR * 2,
+          this.canopyH,
+          this.canopyR * 2,
+        );
         canopyGeo.translate(0, this.trunkH + this.canopyH / 2, 0);
         const canopyMat = new THREE.MeshLambertMaterial({
           color: 0x2a8a2a,

@@ -298,6 +298,7 @@ let terraceState = {
 };
 let awaitingTerracePick = false;
 let awaitingCornerPick = false;
+let awaitingSwapPick = false;
 
 let currentPolygon = null; // GeoJSON geometry
 
@@ -583,7 +584,7 @@ map.on("click", async (e) => {
     }
     const hit = findClosestBlockCorner(e.latlng);
     if (!hit) {
-      setTerraceStatus("Click was too far from any block corner — try again.");
+      setTerraceStatus("Click was too far from any block — try again.");
       return;
     }
     if (!setBlockCornerOverride(hit.block_id, hit.corner)) {
@@ -595,35 +596,167 @@ map.on("click", async (e) => {
     setTerraceStatus(`Set ${hit.block_id} → @${hit.corner}.`);
     return;
   }
+  if (awaitingSwapPick) {
+    awaitingSwapPick = false;
+    document.getElementById("map").style.cursor = "";
+    const meta = terraceState.rawSections?.metadata;
+    if (!meta?.block_corners?.length) {
+      setTerraceStatus("Preview blocks first, then pick a sub-block to swap.");
+      return;
+    }
+    const hit = findClosestBlockCorner(e.latlng);
+    if (!hit) {
+      setTerraceStatus("Click was too far from any block — try again.");
+      return;
+    }
+    if (!toggleSubBlockReverse(hit.block_id)) {
+      setTerraceStatus(
+        `${hit.block_id} has no [Nx …] split spec — nothing to swap.`,
+      );
+      return;
+    }
+    setTerraceStatus(`Swapped sub-blocks of group containing ${hit.block_id}.`);
+    return;
+  }
 });
 
+// Quadrant snap: pick the block whose rotated bbox the click falls inside (or
+// nearest to), then map the click to NW/NE/SW/SE based on which quadrant of
+// that bbox it landed in. This is much more forgiving than precise corner
+// dots — the user just clicks roughly in the corner area of the block they
+// care about.
 function findClosestBlockCorner(latlng) {
   const meta = terraceState.rawSections?.metadata;
   if (!meta?.block_corners?.length) return null;
-  const click = map.latLngToLayerPoint(latlng);
-  let best = null;
-  let bestDist = Infinity;
+  const clickPx = map.latLngToLayerPoint(latlng);
+
+  let bestBlk = null;
+  let bestScore = Infinity;
   for (const blk of meta.block_corners) {
-    for (const corner of ["NW", "NE", "SW", "SE"]) {
-      const c = blk[corner];
-      if (!c) continue;
-      const pt = map.latLngToLayerPoint(L.latLng(c.lat, c.lon));
-      const d = pt.distanceTo(click);
-      if (d < bestDist) {
-        bestDist = d;
-        best = { block_id: blk.block_id, corner };
-      }
+    if (!blk.NW || !blk.NE || !blk.SW || !blk.SE) continue;
+    const NW = map.latLngToLayerPoint(L.latLng(blk.NW.lat, blk.NW.lon));
+    const NE = map.latLngToLayerPoint(L.latLng(blk.NE.lat, blk.NE.lon));
+    const SW = map.latLngToLayerPoint(L.latLng(blk.SW.lat, blk.SW.lon));
+    const SE = map.latLngToLayerPoint(L.latLng(blk.SE.lat, blk.SE.lon));
+    // Express the click in the bbox's local (u along NW→NE, v along NW→SW)
+    // frame. u,v ∈ [0,1] means inside the bbox; outside that range we score
+    // by how far out the click is so a click near the edge still snaps.
+    const ex = { x: NE.x - NW.x, y: NE.y - NW.y };
+    const ey = { x: SW.x - NW.x, y: SW.y - NW.y };
+    const denom = ex.x * ey.y - ex.y * ey.x;
+    if (Math.abs(denom) < 1e-6) continue;
+    const dx = clickPx.x - NW.x;
+    const dy = clickPx.y - NW.y;
+    const u = (dx * ey.y - dy * ey.x) / denom;
+    const v = (ex.x * dy - ex.y * dx) / denom;
+    // Penalty: 0 inside, otherwise distance (in u/v units) outside the bbox.
+    const outU = u < 0 ? -u : u > 1 ? u - 1 : 0;
+    const outV = v < 0 ? -v : v > 1 ? v - 1 : 0;
+    const score = Math.hypot(outU, outV);
+    if (score < bestScore) {
+      bestScore = score;
+      bestBlk = { blk, u, v };
     }
   }
-  return bestDist < 60 ? best : null; // 60 px tolerance
+  // Allow up to ~0.6 bbox-widths outside before giving up — keeps things
+  // forgiving without snapping to absurdly distant blocks.
+  if (!bestBlk || bestScore > 0.6) return null;
+  // Clamp u/v to the bbox so we always end up with a defined quadrant.
+  const u = Math.min(1, Math.max(0, bestBlk.u));
+  const v = Math.min(1, Math.max(0, bestBlk.v));
+  const ns = v < 0.5 ? "N" : "S";
+  const we = u < 0.5 ? "W" : "E";
+  return { block_id: bestBlk.blk.block_id, corner: ns + we };
+}
+
+// Parse a block_id like "P02a" → { groupIdx: 1, subLetter: "a" } or
+// "P02" → { groupIdx: 1, subLetter: null }.
+function parseBlockId(blockId) {
+  const m = /^P0*(\d+)([a-z])?$/i.exec(blockId);
+  if (!m) return null;
+  return {
+    groupIdx: parseInt(m[1], 10) - 1,
+    subLetter: m[2] ? m[2].toLowerCase() : null,
+  };
+}
+
+// Parse a single group part's [...] bracket. Returns null if no bracket, or
+// { kind, n, axis, rev?, subs?, bracketStart, bracketEnd } where:
+//   kind: "old" (Nx axis [~]) or "new" (per-sub list with @C)
+//   subs: list of {idx, corner|null} for the new form, in bed-flow order
+function parseBracketJS(part) {
+  const m = /\[([^\]]*)\]/.exec(part);
+  if (!m) return null;
+  const inner = m[1].trim();
+  const bracketStart = m.index;
+  const bracketEnd = m.index + m[0].length;
+
+  if (inner.includes(":")) {
+    const colonIdx = inner.indexOf(":");
+    const head = inner.slice(0, colonIdx).trim();
+    const listStr = inner.slice(colonIdx + 1);
+    const headM = /^(?:(\d+)\s*x\s*)?(longest|shortest|long|short|l|s)$/i.exec(head);
+    if (!headM) return null;
+    const items = listStr.split(",").map((s) => s.trim()).filter(Boolean);
+    const subs = [];
+    for (const it of items) {
+      const sm = /^(\d+)(?:\s*@\s*(NW|NE|SW|SE))?$/i.exec(it);
+      if (!sm) return null;
+      subs.push({
+        idx: parseInt(sm[1], 10),
+        corner: sm[2] ? sm[2].toUpperCase() : null,
+      });
+    }
+    return {
+      kind: "new",
+      n: headM[1] ? parseInt(headM[1], 10) : subs.length,
+      axis: headM[2],
+      subs,
+      bracketStart,
+      bracketEnd,
+    };
+  }
+
+  const oldM = /^(\d+)\s*x\s*(longest|shortest|long|short|l|s)\s*(~?)$/i.exec(inner);
+  if (!oldM) return null;
+  return {
+    kind: "old",
+    n: parseInt(oldM[1], 10),
+    axis: oldM[2],
+    rev: oldM[3] === "~",
+    bracketStart,
+    bracketEnd,
+  };
+}
+
+function formatBracketNew(b) {
+  const items = b.subs
+    .map((s) => `${s.idx}${s.corner ? `@${s.corner}` : ""}`)
+    .join(", ");
+  return `[${b.n}x ${b.axis}: ${items}]`;
+}
+
+function formatBracketOld(b) {
+  return `[${b.n}x ${b.axis}${b.rev ? "~" : ""}]`;
+}
+
+function replaceBracket(part, bracket, newBracketText) {
+  return (
+    part.slice(0, bracket.bracketStart) +
+    newBracketText +
+    part.slice(bracket.bracketEnd)
+  );
 }
 
 function setBlockCornerOverride(blockId, corner) {
-  // Map block_id → group index (0-based). "P02a" / "P02b" / "P02" all map
-  // to group #2 → index 1; the override applies to the group's first sub-block.
-  const m = /^P0*(\d+)/.exec(blockId);
-  if (!m) return false;
-  const groupIdx = parseInt(m[1], 10) - 1;
+  // Two paths depending on which syntax the group uses:
+  //   - new (per-sub list):  rewrite THIS sub's @C in place
+  //   - old (Nx axis [~]):   if click landed on a non-first sub, toggle ~ so
+  //                          the clicked piece becomes 'a', then set group @C
+  // For non-split groups, just set the group-level @C.
+  const parsed = parseBlockId(blockId);
+  if (!parsed) return false;
+  const { groupIdx, subLetter } = parsed;
   if (groupIdx < 0) return false;
 
   const input = document.getElementById("terraceGrouping");
@@ -632,8 +765,63 @@ function setBlockCornerOverride(blockId, corner) {
     .filter(Boolean);
   if (groupIdx >= parts.length) return false;
 
+  let part = parts[groupIdx];
+  const bracket = parseBracketJS(part);
+
+  if (subLetter && bracket && bracket.kind === "new") {
+    const subPos = subLetter.charCodeAt(0) - "a".charCodeAt(0);
+    if (subPos < 0 || subPos >= bracket.subs.length) return false;
+    bracket.subs[subPos].corner = corner;
+    part = replaceBracket(part, bracket, formatBracketNew(bracket));
+    // Per-sub corner takes precedence; drop any stale group-level @C.
+    parts[groupIdx] = part.replace(/\s*@\s*(NW|NE|SW|SE)\s*$/i, "");
+    input.value = parts.join(", ");
+    refreshTerrace(input.value);
+    renderEndBedsReadout();
+    return true;
+  }
+
+  if (subLetter && subLetter !== "a" && bracket && bracket.kind === "old") {
+    const flipped = { ...bracket, rev: !bracket.rev };
+    part = replaceBracket(part, bracket, formatBracketOld(flipped));
+  }
   parts[groupIdx] =
-    parts[groupIdx].replace(/\s*@\s*(NW|NE|SW|SE)\s*$/i, "") + `@${corner}`;
+    part.replace(/\s*@\s*(NW|NE|SW|SE)\s*$/i, "") + `@${corner}`;
+  input.value = parts.join(", ");
+  refreshTerrace(input.value);
+  renderEndBedsReadout();
+  return true;
+}
+
+// Reverse sub-block order for the group containing `blockId`.
+//   - new syntax: reverse the sub_specs list
+//   - old syntax: toggle the ~ flag
+// Returns false if the group has no split spec to reverse.
+function toggleSubBlockReverse(blockId) {
+  const parsed = parseBlockId(blockId);
+  if (!parsed) return false;
+  const { groupIdx } = parsed;
+  if (groupIdx < 0) return false;
+
+  const input = document.getElementById("terraceGrouping");
+  const parts = splitGroupingTopLevel(input.value)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (groupIdx >= parts.length) return false;
+
+  const part = parts[groupIdx];
+  const bracket = parseBracketJS(part);
+  if (!bracket) return false;
+
+  let newPart;
+  if (bracket.kind === "new") {
+    bracket.subs.reverse();
+    newPart = replaceBracket(part, bracket, formatBracketNew(bracket));
+  } else {
+    const flipped = { ...bracket, rev: !bracket.rev };
+    newPart = replaceBracket(part, bracket, formatBracketOld(flipped));
+  }
+  parts[groupIdx] = newPart;
   input.value = parts.join(", ");
   refreshTerrace(input.value);
   renderEndBedsReadout();
@@ -652,12 +840,32 @@ document
     }
     awaitingCornerPick = true;
     awaitingTerracePick = false; // mutually exclusive
+    awaitingSwapPick = false;
     setTerraceStatus("Click any corner of any block on the map…");
     document.getElementById("map").style.cursor = "crosshair";
   });
 
+document
+  .getElementById("swapSubBlocks")
+  .addEventListener("click", () => {
+    if (
+      !terraceState.rawSections ||
+      !(terraceState.rawSections.metadata?.block_corners?.length)
+    ) {
+      alert("Preview blocks first, then pick a sub-block to swap.");
+      return;
+    }
+    awaitingSwapPick = true;
+    awaitingCornerPick = false;
+    awaitingTerracePick = false;
+    setTerraceStatus(
+      "Click any sub-block (e.g. P02a or P02b) to swap a/b ordering for that group…",
+    );
+    document.getElementById("map").style.cursor = "crosshair";
+  });
+
 async function refreshTerrace(grouping) {
-  if (terraceState.startEdgeIdx == null || !currentPolygon) return;
+  if (terraceState.startEdgeIdx == null || !currentPolygon) return false;
   try {
     const res = await fetch("/api/terrace_sections", {
       method: "POST",
@@ -687,8 +895,10 @@ async function refreshTerrace(grouping) {
     setTerraceStatus(
       `Edge ${m.chain_edges?.[0] ?? "?"}+chain ${m.chain_edges?.length ?? 0}, treads ${m.tread_edges?.length ?? 0}, sections ${m.section_count}${blockBit}.`,
     );
+    return true;
   } catch (err) {
     setTerraceStatus("Terrace error: " + err.message);
+    return false;
   }
 }
 
@@ -794,9 +1004,13 @@ function renderTerrace(fc) {
 
   // Block previews — thick purple outlines on top.
   for (const b of blocks) {
-    const splitTag = b.properties.split
-      ? `, ${b.properties.split.n}x ${b.properties.split.axis}`
-      : "";
+    const sp = b.properties.split;
+    let splitTag = "";
+    if (sp) {
+      splitTag = `, ${sp.n}x ${sp.axis}`;
+      if (sp.orig_idx != null) splitTag += ` (#${sp.orig_idx})`;
+      if (sp.per_sub) splitTag += " ✎"; // per-sub list in use
+    }
     const overrideTag = b.properties.corner_override
       ? `, @${b.properties.corner_override}`
       : "";
@@ -892,25 +1106,50 @@ function expectedBlockIds() {
   );
 }
 
+// Parse the end-beds field into per-block [start, end] ranges. Each comma-
+// separated entry is either a bare integer (cumulative end-bed: continues
+// from previous block's end + 1) or an explicit `start-end` range. The two
+// forms can be mixed — useful for skipping ID gaps between physically-
+// separate greenhouses, e.g. "1-50, 200-244" or "50, 200-244".
 function parseEndBeds(text) {
   const trimmed = text.trim();
-  if (!trimmed) return { nums: [], error: null };
-  const nums = trimmed
-    .split(/[,\s]+/)
-    .filter(Boolean)
-    .map((v) => Number(v));
-  if (nums.some((v) => !Number.isInteger(v) || v <= 0)) {
-    return { nums: [], error: "Each entry must be a positive integer." };
-  }
-  for (let i = 1; i < nums.length; i++) {
-    if (nums[i] <= nums[i - 1]) {
+  if (!trimmed) return { ranges: [], error: null };
+  const items = trimmed.split(/\s*,\s*/).filter(Boolean);
+  const ranges = [];
+  let prevEnd = 0;
+  for (const raw of items) {
+    let start, end;
+    const rangeM = /^(\d+)\s*-\s*(\d+)$/.exec(raw);
+    const intM = /^(\d+)$/.exec(raw);
+    if (rangeM) {
+      start = parseInt(rangeM[1], 10);
+      end = parseInt(rangeM[2], 10);
+    } else if (intM) {
+      const n = parseInt(intM[1], 10);
+      start = prevEnd + 1;
+      end = n;
+    } else {
       return {
-        nums: [],
-        error: `Numbers must strictly increase — got ${nums[i - 1]} then ${nums[i]}.`,
+        ranges: [],
+        error: `'${raw}' is not a positive integer or 'start-end' range.`,
       };
     }
+    if (start < 1 || end < 1 || start > end) {
+      return {
+        ranges: [],
+        error: `Bad range '${raw}' — need 1 ≤ start ≤ end.`,
+      };
+    }
+    if (start <= prevEnd) {
+      return {
+        ranges: [],
+        error: `Range '${raw}' (start=${start}) must be greater than previous block's end (${prevEnd}).`,
+      };
+    }
+    ranges.push([start, end]);
+    prevEnd = end;
   }
-  return { nums, error: null };
+  return { ranges, error: null };
 }
 
 function renderEndBedsReadout() {
@@ -918,37 +1157,34 @@ function renderEndBedsReadout() {
   out.className = "readout";
   const text = document.getElementById("blockEndBeds").value;
   const ids = expectedBlockIds();
-  const { nums, error } = parseEndBeds(text);
+  const { ranges, error } = parseEndBeds(text);
 
   if (error) {
     out.classList.add("error");
     out.textContent = error;
     return;
   }
-  if (nums.length === 0) {
+  if (ranges.length === 0) {
     out.textContent =
       ids.length > 1
-        ? `Expecting ${ids.length} numbers (one per block: ${ids.join(", ")}). Empty falls back to fixed bed spacing.`
-        : `Expecting 1 number (one per block: ${ids[0]}). Empty falls back to fixed bed spacing.`;
+        ? `Expecting ${ids.length} entries (one per block: ${ids.join(", ")}). Each is a count (e.g. 50) or a range (e.g. 1-50, 200-244). Empty falls back to fixed bed spacing.`
+        : `Expecting 1 entry for ${ids[0]}: a count or a range. Empty falls back to fixed bed spacing.`;
     return;
   }
 
   const lines = [];
-  let prev = 0;
-  for (let i = 0; i < nums.length; i++) {
+  for (let i = 0; i < ranges.length; i++) {
     const id = ids[i] ?? `P${(i + 1).toString().padStart(2, "0")}`;
-    const start = prev + 1;
-    const end = nums[i];
-    const count = end - prev;
+    const [start, end] = ranges[i];
+    const count = end - start + 1;
     const idStr = `B${start.toString().padStart(4, "0")} → B${end.toString().padStart(4, "0")}`;
     lines.push(`${id}: ${idStr} (${count} bed${count === 1 ? "" : "s"})`);
-    prev = end;
   }
   out.textContent = lines.join("\n");
-  if (nums.length !== ids.length) {
+  if (ranges.length !== ids.length) {
     out.classList.add("warn");
     out.textContent =
-      `${out.textContent}\n⚠ ${nums.length} number${nums.length === 1 ? "" : "s"} given but ${ids.length} block${ids.length === 1 ? "" : "s"} configured (${ids.join(", ")}).`;
+      `${out.textContent}\n⚠ ${ranges.length} entr${ranges.length === 1 ? "y" : "ies"} given but ${ids.length} block${ids.length === 1 ? "" : "s"} configured (${ids.join(", ")}).`;
   }
 }
 
@@ -1148,29 +1384,37 @@ document.getElementById("generate").addEventListener("click", async () => {
   // while the new run is computing — avoids stale beds layered on the new ones.
   clearResults();
 
-  const endBedsRaw = document.getElementById("blockEndBeds").value.trim();
-  let block_end_beds = null;
-  if (endBedsRaw) {
-    const nums = endBedsRaw
-      .split(/[,\s]+/)
-      .filter(Boolean)
-      .map((v) => parseInt(v, 10));
-    if (nums.some((n) => !Number.isFinite(n) || n <= 0)) {
-      alert(
-        "End-bed numbers must be positive integers, e.g. '50, 95'.",
-      );
-      return;
-    }
-    for (let i = 1; i < nums.length; i++) {
-      if (nums[i] <= nums[i - 1]) {
+  // If a terrace edge is picked, make sure the cached block geometry matches
+  // the current grouping input. Without this refresh, edits to the grouping
+  // that weren't followed by a "Preview blocks" click would leave terraceState
+  // pointing at the previous blocks — Generate would then save a fresh file
+  // whose contents reflect the OLD grouping, and the Frappe export would look
+  // like "the latest output keeps picking the old one".
+  if (terraceState.startEdgeIdx != null) {
+    const groupingNow = document.getElementById("terraceGrouping").value.trim();
+    const groupingApplied =
+      terraceState.rawSections?.metadata?.grouping ?? null;
+    const wantGrouping = groupingNow || null;
+    if (wantGrouping !== groupingApplied) {
+      const ok = await refreshTerrace(wantGrouping);
+      if (!ok) {
+        setStatus("error", "error");
         alert(
-          "End-bed numbers must be strictly increasing — each block ends at a higher bed than the previous.",
+          "Couldn't refresh terrace blocks for the current grouping — fix the grouping and try again.",
         );
         return;
       }
     }
-    block_end_beds = nums;
   }
+
+  const { ranges: bedRanges, error: rangeErr } = parseEndBeds(
+    document.getElementById("blockEndBeds").value,
+  );
+  if (rangeErr) {
+    alert("End-bed entries: " + rangeErr);
+    return;
+  }
+  const block_bed_ranges = bedRanges.length > 0 ? bedRanges : null;
 
   const body = {
     polygon: currentPolygon,
@@ -1181,7 +1425,7 @@ document.getElementById("generate").addEventListener("click", async () => {
     n_blocks: parseInt(document.getElementById("splitParts").value, 10) || 1,
     split_axis: document.getElementById("splitAxis").value,
     start_corner: document.getElementById("startCorner").value,
-    block_end_beds,
+    block_bed_ranges,
     custom_blocks: terraceState.blockGeoJson || null,
     block_start_corners: terraceState.blockGeoJson
       ? terraceState.blockStartCorners

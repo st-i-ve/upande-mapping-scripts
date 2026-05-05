@@ -35,6 +35,7 @@ class GenerateRequest(BaseModel):
     split_axis: str = Field("none", pattern="^(none|longest|shortest)$")
     start_corner: str = Field("NW", pattern="^(NW|NE|SW|SE)$")
     block_end_beds: Optional[list[int]] = Field(None, description="Cumulative end-bed numbers per block; overrides bed_spacing")
+    block_bed_ranges: Optional[list[list[int]]] = Field(None, description="Explicit per-block [start, end] bed-ID ranges, e.g. [[1,50],[200,244]]; takes precedence over block_end_beds.")
     custom_blocks: Optional[list[dict[str, Any]]] = Field(None, description="When supplied, use these GeoJSON polygons as blocks instead of equal-split (terrace mode)")
     block_start_corners: Optional[list[Optional[str]]] = Field(None, description="Per-block corner overrides (NW/NE/SW/SE or null = auto-flip). Same length as custom_blocks (or equal-split count).")
     name: Optional[str] = Field(None, max_length=80)
@@ -62,6 +63,7 @@ def generate(req: GenerateRequest) -> JSONResponse:
             split_axis=req.split_axis,
             start_corner=req.start_corner,
             block_end_beds=req.block_end_beds,
+            block_bed_ranges=req.block_bed_ranges,
             custom_blocks=req.custom_blocks,
             block_start_corners=req.block_start_corners,
         )

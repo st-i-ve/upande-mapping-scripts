@@ -122,6 +122,64 @@ def _resolve_block_counts(block_end_beds, total_blocks: int) -> list[int]:
     return counts[:total_blocks]
 
 
+def _resolve_block_ranges(
+    block_bed_ranges,
+    block_end_beds,
+    total_blocks: int,
+) -> list[tuple[int, int]]:
+    """Resolve per-block (start_bed, end_bed) pairs.
+
+    Precedence:
+      1. block_bed_ranges (list[(start, end)]) is taken as-is. Each block's
+         range is independent — gaps between blocks are allowed (e.g. block 1
+         is 1-50, block 2 is 200-244 for a physically-separate greenhouse).
+      2. block_end_beds (cumulative) is the legacy form; converted to
+         contiguous ranges starting at 1.
+      3. Neither given → caller falls back to spacing mode; this returns [].
+
+    Validation:
+      - 1 ≤ start ≤ end within each block
+      - block i's start > block i-1's end (no overlap)
+    """
+    if block_bed_ranges:
+        ranges: list[tuple[int, int]] = []
+        prev_end = 0
+        for i, item in enumerate(block_bed_ranges):
+            try:
+                start, end = int(item[0]), int(item[1])
+            except (TypeError, ValueError, IndexError) as e:
+                raise ValueError(
+                    f"block_bed_ranges[{i}] must be [start, end] integers; got {item!r}"
+                ) from e
+            if start < 1 or end < 1 or start > end:
+                raise ValueError(
+                    f"block_bed_ranges[{i}]: start={start} end={end} must satisfy 1 ≤ start ≤ end"
+                )
+            if start <= prev_end:
+                raise ValueError(
+                    f"block_bed_ranges[{i}] (start={start}) must be greater than the previous block's end ({prev_end})"
+                )
+            ranges.append((start, end))
+            prev_end = end
+        while len(ranges) < total_blocks:
+            ranges.append((0, 0))  # zero-bed sentinel
+        return ranges[:total_blocks]
+
+    if block_end_beds:
+        counts = _resolve_block_counts(block_end_beds, total_blocks)
+        ranges = []
+        cursor = 1
+        for cnt in counts:
+            if cnt <= 0:
+                ranges.append((0, 0))
+            else:
+                ranges.append((cursor, cursor + cnt - 1))
+                cursor += cnt
+        return ranges
+
+    return []
+
+
 def _clip_to_parts(line: LineString, poly) -> list[LineString]:
     clipped = line.intersection(poly)
     if clipped.is_empty:
@@ -133,17 +191,34 @@ def _clip_to_parts(line: LineString, poly) -> list[LineString]:
     return []
 
 
-def _subdivide(line: LineString, zone_length: float) -> list[LineString]:
+def _subdivide(
+    line: LineString,
+    zone_length: float,
+    min_remainder_m: float = 1.0,
+) -> list[LineString]:
+    """Split `line` into zones of exactly `zone_length` metres each.
+
+    Full zones are never squeezed. The leftover at the end is kept as its own
+    (short) zone only when it exceeds `min_remainder_m`; otherwise it's dropped.
+    So a 9 m line at 4 m zones with min_remainder=1 m → two 4 m zones (the 1 m
+    tail is dropped), but a 3 m line keeps its single 3 m zone (3 > 1).
+    """
     total = line.length
-    if total <= zone_length:
-        return [line]
+    # 1 µm tolerance covers numerical drift on bed lengths that are exactly
+    # an integer multiple of zone_length but land at e.g. 8.0 - 1e-12 in UTM.
+    EPS = 1e-6
+    n_full = int((total + EPS) // zone_length)
     zones: list[LineString] = []
-    n = math.ceil(total / zone_length)
-    step = total / n
-    for i in range(n):
-        a = ops.substring(line, i * step, (i + 1) * step)
-        if a.length > 0:
-            zones.append(a)
+    for i in range(n_full):
+        seg = ops.substring(line, i * zone_length, (i + 1) * zone_length)
+        if seg.length > 0:
+            zones.append(seg)
+    used = n_full * zone_length
+    leftover = total - used
+    if leftover > min_remainder_m + EPS:
+        seg = ops.substring(line, used, total)
+        if seg.length > 0:
+            zones.append(seg)
     return zones
 
 
@@ -568,17 +643,127 @@ def _section_sort_key(part_angle: float, origin):
     return key
 
 
-_BLOCK_SPLIT_RE = re.compile(
+_AXIS_NORMALISE = {
+    "longest": "longest",
+    "long": "longest",
+    "l": "longest",
+    "shortest": "shortest",
+    "short": "shortest",
+    "s": "shortest",
+}
+
+# Outer regex matches the whole group part: leaves bracket internals as a raw
+# string for a second pass (so the bracket can carry the new per-sub list with
+# its own commas and @C tokens).
+_BLOCK_OUTER_RE = re.compile(
     r"""
     ^\s*
     (?P<a>\d+)
     (?:\s*-\s*(?P<b>\d+))?
-    (?:\s*\[\s*(?P<n>\d+)\s*x\s*(?P<axis>longest|shortest|long|short|l|s)\s*\]\s*)?
+    (?:\s*\[(?P<bracket>[^\]]*)\]\s*)?
     (?:\s*@\s*(?P<corner>NW|NE|SW|SE)\s*)?
     \s*$
     """,
     re.IGNORECASE | re.VERBOSE,
 )
+
+# Old bracket form: "Nx axis" with optional ~ reverse flag.
+_BRACKET_OLD_RE = re.compile(
+    r"""
+    ^\s*
+    (?P<n>\d+)\s*x\s*(?P<axis>longest|shortest|long|short|l|s)
+    \s*(?P<rev>~)?\s*
+    $
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+# New bracket form: "[Nx ]axis : <orig_idx>[@C], <orig_idx>[@C], …"
+# The list order is the bed-flow order; orig_idx points at the natural
+# (pre-sort) sub-block position so reordering stays unambiguous.
+_BRACKET_NEW_RE = re.compile(
+    r"""
+    ^\s*
+    (?:(?P<n>\d+)\s*x\s*)?
+    (?P<axis>longest|shortest|long|short|l|s)
+    \s*:\s*
+    (?P<list>.+)
+    $
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+_SUB_SPEC_RE = re.compile(
+    r"""
+    ^\s*
+    (?P<idx>\d+)
+    (?:\s*@\s*(?P<corner>NW|NE|SW|SE))?
+    \s*$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _parse_bracket(
+    bracket_text: str,
+) -> tuple[int, str, list[tuple[int, str | None]] | None]:
+    """Parse the contents of a [...] split spec.
+
+    Returns (n_split, axis, sub_specs).
+    sub_specs is None for old-syntax brackets (caller falls back to natural
+    sub-block order). For new syntax, sub_specs is a list of (orig_idx,
+    corner_or_None) in bed-flow order. The legacy `~` reverse flag is
+    desugared into an equivalent sub_specs list so the caller has one
+    code path.
+    """
+    raw = bracket_text.strip()
+
+    m = _BRACKET_OLD_RE.match(raw)
+    if m:
+        n_split = int(m.group("n"))
+        axis = _AXIS_NORMALISE[m.group("axis").lower()]
+        if m.group("rev"):
+            sub_specs = [(i, None) for i in range(n_split, 0, -1)]
+            return (n_split, axis, sub_specs)
+        return (n_split, axis, None)
+
+    m = _BRACKET_NEW_RE.match(raw)
+    if m:
+        axis = _AXIS_NORMALISE[m.group("axis").lower()]
+        items = [it.strip() for it in m.group("list").split(",") if it.strip()]
+        if not items:
+            raise ValueError(f"Bracket '[{raw}]' has no sub-block items")
+        sub_specs: list[tuple[int, str | None]] = []
+        seen: set[int] = set()
+        for it in items:
+            sm = _SUB_SPEC_RE.match(it)
+            if not sm:
+                raise ValueError(
+                    f"Bad sub-block spec '{it}' in '[{raw}]' — use forms like '1' or '2@SE'."
+                )
+            idx = int(sm.group("idx"))
+            if idx in seen:
+                raise ValueError(
+                    f"Sub-block index {idx} listed twice in '[{raw}]'."
+                )
+            seen.add(idx)
+            corner = sm.group("corner").upper() if sm.group("corner") else None
+            sub_specs.append((idx, corner))
+        n_split = int(m.group("n")) if m.group("n") else len(sub_specs)
+        if n_split != len(sub_specs):
+            raise ValueError(
+                f"Split count {n_split} doesn't match list length {len(sub_specs)} in '[{raw}]'."
+            )
+        for idx, _ in sub_specs:
+            if idx < 1 or idx > n_split:
+                raise ValueError(
+                    f"Sub-block index {idx} out of range 1..{n_split} in '[{raw}]'."
+                )
+        return (n_split, axis, sub_specs)
+
+    raise ValueError(
+        f"Invalid bracket '[{raw}]' — use forms like '2x longest', '2x longest~', or 'shortest: 1@SE, 2@SW'."
+    )
 
 
 def _split_grouping_top_level(grouping: str) -> list[str]:
@@ -606,38 +791,36 @@ def _split_grouping_top_level(grouping: str) -> list[str]:
 
 def _resolve_grouping_with_splits(
     grouping: str, n_sections: int
-) -> list[tuple[list[int], tuple[int, str] | None, str | None]]:
-    """Parse a grouping string into per-block (section_indices, split_spec, corner_override).
+) -> list[tuple[list[int], tuple[int, str] | None, str | None, list[tuple[int, str | None]] | None]]:
+    """Parse a grouping string into per-block (section_indices, split_spec, corner_override, sub_specs).
 
     Examples:
-      '1-3, 4, 5-7'                  → [([1,2,3],None,None), ([4],None,None), ([5,6,7],None,None)]
-      '1-2[2x longest], 3, 4-5[3xS]' → split annotations honoured, no @corner overrides
-      '1-2, 3@SE, 4-5'               → middle block forced to start at SE corner
-      '1-2[2x long]@NE, 3'           → 1-2 merged then split-2-along-long, first sub-block at NE
+      '1-3, 4, 5-7'                       → 3 plain blocks, no splits
+      '1-2[2x longest], 3, 4-5[3xS]'      → split annotations honoured, default sub order
+      '1-2, 3@SE, 4-5'                    → middle block forced to start at SE corner
+      '1-2[2x long]@NE, 3'                → 1-2 merged then split-2-along-long, first sub at NE
+      '2[2x longest~]'                    → split + reverse sub order (sugar for new syntax)
+      '5[2x shortest: 2@SW, 1@SE]'        → explicit per-sub list: original#2 becomes 'a' at SW, original#1 becomes 'b' at SE
+      '5[shortest: 1@SE, 2]'              → count inferred from list length; sub#2 has no override (auto-flip)
 
-    corner_override is one of NW/NE/SW/SE or None (use auto-flip).
+    sub_specs:
+      - None: use natural sub-block order (1..N); corner_override applies to first sub only
+      - list[(orig_idx, corner_or_None)]: use this explicit bed-flow order; each entry's
+        corner overrides for that sub. The group-level @corner falls back to the FIRST sub
+        if its entry has no @C.
     """
     if not grouping or not grouping.strip():
-        return [([i + 1], None, None) for i in range(n_sections)]
+        return [([i + 1], None, None, None) for i in range(n_sections)]
 
-    AXIS_NORMALISE = {
-        "longest": "longest",
-        "long": "longest",
-        "l": "longest",
-        "shortest": "shortest",
-        "short": "shortest",
-        "s": "shortest",
-    }
-
-    blocks: list[tuple[list[int], tuple[int, str] | None, str | None]] = []
+    blocks: list[tuple[list[int], tuple[int, str] | None, str | None, list[tuple[int, str | None]] | None]] = []
     for raw in _split_grouping_top_level(grouping):
         part = raw.strip()
         if not part:
             continue
-        m = _BLOCK_SPLIT_RE.match(part)
+        m = _BLOCK_OUTER_RE.match(part)
         if not m:
             raise ValueError(
-                f"Invalid block spec '{part}' — use forms like '1', '2-4', '1-2[2x longest]', '3@SE'."
+                f"Invalid block spec '{part}' — use forms like '1', '2-4', '1-2[2x longest]', '3@SE', '5[shortest: 1@SE, 2@SW]'."
             )
         a = int(m.group("a"))
         b = int(m.group("b")) if m.group("b") else a
@@ -646,25 +829,28 @@ def _resolve_grouping_with_splits(
                 f"Block range '{part}' out of bounds for {n_sections} sections."
             )
         sections = list(range(a, b + 1))
-        if m.group("n"):
-            n_split = int(m.group("n"))
+
+        spec: tuple[int, str] | None = None
+        sub_specs: list[tuple[int, str | None]] | None = None
+        if m.group("bracket") is not None:
+            n_split, axis, sub_specs = _parse_bracket(m.group("bracket"))
             if n_split < 1 or n_split > 20:
                 raise ValueError(
                     f"Block '{part}': split count must be 1–20, got {n_split}."
                 )
-            axis_raw = m.group("axis").lower()
-            axis = AXIS_NORMALISE[axis_raw]
-            spec: tuple[int, str] | None = (n_split, axis) if n_split > 1 else None
-        else:
-            spec = None
+            spec = (n_split, axis) if n_split > 1 else None
+            if spec is None:
+                # n=1 split is a no-op; drop the sub_specs too.
+                sub_specs = None
+
         corner_override = m.group("corner").upper() if m.group("corner") else None
-        blocks.append((sections, spec, corner_override))
+        blocks.append((sections, spec, corner_override, sub_specs))
     return blocks
 
 
 def _resolve_grouping(grouping: str, n_sections: int) -> list[list[int]]:
     """Backwards-compat shim — returns just the section index lists."""
-    return [secs for secs, _, _ in _resolve_grouping_with_splits(grouping, n_sections)]
+    return [secs for secs, _, _, _ in _resolve_grouping_with_splits(grouping, n_sections)]
 
 
 def terrace_sections(
@@ -775,7 +961,7 @@ def terrace_sections(
         parent_angle = _long_axis_angle(geom_utm)
         parent_origin = geom_utm.centroid
 
-        for group_idx, (grp, split_spec, corner_override) in enumerate(groups, start=1):
+        for group_idx, (grp, split_spec, corner_override, sub_specs) in enumerate(groups, start=1):
             merged = ops.unary_union([sections[i - 1] for i in grp])
             if merged.is_empty:
                 continue
@@ -787,19 +973,43 @@ def terrace_sections(
             if not isinstance(merged, Polygon):
                 continue
 
-            block_polys: list[tuple[Polygon, str, list[int], tuple[int, str] | None, bool]] = []
+            # Each entry: (poly_utm, block_id, grp_used, split_spec, effective_override, orig_idx_or_None)
+            block_polys: list[tuple[Polygon, str, list[int], tuple[int, str] | None, str | None, int | None]] = []
             if split_spec is None:
                 block_id = f"P{group_idx:02d}"
-                block_polys.append((merged, block_id, grp, None, True))  # True = first sub-block
+                block_polys.append((merged, block_id, grp, None, corner_override, None))
             else:
                 n_split, split_axis = split_spec
                 rotated_block = rotate(merged, -parent_angle, origin=parent_origin)
                 sub_blocks_rot = _split_in_rotated_frame(
                     rotated_block, n_split, split_axis
                 )
-                for sub_idx, sb_rot in enumerate(sub_blocks_rot, start=1):
-                    if sb_rot.is_empty or sb_rot.area <= 0.01:
-                        continue
+                # Filter empties first so a/b/c suffixes stay contiguous.
+                sub_blocks_rot = [
+                    sb for sb in sub_blocks_rot if not sb.is_empty and sb.area > 0.01
+                ]
+
+                # Resolve final ordering and per-sub corner overrides. With no
+                # sub_specs we fall back to natural order (1..N) and apply the
+                # group-level @corner only to the first sub.
+                if sub_specs is None:
+                    final_order: list[tuple[int, str | None]] = [
+                        (i + 1, None) for i in range(len(sub_blocks_rot))
+                    ]
+                else:
+                    final_order = [
+                        (orig_idx, corner)
+                        for orig_idx, corner in sub_specs
+                        if 1 <= orig_idx <= len(sub_blocks_rot)
+                    ]
+                # Group-level @C falls back to the first sub if it has no
+                # explicit corner of its own — works for both legacy and
+                # new syntax.
+                if final_order and corner_override is not None and final_order[0][1] is None:
+                    final_order[0] = (final_order[0][0], corner_override)
+
+                for sub_idx, (orig_idx, sub_corner) in enumerate(final_order, start=1):
+                    sb_rot = sub_blocks_rot[orig_idx - 1]
                     sb = rotate(sb_rot, parent_angle, origin=parent_origin)
                     if not isinstance(sb, Polygon):
                         if isinstance(sb, MultiPolygon):
@@ -807,12 +1017,11 @@ def terrace_sections(
                         else:
                             continue
                     sub_id = f"P{group_idx:02d}{chr(ord('a') + sub_idx - 1)}"
-                    block_polys.append((sb, sub_id, grp, (n_split, split_axis), sub_idx == 1))
+                    block_polys.append(
+                        (sb, sub_id, grp, (n_split, split_axis), sub_corner, orig_idx)
+                    )
 
-            for poly_utm, block_id, grp_used, spec, is_first_sub in block_polys:
-                # Per-block corner override only applies to the FIRST sub-block
-                # of a group; subsequent sub-blocks alternate from there.
-                effective_override = corner_override if is_first_sub else None
+            for poly_utm, block_id, grp_used, spec, effective_override, orig_idx in block_polys:
                 block_start_corners.append(effective_override)
 
                 poly_wgs = _project(poly_utm, to_wgs)
@@ -826,7 +1035,14 @@ def terrace_sections(
                         "block_id": block_id,
                         "sections": grp_used,
                         "split": (
-                            {"n": spec[0], "axis": spec[1]} if spec else None
+                            {
+                                "n": spec[0],
+                                "axis": spec[1],
+                                "orig_idx": orig_idx,
+                                "per_sub": sub_specs is not None,
+                            }
+                            if spec
+                            else None
                         ),
                         "corner_override": effective_override,
                         "area_m2": round(poly_utm.area, 2),
@@ -999,6 +1215,7 @@ def generate_beds_zones(
     split_axis: str = "none",
     start_corner: str = "NW",
     block_end_beds: list[int] | None = None,
+    block_bed_ranges: list[tuple[int, int]] | list[list[int]] | None = None,
     custom_blocks: list[dict] | None = None,
     block_start_corners: list[str | None] | None = None,
     bed_prefix: str = "B",
@@ -1017,6 +1234,11 @@ def generate_beds_zones(
                   meet the per-block count (count[i] = end[i] - end[i-1]); the
                   bed_spacing parameter is ignored. Length should match the
                   total block count (n_blocks × number_of_input_parts).
+    block_bed_ranges: optional list of explicit [start, end] bed-ID ranges per
+                  block — e.g. [[1, 50], [200, 244]] gives block 1 IDs B0001-B0050
+                  and block 2 IDs B0200-B0244 (skipping 51-199). Useful when two
+                  blocks belong to physically-separate greenhouses and shouldn't
+                  share a contiguous numbering. Takes precedence over block_end_beds.
     custom_blocks: optional list of GeoJSON polygons. When supplied, equal-
                   split is bypassed and these polygons are used as blocks
                   directly (in the order given). The parent polygon's long
@@ -1045,10 +1267,16 @@ def generate_beds_zones(
     else:
         blocks_per_part = n_blocks if (n_blocks > 1 and split_axis != "none") else 1
         total_blocks = len(non_empty_parts) * blocks_per_part
-    use_counts = bool(block_end_beds)
-    block_counts = (
-        _resolve_block_counts(block_end_beds, total_blocks) if use_counts else []
+    use_counts = bool(block_end_beds) or bool(block_bed_ranges)
+    block_ranges = (
+        _resolve_block_ranges(block_bed_ranges, block_end_beds, total_blocks)
+        if use_counts
+        else []
     )
+    # Per-block counts derived from the resolved ranges (legacy metadata).
+    block_counts = [
+        (e - s + 1) if (s and e) else 0 for s, e in block_ranges
+    ]
 
     all_features: list[dict] = []
     bed_counter = 0
@@ -1138,6 +1366,11 @@ def generate_beds_zones(
             #     lines through the whole rotated polygon at fixed intervals
             #     and treat each clipped fragment as its own bed.
             rows: list[list[LineString]] = []
+            block_start_id, _ = (
+                block_ranges[block_counter - 1]
+                if use_counts and block_counter - 1 < len(block_ranges)
+                else (0, 0)
+            )
             if use_counts:
                 requested = block_counts[block_counter - 1]
                 if requested > 0:
@@ -1157,6 +1390,7 @@ def generate_beds_zones(
                 segments.sort(key=_segment_sort_key(block_corner))
                 rows = [[s] for s in segments]
 
+            block_local_idx = 0
             for row_fragments in rows:
                 # Sort fragments within the row by X based on the corner
                 # direction so zone numbering Z01 lands on the chosen end.
@@ -1170,7 +1404,12 @@ def generate_beds_zones(
                 ]
 
                 bed_counter += 1
-                bed_id = f"{bed_prefix}{bed_counter:04d}"
+                if block_start_id > 0:
+                    block_local_idx += 1
+                    bed_num = block_start_id + block_local_idx - 1
+                else:
+                    bed_num = bed_counter
+                bed_id = f"{bed_prefix}{bed_num:04d}"
                 if len(row_fragments) == 1:
                     bed_geom_local = row_fragments[0]
                 else:
@@ -1256,7 +1495,10 @@ def generate_beds_zones(
             "n_blocks": n_blocks,
             "split_axis": split_axis,
             "start_corner": start_corner,
-            "block_end_beds": list(block_end_beds) if use_counts else None,
+            "block_end_beds": list(block_end_beds) if block_end_beds else None,
+            "block_bed_ranges": (
+                [list(r) for r in block_ranges] if use_counts else None
+            ),
             "block_counts": block_counts if use_counts else None,
             "mode": "count" if use_counts else "spacing",
             "custom_blocks": True if use_custom else False,

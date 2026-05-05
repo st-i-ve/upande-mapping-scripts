@@ -135,20 +135,22 @@
           <label>Block grouping
             <input id="terraceGrouping" type="text" placeholder="e.g. 1-2, 3, 4-5[3x longest]" />
           </label>
-          <p class="hint">Examples — <code>1-2, 3</code> (two blocks). <code>1-2, 3[3x longest]</code> (block 2 split into 3 along long axis → P02a/b/c). <code>1[2xL], 2-3</code> (shorthand: <code>L</code>=longest, <code>S</code>=shortest). The <em>order</em> you list groups in is the bed-flow order — block 1 is where the snake starts. Append <code>@NW</code>/<code>@NE</code>/<code>@SW</code>/<code>@SE</code> to force a specific corner for that block — <code>1, 2@SE, 3</code> overrides P02 to start at SE; the next blocks alternate from there.</p>
+          <p class="hint">Examples — <code>1-2, 3</code> (two blocks). <code>1-2, 3[3x longest]</code> (block 2 split into 3 along long axis → P02a/b/c). <code>1[2xL], 2-3</code> (shorthand: <code>L</code>=longest, <code>S</code>=shortest). The <em>order</em> you list groups in is the bed-flow order — block 1 is where the snake starts. Append <code>@NW</code>/<code>@NE</code>/<code>@SW</code>/<code>@SE</code> to force a specific corner for that block — <code>1, 2@SE, 3</code> overrides P02 to start at SE; the next blocks alternate from there.<br>
+          <strong>Per-sub corners (more control):</strong> <code>5[2x shortest: 1@SE, 2@SW]</code> — split section 5 into 2 pieces by shortest axis, original piece #1 becomes P05a at SE, original #2 becomes P05b at SW. To swap bed-flow order while keeping corners pinned to the same physical pieces: <code>5[2x shortest: 2@SW, 1@SE]</code>. Omit <code>@C</code> on a sub to let it auto-flip from the previous one. Count is optional when the list length is unambiguous: <code>5[shortest: 1@SE, 2]</code>. The legacy <code>~</code> shortcut (<code>5[2x shortest~]</code>) still works as sugar for the reversed list.</p>
           <div class="row">
             <button id="previewTerraceBlocks" class="secondary">Preview blocks</button>
             <button id="reverseTerraceBlocks" class="secondary">Reverse order</button>
             <button id="pickBlockCorner" class="secondary">Pick block corner</button>
+            <button id="swapSubBlocks" class="secondary">Swap sub-blocks</button>
           </div>
-          <p class="hint">After previewing blocks, click <strong>Pick block corner</strong> then click any corner of any block on the map — it will set/replace that block's <code>@corner</code> in the grouping above and re-preview.</p>
+          <p class="hint">After previewing blocks, click <strong>Pick block corner</strong> then click anywhere in the corner area of any block — it snaps to the nearest quadrant (NW/NE/SW/SE) and updates the grouping. With per-sub syntax, the click rewrites that sub's <code>@C</code> in place. With legacy syntax, clicking a non-first sub auto-swaps a/b so that piece becomes bed #1. <strong>Swap sub-blocks</strong> reverses sub-block order for the picked group (reorders the per-sub list, or toggles <code>~</code> on legacy groups).</p>
         </details>
 
         <p class="hint section-divider">Beds and zones.</p>
-        <label>End bed of each block (cumulative)
-          <input id="blockEndBeds" type="text" placeholder="e.g. 50, 95" />
+        <label>Per-block bed numbering
+          <input id="blockEndBeds" type="text" placeholder="e.g. 50, 95  or  1-50, 200-244" />
         </label>
-        <p class="hint">One number per block, comma-separated, listing the <em>last</em> bed in each block. <code>50, 95</code> means block 1 ends at B0050 (50 beds) and block 2 ends at B0095 (45 beds). Beds are spread evenly inside the inward buffer of each block. Leave empty to fall back to fixed spacing.</p>
+        <p class="hint">One entry per block, comma-separated. A bare number is the <em>cumulative end-bed</em> (continues from the previous block) — <code>50, 95</code> gives block 1 → B0001-B0050, block 2 → B0051-B0095. A <code>start-end</code> range sets explicit IDs — <code>1-50, 200-244</code> gives block 1 → B0001-B0050, block 2 → B0200-B0244 (useful when blocks belong to physically-separate greenhouses and shouldn't share contiguous IDs). Forms can be mixed. Leave empty to fall back to fixed spacing.</p>
         <div id="endBedsReadout" class="readout"></div>
         <label>Inward buffer (m) <input id="bufferM" type="number" step="0.05" min="0" value="1" /></label>
         <label>Zone length (m) <input id="zoneLength" type="number" step="0.5" min="0.5" value="4" /></label>
