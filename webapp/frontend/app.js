@@ -1541,6 +1541,8 @@ async function loadOutputs() {
     a.href = "/api/outputs/" + encodeURIComponent(o.filename);
     a.textContent = o.filename;
     a.download = o.filename;
+    const actions = document.createElement("div");
+    actions.className = "actions";
     const view = document.createElement("a");
     view.href = "#";
     view.textContent = "view";
@@ -1561,10 +1563,11 @@ async function loadOutputs() {
     frappeDl.textContent = "frappe.txt";
     frappeDl.download =
       o.filename.replace(/\.geojson$/, "") + ".frappe.txt";
+    actions.appendChild(view);
+    actions.appendChild(frappeCopy);
+    actions.appendChild(frappeDl);
     li.appendChild(a);
-    li.appendChild(view);
-    li.appendChild(frappeCopy);
-    li.appendChild(frappeDl);
+    li.appendChild(actions);
     ul.appendChild(li);
   }
 }
