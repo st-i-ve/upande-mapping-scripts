@@ -1,4 +1,67 @@
-/* Shape editor — scoped to .shape-editor namespace. */
+/* Shape editor — scoped to #shapeBuilder + .shape-editor namespace. */
+
+#shapeBuilder {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-subtle);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  transition: width 0.2s ease;
+}
+
+#shapeBuilder.collapsed {
+  width: 56px;
+}
+
+#shapeBuilder .sb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+#shapeBuilder .sb-head h2 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#shapeBuilder.collapsed .sb-head h2 {
+  display: none;
+}
+
+#shapeBuilder .sb-head .sb-toggle {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+#shapeBuilder .sb-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+#shapeBuilder.collapsed .sb-body {
+  padding: 8px 6px;
+}
 
 .shape-editor .toolbar {
   display: flex;
@@ -29,6 +92,30 @@
   color: var(--text-muted);
   margin: 4px 0;
 }
+
+/* Icon + label split so collapsed mode can hide labels only. */
+.shape-editor .se-icon { display: inline-block; }
+.shape-editor .se-label { display: inline-block; margin-left: 4px; }
+
+/* Collapsed mode: icon-only vertical strip. Tools row becomes one column. */
+#shapeBuilder.collapsed .sb-tools .toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+#shapeBuilder.collapsed .sb-tools .toolbar button {
+  padding: 8px 4px;
+  font-size: 16px;
+  text-align: center;
+}
+#shapeBuilder.collapsed .se-label { display: none; }
+#shapeBuilder.collapsed .sb-tools .stat-line,
+#shapeBuilder.collapsed .sb-hint,
+#shapeBuilder.collapsed .sb-combine,
+#shapeBuilder.collapsed .sb-output,
+#shapeBuilder.collapsed .sb-status,
+#shapeBuilder.collapsed .sb-save,
+#shapeBuilder.collapsed #seTogglePencilMode { display: none; }
 
 .shape-editor-handle {
   width: 12px;

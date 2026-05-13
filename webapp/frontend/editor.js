@@ -45,6 +45,9 @@
       document.getElementById("seDownload").addEventListener("click", () => this._downloadGeoJson());
       document.getElementById("seSave").addEventListener("click", () => this._saveToLocalStorage());
       document.getElementById("seClearAll").addEventListener("click", () => this._clearAll());
+      const toggleBtn = document.getElementById("seBuilderToggle");
+      if (toggleBtn) toggleBtn.addEventListener("click", () => this._toggleBuilderCollapsed());
+      this._applyCollapsedFromStorage();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
           if (this.activeTool) {
@@ -82,6 +85,27 @@
           }
         }
       });
+    },
+    _applyCollapsedFromStorage() {
+      const collapsed = localStorage.getItem("shapeEditor.collapsed.v1") === "1";
+      this._setBuilderCollapsed(collapsed);
+    },
+    _toggleBuilderCollapsed() {
+      const panel = document.getElementById("shapeBuilder");
+      if (!panel) return;
+      this._setBuilderCollapsed(!panel.classList.contains("collapsed"));
+    },
+    _setBuilderCollapsed(collapsed) {
+      const panel = document.getElementById("shapeBuilder");
+      const btn = document.getElementById("seBuilderToggle");
+      if (!panel) return;
+      panel.classList.toggle("collapsed", collapsed);
+      if (btn) {
+        btn.textContent = collapsed ? "▶" : "◀";
+        btn.title = collapsed ? "Expand" : "Collapse";
+        btn.setAttribute("aria-label", collapsed ? "Expand panel" : "Collapse panel");
+      }
+      try { localStorage.setItem("shapeEditor.collapsed.v1", collapsed ? "1" : "0"); } catch (e) {}
     },
     _restoreFromLocalStorage() {
       try {
@@ -431,7 +455,8 @@
       if (wasActive) this._exitPencil();
       this.pencilMode = this.pencilMode === "freehand" ? "vertex" : "freehand";
       const btn = document.getElementById("seTool-pencil");
-      btn.textContent = this.pencilMode === "freehand" ? "✎ Freehand" : "✎ Vertex";
+      const label = btn.querySelector(".se-label");
+      if (label) label.textContent = this.pencilMode === "freehand" ? "Freehand" : "Vertex";
       this._setStatus(`Pencil mode: ${this.pencilMode}.`);
       if (wasActive) this._togglePencilTool();
     },
