@@ -45,9 +45,6 @@
       document.getElementById("seDownload").addEventListener("click", () => this._downloadGeoJson());
       document.getElementById("seSave").addEventListener("click", () => this._saveToLocalStorage());
       document.getElementById("seClearAll").addEventListener("click", () => this._clearAll());
-      const toggleBtn = document.getElementById("seBuilderToggle");
-      if (toggleBtn) toggleBtn.addEventListener("click", () => this._toggleBuilderCollapsed());
-      this._applyCollapsedFromStorage();
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
           if (this.activeTool) {
@@ -86,27 +83,6 @@
         }
       });
     },
-    _applyCollapsedFromStorage() {
-      const collapsed = localStorage.getItem("shapeEditor.collapsed.v1") === "1";
-      this._setBuilderCollapsed(collapsed);
-    },
-    _toggleBuilderCollapsed() {
-      const panel = document.getElementById("shapeBuilder");
-      if (!panel) return;
-      this._setBuilderCollapsed(!panel.classList.contains("collapsed"));
-    },
-    _setBuilderCollapsed(collapsed) {
-      const panel = document.getElementById("shapeBuilder");
-      const btn = document.getElementById("seBuilderToggle");
-      if (!panel) return;
-      panel.classList.toggle("collapsed", collapsed);
-      if (btn) {
-        btn.textContent = collapsed ? "▶" : "◀";
-        btn.title = collapsed ? "Expand" : "Collapse";
-        btn.setAttribute("aria-label", collapsed ? "Expand panel" : "Collapse panel");
-      }
-      try { localStorage.setItem("shapeEditor.collapsed.v1", collapsed ? "1" : "0"); } catch (e) {}
-    },
     _restoreFromLocalStorage() {
       try {
         const raw = localStorage.getItem("shapeEditor.shapes.v1");
@@ -126,11 +102,16 @@
     _updateStats() {
       const el = document.getElementById("shapeEditorStats");
       if (!el) return;
-      el.textContent = `Shapes: ${this.shapes.size} · Selected: ${this.selection.size}`;
+      const total = this.shapes.size;
+      const sel = this.selection.size;
+      el.textContent = `${total}/${sel}`;
+      el.title = `${total} shape(s), ${sel} selected`;
     },
     _setStatus(text) {
       const el = document.getElementById("shapeEditorStatus");
-      if (el) el.textContent = text;
+      if (!el) return;
+      el.textContent = text;
+      el.title = text;
     },
     _newId() {
       return (crypto && crypto.randomUUID) ? crypto.randomUUID() : `id-${Math.random().toString(36).slice(2)}`;
@@ -455,8 +436,9 @@
       if (wasActive) this._exitPencil();
       this.pencilMode = this.pencilMode === "freehand" ? "vertex" : "freehand";
       const btn = document.getElementById("seTool-pencil");
-      const label = btn.querySelector(".se-label");
-      if (label) label.textContent = this.pencilMode === "freehand" ? "Freehand" : "Vertex";
+      if (btn) btn.title = `Pencil — ${this.pencilMode === "freehand" ? "Freehand" : "Vertex"}`;
+      const tog = document.getElementById("seTogglePencilMode");
+      if (tog) tog.title = `Switch pencil mode (currently ${this.pencilMode})`;
       this._setStatus(`Pencil mode: ${this.pencilMode}.`);
       if (wasActive) this._togglePencilTool();
     },

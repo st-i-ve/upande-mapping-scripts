@@ -1,122 +1,113 @@
-/* Shape editor — scoped to #shapeBuilder + .shape-editor namespace. */
+/* Shape editor — narrow icon strip, permanently visible.
+ * Scoped to #shapeBuilder + .shape-editor namespace.
+ */
 
 #shapeBuilder {
-  width: 240px;
+  width: 56px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-subtle);
   border-right: 1px solid var(--border);
   overflow: hidden;
-  transition: width 0.2s ease;
 }
 
-#shapeBuilder.collapsed {
-  width: 56px;
-}
-
-#shapeBuilder .sb-head {
+#shapeBuilder .sb-strip {
+  flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  min-height: 36px;
-  box-sizing: border-box;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 8px 6px;
+  overflow-y: auto;
 }
 
-#shapeBuilder .sb-head h2 {
-  margin: 0;
-  font-size: 11px;
+#shapeBuilder .sb-btn {
+  padding: 7px 4px;
+  font-size: 16px;
+  line-height: 1.1;
+  text-align: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+#shapeBuilder .sb-btn:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  border-color: var(--text-muted);
+}
+
+#shapeBuilder .sb-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+#shapeBuilder .sb-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+#shapeBuilder .sb-btn.sb-btn-primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+}
+#shapeBuilder .sb-btn.sb-btn-primary:disabled {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--border);
+}
+#shapeBuilder .sb-btn.sb-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+#shapeBuilder .sb-btn.sb-btn-tiny {
+  padding: 2px 4px;
+  font-size: 11px;
+  margin-top: -2px;
+  margin-bottom: 2px;
+}
+
+#shapeBuilder .sb-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+
+#shapeBuilder .sb-foot {
+  border-top: 1px solid var(--border);
+  padding: 6px 4px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+#shapeBuilder .sb-stats {
+  font-size: 10px;
   color: var(--text-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+#shapeBuilder .sb-status {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: help;
 }
 
-#shapeBuilder.collapsed .sb-head h2 {
-  display: none;
-}
-
-#shapeBuilder .sb-head .sb-toggle {
-  padding: 2px 8px;
-  font-size: 12px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  cursor: pointer;
-  color: var(--text);
-  line-height: 1.2;
-}
-
-#shapeBuilder .sb-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px 12px;
-}
-
-#shapeBuilder.collapsed .sb-body {
-  padding: 8px 6px;
-}
-
-.shape-editor .toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 6px 0;
-}
-
-.shape-editor .toolbar button {
-  padding: 4px 8px;
-  font-size: 12px;
-}
-
-.shape-editor .toolbar button.active {
-  background: var(--accent);
-  color: white;
-}
-
-.shape-editor .stat-line {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin: 4px 0;
-}
-
-.shape-editor .status {
-  font-size: 11px;
-  min-height: 14px;
-  color: var(--text-muted);
-  margin: 4px 0;
-}
-
-/* Icon + label split so collapsed mode can hide labels only. */
-.shape-editor .se-icon { display: inline-block; }
-.shape-editor .se-label { display: inline-block; margin-left: 4px; }
-
-/* Collapsed mode: icon-only vertical strip. Tools row becomes one column. */
-#shapeBuilder.collapsed .sb-tools .toolbar {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-}
-#shapeBuilder.collapsed .sb-tools .toolbar button {
-  padding: 8px 4px;
-  font-size: 16px;
-  text-align: center;
-}
-#shapeBuilder.collapsed .se-label { display: none; }
-#shapeBuilder.collapsed .sb-tools .stat-line,
-#shapeBuilder.collapsed .sb-hint,
-#shapeBuilder.collapsed .sb-combine,
-#shapeBuilder.collapsed .sb-output,
-#shapeBuilder.collapsed .sb-status,
-#shapeBuilder.collapsed .sb-save,
-#shapeBuilder.collapsed #seTogglePencilMode { display: none; }
-
+/* Custom scale handles (existing — unchanged). */
 .shape-editor-handle {
   width: 12px;
   height: 12px;

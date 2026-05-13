@@ -275,51 +275,30 @@
     </aside>
 
     <aside id="shapeBuilder" class="shape-editor">
-      <header class="sb-head">
-        <h2>Shape builder</h2>
-        <button id="seBuilderToggle" class="sb-toggle" type="button" title="Collapse" aria-label="Collapse panel">◀</button>
-      </header>
-      <div class="sb-body">
-        <div class="sb-section sb-tools">
-          <div class="stat-line"><strong>Tools</strong></div>
-          <div class="toolbar">
-            <button id="seTool-rect" class="secondary" type="button"><span class="se-icon">⬚</span><span class="se-label">Rect</span></button>
-            <button id="seTool-pencil" class="secondary" type="button"><span class="se-icon">✎</span><span class="se-label">Freehand</span></button>
-            <button id="seTogglePencilMode" class="secondary" type="button" title="Toggle freehand / vertex" aria-label="Toggle freehand / vertex">▾</button>
-            <button id="seTool-move" class="secondary" type="button"><span class="se-icon">✋</span><span class="se-label">Move</span></button>
-            <button id="seTool-rotate" class="secondary" type="button"><span class="se-icon">↺</span><span class="se-label">Rotate</span></button>
-            <button id="seTool-scale" class="secondary" type="button"><span class="se-icon">⤢</span><span class="se-label">Scale</span></button>
-            <button id="seDuplicate" class="secondary" type="button"><span class="se-icon">⎘</span><span class="se-label">Duplicate</span></button>
-            <button id="seDelete" class="secondary" type="button"><span class="se-icon">🗑</span><span class="se-label">Delete</span></button>
-          </div>
-        </div>
-        <p class="hint sb-hint">Click = select · Ctrl+Shift+Click = add/remove · Esc = clear</p>
-        <div class="sb-section sb-combine">
-          <div class="stat-line"><strong>Combine</strong></div>
-          <div class="toolbar">
-            <button id="seUnion" class="secondary" type="button" disabled>Merge</button>
-            <button id="seSubtract" class="secondary" type="button" disabled>Subtract</button>
-            <button id="seIntersect" class="secondary" type="button" disabled>Intersect</button>
-            <button id="seUndo" class="secondary" type="button" disabled>Undo</button>
-          </div>
-        </div>
-        <div class="sb-section sb-output">
-          <div class="stat-line"><strong>Output</strong></div>
-          <div class="toolbar">
-            <button id="seUseAsPolygon" type="button" disabled>Use as polygon →</button>
-            <button id="seDownload" class="secondary" type="button">Download GeoJSON</button>
-          </div>
-        </div>
-        <div class="sb-section sb-status">
-          <div class="stat-line" id="shapeEditorStats">Shapes: 0 · Selected: 0</div>
-          <div class="status" id="shapeEditorStatus">Ready.</div>
-        </div>
-        <div class="sb-section sb-save">
-          <div class="toolbar">
-            <button id="seSave" class="secondary" type="button">📦 Save shapes locally</button>
-            <button id="seClearAll" class="secondary" type="button">Clear all</button>
-          </div>
-        </div>
+      <div class="sb-strip">
+        <button id="seTool-rect" class="sb-btn" type="button" title="Rectangle">⬚</button>
+        <button id="seTool-pencil" class="sb-btn" type="button" title="Pencil — Freehand">✎</button>
+        <button id="seTogglePencilMode" class="sb-btn sb-btn-tiny" type="button" title="Switch pencil mode (Freehand ↔ Vertex)" aria-label="Toggle pencil mode">▾</button>
+        <button id="seTool-move" class="sb-btn" type="button" title="Move">✋</button>
+        <button id="seTool-rotate" class="sb-btn" type="button" title="Rotate">↺</button>
+        <button id="seTool-scale" class="sb-btn" type="button" title="Scale">⤢</button>
+        <button id="seDuplicate" class="sb-btn" type="button" title="Duplicate">⎘</button>
+        <button id="seDelete" class="sb-btn" type="button" title="Delete">🗑</button>
+        <div class="sb-divider"></div>
+        <button id="seUnion" class="sb-btn" type="button" disabled title="Merge (union of selected)">∪</button>
+        <button id="seSubtract" class="sb-btn" type="button" disabled title="Subtract (first selected minus the rest)">−</button>
+        <button id="seIntersect" class="sb-btn" type="button" disabled title="Intersect (overlap of selected)">∩</button>
+        <button id="seUndo" class="sb-btn" type="button" disabled title="Undo last boolean">↶</button>
+        <div class="sb-divider"></div>
+        <button id="seUseAsPolygon" class="sb-btn sb-btn-primary" type="button" disabled title="Use as working polygon (send to bed/zone mapper)">→</button>
+        <button id="seDownload" class="sb-btn" type="button" title="Download GeoJSON">⬇</button>
+        <div class="sb-divider"></div>
+        <button id="seSave" class="sb-btn" type="button" title="Save shapes to browser storage">💾</button>
+        <button id="seClearAll" class="sb-btn" type="button" title="Clear all shapes">✕</button>
+      </div>
+      <div class="sb-foot">
+        <div class="sb-stats" id="shapeEditorStats" title="0 shapes, 0 selected">0/0</div>
+        <div class="sb-status" id="shapeEditorStatus" title="Ready.">Ready.</div>
       </div>
     </aside>
 
