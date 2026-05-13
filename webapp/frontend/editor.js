@@ -42,6 +42,8 @@
       });
       document.getElementById("seUseAsPolygon").addEventListener("click", () => this._useAsPolygon());
       document.getElementById("seDownload").addEventListener("click", () => this._downloadGeoJson());
+      document.getElementById("seSave").addEventListener("click", () => this._saveToLocalStorage());
+      document.getElementById("seClearAll").addEventListener("click", () => this._clearAll());
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
           if (this.activeTool) {
@@ -76,7 +78,20 @@
       });
     },
     _restoreFromLocalStorage() {
-      // wired in Task 30
+      try {
+        const raw = localStorage.getItem("shapeEditor.shapes.v1");
+        if (!raw) return;
+        const fc = JSON.parse(raw);
+        if (!fc || fc.type !== "FeatureCollection" || !Array.isArray(fc.features)) return;
+        for (const feat of fc.features) {
+          if (!feat.geometry) continue;
+          const layer = L.geoJSON(feat).getLayers()[0];
+          this._addShape(layer, (feat.properties && feat.properties.source) || "rect");
+        }
+        this._setStatus(`Restored ${fc.features.length} shape(s).`);
+      } catch (err) {
+        console.warn("Could not restore shapes:", err);
+      }
     },
     _updateStats() {
       const el = document.getElementById("shapeEditorStats");
@@ -576,6 +591,33 @@
         this.onUsePolygon(geom);
         this._setStatus("Polygon sent to bed/zone mapper.");
       }
+    },
+    _saveToLocalStorage() {
+      const features = [];
+      for (const layer of this.shapes.values()) {
+        const f = layer.toGeoJSON();
+        f.properties = { ...layer.feature.properties };
+        features.push(f);
+      }
+      const fc = { type: "FeatureCollection", features };
+      try {
+        localStorage.setItem("shapeEditor.shapes.v1", JSON.stringify(fc));
+        this._setStatus(`Saved ${features.length} shape(s) to browser storage.`);
+      } catch (err) {
+        this._setStatus(`Save failed: ${err.message}`);
+      }
+    },
+    _clearAll() {
+      if (this.shapes.size === 0 && !localStorage.getItem("shapeEditor.shapes.v1")) {
+        this._setStatus("Nothing to clear.");
+        return;
+      }
+      if (!window.confirm("Clear all editor shapes and saved data?")) return;
+      for (const id of [...this.shapes.keys()]) this._removeShape(id);
+      this.lastBoolean = null;
+      localStorage.removeItem("shapeEditor.shapes.v1");
+      this._refreshButtons();
+      this._setStatus("Cleared.");
     },
     _downloadGeoJson() {
       if (this.shapes.size === 0) {
