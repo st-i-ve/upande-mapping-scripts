@@ -110,6 +110,9 @@
           this.selection = new Set([id]);
         }
         this._refreshAll();
+        this._setStatus(this.selection.size === 0
+          ? "Ready."
+          : `Selected ${this.selection.size} shape(s).`);
       });
     },
     _refreshSelectionStyles() {
