@@ -25,6 +25,10 @@
       document.getElementById("seDuplicate").addEventListener("click", () => this._duplicateSelected());
       document.getElementById("seTool-pencil").addEventListener("click", () => this._togglePencilTool());
       document.getElementById("seTogglePencilMode").addEventListener("click", () => this._togglePencilMode());
+      document.getElementById("seUnion").addEventListener("click", () => this._applyBoolean("union"));
+      document.getElementById("seSubtract").addEventListener("click", () => this._applyBoolean("subtract"));
+      document.getElementById("seIntersect").addEventListener("click", () => this._applyBoolean("intersect"));
+      document.getElementById("seUndo").addEventListener("click", () => this._undoBoolean());
       this.map.on("pm:create", (e) => this._onPmCreate(e));
       // Geoman's own toolbar is suppressed by not calling map.pm.addControls().
       this.map.on("click", (e) => {
@@ -327,11 +331,13 @@
         this._refreshAll();
         this.map.pm.disableDraw();
         this._setActiveTool(null);
+        this._invalidateUndo();
         this._setStatus(`Rectangle added.`);
       }
       // Any other tool path (pencil) does not use pm:create; we ignore.
     },
     _deleteSelected() {
+      this._invalidateUndo();
       if (this.selection.size === 0) {
         this._setStatus("Nothing selected.");
         return;
@@ -341,6 +347,7 @@
       this._setStatus(`Deleted ${ids.length} shape(s).`);
     },
     _duplicateSelected() {
+      this._invalidateUndo();
       if (this.selection.size === 0) {
         this._setStatus("Select shapes to duplicate first.");
         return;
@@ -417,6 +424,7 @@
           const id = this._addShape(layer, "pencil");
           this.selection = new Set([id]);
           this._refreshAll();
+          this._invalidateUndo();
           this._setStatus("Freehand shape added.");
         },
       };
@@ -490,6 +498,7 @@
       this.selection = new Set([id]);
       this._refreshAll();
       this._setActiveTool(null);
+      this._invalidateUndo();
       this._setStatus("Vertex polygon added.");
     },
     _exitVertex() {
@@ -502,6 +511,57 @@
       if (this._vxLine) { this.map.removeLayer(this._vxLine); this._vxLine = null; }
       if (this._vxRubber) { this.map.removeLayer(this._vxRubber); this._vxRubber = null; }
       this._vxPoints = [];
+    },
+    _applyBoolean(op) {
+      if (this.selection.size < 2) return;
+      const ids = [...this.selection];
+      const geoms = ids.map((id) => this.shapes.get(id).toGeoJSON().geometry);
+      let result;
+      try {
+        if (op === "union") result = window.EditorGeom.unionAll(geoms);
+        else if (op === "subtract") result = window.EditorGeom.subtractFromBase(geoms[0], geoms.slice(1));
+        else if (op === "intersect") result = window.EditorGeom.intersectAll(geoms);
+      } catch (err) {
+        this._setStatus(`${op} failed: ${err.message}`);
+        return;
+      }
+      if (!result) {
+        this._setStatus(op === "intersect" ? "No intersection — nothing changed." : `${op} produced no geometry.`);
+        return;
+      }
+      // Save undo snapshot of originals BEFORE removing.
+      this.lastBoolean = {
+        originals: ids.map((id) => ({ id, geoJson: this.shapes.get(id).toGeoJSON().geometry, source: this.shapes.get(id).feature.properties.source })),
+        resultId: null,
+      };
+      for (const id of ids) this._removeShape(id);
+      const layer = L.geoJSON({ type: "Feature", geometry: result }).getLayers()[0];
+      const newId = this._addShape(layer, "merged");
+      this.lastBoolean.resultId = newId;
+      this.selection = new Set([newId]);
+      this._refreshAll();
+      this._setStatus(`${op[0].toUpperCase()}${op.slice(1)} complete.`);
+    },
+    _undoBoolean() {
+      if (!this.lastBoolean) return;
+      // Remove the result shape, restore originals.
+      if (this.lastBoolean.resultId) this._removeShape(this.lastBoolean.resultId);
+      const restoredIds = [];
+      for (const orig of this.lastBoolean.originals) {
+        const layer = L.geoJSON({ type: "Feature", geometry: orig.geoJson }).getLayers()[0];
+        const newId = this._addShape(layer, orig.source);
+        restoredIds.push(newId);
+      }
+      this.selection = new Set(restoredIds);
+      this.lastBoolean = null;
+      this._refreshAll();
+      this._setStatus("Undo: boolean op reverted.");
+    },
+    _invalidateUndo() {
+      if (this.lastBoolean) {
+        this.lastBoolean = null;
+        this._refreshButtons();
+      }
     },
   };
   window.ShapeEditor = ShapeEditor;
