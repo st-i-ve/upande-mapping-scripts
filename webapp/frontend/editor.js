@@ -425,12 +425,12 @@
       this.map.on("mouseup", this._fhHandlers.up);
     },
     _exitFreehand() {
-      if (this._fhHandlers) {
-        this.map.off("mousedown", this._fhHandlers.down);
-        this.map.off("mousemove", this._fhHandlers.move);
-        this.map.off("mouseup", this._fhHandlers.up);
-        this._fhHandlers = null;
-      }
+      // Only run when freehand was actually entered (_enterFreehand sets _fhHandlers).
+      if (!this._fhHandlers) return;
+      this.map.off("mousedown", this._fhHandlers.down);
+      this.map.off("mousemove", this._fhHandlers.move);
+      this.map.off("mouseup", this._fhHandlers.up);
+      this._fhHandlers = null;
       if (this._fhPreview) {
         this.map.removeLayer(this._fhPreview);
         this._fhPreview = null;
@@ -483,11 +483,8 @@
     _commitVertexPolygon() {
       const ring = [...this._vxPoints, [this._vxPoints[0][0], this._vxPoints[0][1]]];
       this._exitVertex();
-      if (ring.length < 4) {
-        this._setStatus("Need at least 3 vertices.");
-        this._setActiveTool(null);
-        return;
-      }
+      // Callers (click-on-first-vertex / Enter) only invoke this with >=3 vertices,
+      // so ring is guaranteed to have >=4 entries (3 + closing duplicate).
       const layer = L.geoJSON({ type: "Feature", geometry: { type: "Polygon", coordinates: [ring] } }).getLayers()[0];
       const id = this._addShape(layer, "pencil");
       this.selection = new Set([id]);
