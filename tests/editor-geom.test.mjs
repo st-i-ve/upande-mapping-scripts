@@ -93,3 +93,68 @@ test("rotateGeometry rotates a square 90° around its centroid", () => {
   const a2 = turf.area(rotated);
   assert.ok(Math.abs(a1 - a2) / a1 < 0.001, `area preserved (${a1} vs ${a2})`);
 });
+
+function squareAt(x, y, side = 0.0001) {
+  return {
+    type: "Polygon",
+    coordinates: [[
+      [x, y],
+      [x + side, y],
+      [x + side, y + side],
+      [x, y + side],
+      [x, y],
+    ]],
+  };
+}
+
+test("unionAll fuses two overlapping squares into one polygon", () => {
+  const a = squareAt(35.5, 0.05);
+  const b = squareAt(35.50005, 0.05); // overlaps a by half
+  const out = geom.unionAll([a, b]);
+  assert.equal(out.type, "Polygon");
+  // Combined extent in lng spans ~1.5 * side
+  const xs = out.coordinates[0].map((p) => p[0]);
+  const dx = Math.max(...xs) - Math.min(...xs);
+  assert.ok(Math.abs(dx - 0.00015) < 1e-9, `expected ~0.00015, got ${dx}`);
+});
+
+test("unionAll returns MultiPolygon for non-overlapping inputs", () => {
+  const a = squareAt(35.5, 0.05);
+  const b = squareAt(35.51, 0.05); // far away, no overlap
+  const out = geom.unionAll([a, b]);
+  assert.equal(out.type, "MultiPolygon");
+  assert.equal(out.coordinates.length, 2);
+});
+
+test("subtractFromBase creates a hole when cutter is inside base", () => {
+  const base = squareAt(35.5, 0.05, 0.001);   // big
+  const cutter = squareAt(35.5003, 0.0503, 0.0002); // inside
+  const out = geom.subtractFromBase(base, [cutter]);
+  assert.equal(out.type, "Polygon");
+  // A polygon with a hole has 2 rings: outer + inner.
+  assert.equal(out.coordinates.length, 2);
+});
+
+test("subtractFromBase returns base unchanged when no overlap", () => {
+  const base = squareAt(35.5, 0.05);
+  const cutter = squareAt(35.51, 0.05); // far away
+  const out = geom.subtractFromBase(base, [cutter]);
+  // turf.difference returns base geometry unchanged
+  assert.equal(out.type, "Polygon");
+  assert.equal(out.coordinates.length, 1);
+});
+
+test("intersectAll returns the overlap area of two squares", () => {
+  const a = squareAt(35.5, 0.05);
+  const b = squareAt(35.50005, 0.05); // half overlap
+  const out = geom.intersectAll([a, b]);
+  assert.ok(out, "non-null result");
+  assert.equal(out.type, "Polygon");
+});
+
+test("intersectAll returns null when shapes don't overlap", () => {
+  const a = squareAt(35.5, 0.05);
+  const b = squareAt(35.51, 0.05);
+  const out = geom.intersectAll([a, b]);
+  assert.equal(out, null);
+});

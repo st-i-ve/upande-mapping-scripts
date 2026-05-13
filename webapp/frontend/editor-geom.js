@@ -98,7 +98,47 @@
       }
       throw new Error(`scaleGeometry: unsupported type ${geomObj.type}`);
     }
-    return { toMetric, fromMetric, rotateGeometry, offsetGeometry, scaleGeometry };
+    function toFeature(g) {
+      return g.type === "Feature" ? g : turf.feature(g);
+    }
+    function unionAll(geoms) {
+      if (!geoms || geoms.length < 2) {
+        return geoms && geoms[0] ? geoms[0] : null;
+      }
+      const features = geoms.map(toFeature);
+      const fc = turf.featureCollection(features);
+      const result = turf.union(fc);
+      return result ? result.geometry : null;
+    }
+    function subtractFromBase(base, cutters) {
+      if (!base) return null;
+      if (!cutters || cutters.length === 0) return base;
+      let resultFeat = toFeature(base);
+      for (const c of cutters) {
+        const cutterFeat = toFeature(c);
+        const fc = turf.featureCollection([resultFeat, cutterFeat]);
+        const diff = turf.difference(fc);
+        if (!diff) return null; // base was entirely consumed
+        resultFeat = diff;
+      }
+      return resultFeat.geometry;
+    }
+    function intersectAll(geoms) {
+      if (!geoms || geoms.length < 2) return null;
+      let resultFeat = toFeature(geoms[0]);
+      for (let i = 1; i < geoms.length; i++) {
+        const fc = turf.featureCollection([resultFeat, toFeature(geoms[i])]);
+        const inter = turf.intersect(fc);
+        if (!inter) return null;
+        resultFeat = inter;
+      }
+      return resultFeat.geometry;
+    }
+    return {
+      toMetric, fromMetric,
+      rotateGeometry, offsetGeometry, scaleGeometry,
+      unionAll, subtractFromBase, intersectAll,
+    };
   }
   if (typeof window !== "undefined") {
     window.EditorGeom = makeEditorGeom(window.turf);
