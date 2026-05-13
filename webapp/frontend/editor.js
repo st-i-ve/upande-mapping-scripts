@@ -12,9 +12,35 @@
       this.activeTool = null;
       this.pencilMode = "freehand"; // or "vertex"
       this.lastBoolean = null; // {originals: [{id, geoJson}], resultId}
+      this.snapEnabled = localStorage.getItem("shapeEditor.snap.v1") !== "0";
+      this._applySnapGlobal();
       this._wireSidebar();
       this._restoreFromLocalStorage();
       this._updateStats();
+      this._reflectSnapButton();
+    },
+    _applySnapGlobal() {
+      if (this.map && this.map.pm && typeof this.map.pm.setGlobalOptions === "function") {
+        this.map.pm.setGlobalOptions({
+          snappable: this.snapEnabled,
+          snapDistance: 15,
+          snapMiddle: false,
+        });
+      }
+    },
+    _reflectSnapButton() {
+      const btn = document.getElementById("seSnapToggle");
+      if (!btn) return;
+      btn.classList.toggle("active", this.snapEnabled);
+      btn.setAttribute("aria-pressed", this.snapEnabled ? "true" : "false");
+      btn.title = `Snap to nearby edges/vertices (${this.snapEnabled ? "on" : "off"})`;
+    },
+    _toggleSnap() {
+      this.snapEnabled = !this.snapEnabled;
+      try { localStorage.setItem("shapeEditor.snap.v1", this.snapEnabled ? "1" : "0"); } catch (e) {}
+      this._applySnapGlobal();
+      this._reflectSnapButton();
+      this._setStatus(`Snap ${this.snapEnabled ? "on" : "off"}.`);
     },
     _wireSidebar() {
       const btnRect = document.getElementById("seTool-rect");
@@ -45,6 +71,7 @@
       document.getElementById("seDownload").addEventListener("click", () => this._downloadGeoJson());
       document.getElementById("seSave").addEventListener("click", () => this._saveToLocalStorage());
       document.getElementById("seClearAll").addEventListener("click", () => this._clearAll());
+      document.getElementById("seSnapToggle").addEventListener("click", () => this._toggleSnap());
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
           if (this.activeTool) {
@@ -372,7 +399,9 @@
         return;
       }
       this.map.pm.disableDraw();
-      this.map.pm.enableDraw("Rectangle", { snappable: false });
+      // Snap behaviour is driven by the global option set via _applySnapGlobal()
+      // so the user's 🧲 toggle decides whether this draw snaps to neighbour edges.
+      this.map.pm.enableDraw("Rectangle");
       this._setActiveTool("rect");
       this._setStatus("Draw a rectangle by dragging.");
     },
