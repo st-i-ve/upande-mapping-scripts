@@ -310,14 +310,58 @@ function setStatus(text, kind = "idle") {
 }
 
 // ---- polygon handling -----------------------------------------------------
+function normalizeToPolygonGeometry(input) {
+  // Reduces any GeoJSON value to a bare Polygon/MultiPolygon geometry, or null.
+  // Accepts FeatureCollection, Feature, GeometryCollection, or a raw geometry.
+  if (!input || typeof input !== "object") return null;
+  const collectPolys = (items, getGeom) => {
+    const polys = [];
+    for (const it of items || []) {
+      const g = getGeom(it);
+      if (!g) continue;
+      if (g.type === "Polygon") polys.push(g);
+      else if (g.type === "MultiPolygon") polys.push(g);
+      else if (g.type === "Feature" || g.type === "GeometryCollection") {
+        const nested = normalizeToPolygonGeometry(g);
+        if (nested) polys.push(nested);
+      }
+    }
+    return polys;
+  };
+  const merge = (polys) => {
+    if (polys.length === 0) return null;
+    if (polys.length === 1) return polys[0];
+    const coords = [];
+    for (const g of polys) {
+      if (g.type === "Polygon") coords.push(g.coordinates);
+      else coords.push(...g.coordinates);
+    }
+    return { type: "MultiPolygon", coordinates: coords };
+  };
+  if (input.type === "FeatureCollection") {
+    return merge(collectPolys(input.features, (f) => f && f.geometry));
+  }
+  if (input.type === "Feature") return normalizeToPolygonGeometry(input.geometry);
+  if (input.type === "GeometryCollection") {
+    return merge(collectPolys(input.geometries, (g) => g));
+  }
+  if (input.type === "Polygon" || input.type === "MultiPolygon") return input;
+  return null;
+}
+
 function setPolygon(geojson) {
   drawn.clearLayers();
   try {
-    const layer = L.geoJSON(geojson, { style: { color: "#0f6fd1" } });
+    const geom = normalizeToPolygonGeometry(geojson);
+    if (!geom) {
+      alert("Pasted GeoJSON has no Polygon or MultiPolygon geometry.");
+      return;
+    }
+    const layer = L.geoJSON(geom, { style: { color: "#0f6fd1" } });
     layer.eachLayer((l) => drawn.addLayer(l));
     const bounds = drawn.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
-    currentPolygon = geojson;
+    currentPolygon = geom;
   } catch (e) {
     alert("Could not parse polygon: " + e.message);
   }
