@@ -20,6 +20,7 @@
       const btnRect = document.getElementById("seTool-rect");
       btnRect.addEventListener("click", () => this._toggleRectTool());
       document.getElementById("seDelete").addEventListener("click", () => this._deleteSelected());
+      document.getElementById("seTool-move").addEventListener("click", () => this._toggleMoveTool());
       document.getElementById("seTool-rotate").addEventListener("click", () => this._toggleRotateTool());
       document.getElementById("seTool-scale").addEventListener("click", () => this._toggleScaleTool());
       document.getElementById("seDuplicate").addEventListener("click", () => this._duplicateSelected());
@@ -52,6 +53,11 @@
               for (const id of this.selection) {
                 const layer = this.shapes.get(id);
                 if (layer && layer.pm && typeof layer.pm.disableRotate === "function") layer.pm.disableRotate();
+              }
+            } else if (this.activeTool === "move") {
+              for (const id of this.selection) {
+                const layer = this.shapes.get(id);
+                if (layer && layer.pm && typeof layer.pm.disableLayerDrag === "function") layer.pm.disableLayerDrag();
               }
             } else if (this.activeTool === "scale") {
               this._exitScale();
@@ -122,6 +128,9 @@
       layer.on("pm:rotateend", () => {
         layer.feature.geometry = layer.toGeoJSON().geometry;
       });
+      layer.on("pm:dragend", () => {
+        layer.feature.geometry = layer.toGeoJSON().geometry;
+      });
       this._updateStats();
       this._refreshButtons();
       return id;
@@ -182,7 +191,7 @@
     },
     _setActiveTool(name) {
       this.activeTool = name;
-      for (const id of ["seTool-rect", "seTool-pencil", "seTool-rotate", "seTool-scale"]) {
+      for (const id of ["seTool-rect", "seTool-pencil", "seTool-move", "seTool-rotate", "seTool-scale"]) {
         const el = document.getElementById(id);
         if (!el) continue;
         el.classList.toggle("active", id === `seTool-${name}`);
@@ -205,6 +214,24 @@
       }
       this._setActiveTool(enabling ? "rotate" : null);
       this._setStatus(enabling ? "Drag the rotation handle. Esc to finish." : "Ready.");
+    },
+    _toggleMoveTool() {
+      if (this.selection.size === 0) {
+        this._setStatus("Select shapes to move first.");
+        return;
+      }
+      const enabling = this.activeTool !== "move";
+      for (const id of this.selection) {
+        const layer = this.shapes.get(id);
+        if (!layer || !layer.pm) continue;
+        if (enabling) {
+          if (typeof layer.pm.enableLayerDrag === "function") layer.pm.enableLayerDrag();
+        } else {
+          if (typeof layer.pm.disableLayerDrag === "function") layer.pm.disableLayerDrag();
+        }
+      }
+      this._setActiveTool(enabling ? "move" : null);
+      this._setStatus(enabling ? "Drag any selected shape to move. Esc to finish." : "Ready.");
     },
     _toggleScaleTool() {
       if (this.activeTool === "scale") {
