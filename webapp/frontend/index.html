@@ -264,6 +264,40 @@
         <ul id="outputs" class="outputs"></ul>
       </section>
 
+      <section class="shape-editor">
+        <h2>9. Shape builder</h2>
+        <p class="hint">Compose a complex polygon from rectangles and freehand strokes. Combine with boolean operations.</p>
+        <div class="stat-line"><strong>Tools</strong></div>
+        <div class="toolbar">
+          <button id="seTool-rect" class="secondary" type="button">⬚ Rect</button>
+          <button id="seTool-pencil" class="secondary" type="button">✎ Freehand</button>
+          <button id="seTogglePencilMode" class="secondary" type="button" title="Toggle freehand / vertex">▾</button>
+          <button id="seTool-rotate" class="secondary" type="button">↺ Rotate</button>
+          <button id="seTool-scale" class="secondary" type="button">⤢ Scale</button>
+          <button id="seDuplicate" class="secondary" type="button">⎘ Duplicate</button>
+          <button id="seDelete" class="secondary" type="button">🗑 Delete</button>
+        </div>
+        <p class="hint">Click = select · Ctrl+Shift+Click = add/remove · Esc = clear</p>
+        <div class="stat-line"><strong>Combine</strong></div>
+        <div class="toolbar">
+          <button id="seUnion" class="secondary" type="button" disabled>Merge</button>
+          <button id="seSubtract" class="secondary" type="button" disabled>Subtract</button>
+          <button id="seIntersect" class="secondary" type="button" disabled>Intersect</button>
+          <button id="seUndo" class="secondary" type="button" disabled>Undo</button>
+        </div>
+        <div class="stat-line"><strong>Output</strong></div>
+        <div class="toolbar">
+          <button id="seUseAsPolygon" type="button" disabled>Use as polygon →</button>
+          <button id="seDownload" class="secondary" type="button">Download GeoJSON</button>
+        </div>
+        <div class="stat-line" id="shapeEditorStats">Shapes: 0 · Selected: 0</div>
+        <div class="status" id="shapeEditorStatus">Ready.</div>
+        <div class="toolbar">
+          <button id="seSave" class="secondary" type="button">📦 Save shapes locally</button>
+          <button id="seClearAll" class="secondary" type="button">Clear all</button>
+        </div>
+      </section>
+
       <section>
         <h2>8. Basemap API keys</h2>
         <p class="hint">Saved in this browser only (localStorage). Leave blank to hide that layer.</p>
