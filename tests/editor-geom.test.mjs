@@ -47,6 +47,9 @@ test("offsetGeometry shifts a polygon by (dx, dy) meters", () => {
   const dist = turf.distance(turf.point(c1), turf.point(c2), { units: "meters" });
   const expected = Math.hypot(100, 50);
   assert.ok(Math.abs(dist - expected) < 1, `dist≈${expected} m, got ${dist} m`);
+  // Direction checks: +dx is east (lng increases), -dy is south (lat decreases)
+  assert.ok(c2[0] > c1[0], "moved east (lng increased)");
+  assert.ok(c2[1] < c1[1], "moved south (lat decreased)");
 });
 
 test("scaleGeometry doubles a square's area when sx=sy=2 around centroid", () => {
@@ -68,6 +71,7 @@ test("scaleGeometry doubles a square's area when sx=sy=2 around centroid", () =>
   const c1 = turf.centroid(square).geometry.coordinates;
   const c2 = turf.centroid(scaled).geometry.coordinates;
   assert.ok(Math.abs(c1[0] - c2[0]) < 1e-9, "centroid lng unchanged");
+  assert.ok(Math.abs(c1[1] - c2[1]) < 1e-9, "centroid lat unchanged");
 });
 
 test("rotateGeometry rotates a square 90° around its centroid", () => {
@@ -173,7 +177,8 @@ test("simplifyAndClose decimates a dense ring and returns a closed Polygon", () 
   const last = poly.coordinates[0][poly.coordinates[0].length - 1];
   assert.deepEqual(first, last);
   // Simplified should have fewer vertices than input (was 20 in a circle ≈ 1 m radius)
-  assert.ok(poly.coordinates[0].length <= 20, "vertex count not increased");
+  // 20-point circle of radius 1 m at 0.5 m tolerance should decimate to far fewer points.
+  assert.ok(poly.coordinates[0].length <= 12, `vertex count should be heavily decimated, got ${poly.coordinates[0].length}`);
 });
 
 test("simplifyAndClose returns null for fewer than 3 distinct points", () => {

@@ -31,48 +31,11 @@
         return fromMetric([xr, yr], originLngLat);
       });
     }
-    function rotateGeometry(geomObj, degrees) {
-      const radians = (degrees * Math.PI) / 180;
-      const origin = turf.centroid(geomObj).geometry.coordinates;
-      if (geomObj.type === "Polygon") {
-        return {
-          type: "Polygon",
-          coordinates: geomObj.coordinates.map((r) => rotateRing(r, origin, radians)),
-        };
-      }
-      if (geomObj.type === "MultiPolygon") {
-        return {
-          type: "MultiPolygon",
-          coordinates: geomObj.coordinates.map((poly) =>
-            poly.map((r) => rotateRing(r, origin, radians)),
-          ),
-        };
-      }
-      throw new Error(`rotateGeometry: unsupported type ${geomObj.type}`);
-    }
     function offsetRing(ring, originLngLat, dx, dy) {
       return ring.map((pt) => {
         const [x, y] = toMetric(pt, originLngLat);
         return fromMetric([x + dx, y + dy], originLngLat);
       });
-    }
-    function offsetGeometry(geomObj, dxMeters, dyMeters) {
-      const origin = turf.centroid(geomObj).geometry.coordinates;
-      if (geomObj.type === "Polygon") {
-        return {
-          type: "Polygon",
-          coordinates: geomObj.coordinates.map((r) => offsetRing(r, origin, dxMeters, dyMeters)),
-        };
-      }
-      if (geomObj.type === "MultiPolygon") {
-        return {
-          type: "MultiPolygon",
-          coordinates: geomObj.coordinates.map((poly) =>
-            poly.map((r) => offsetRing(r, origin, dxMeters, dyMeters)),
-          ),
-        };
-      }
-      throw new Error(`offsetGeometry: unsupported type ${geomObj.type}`);
     }
     function scaleRing(ring, originLngLat, sx, sy) {
       return ring.map((pt) => {
@@ -80,23 +43,28 @@
         return fromMetric([x * sx, y * sy], originLngLat);
       });
     }
-    function scaleGeometry(geomObj, sx, sy) {
+    function applyToRings(geomObj, ringFn) {
       const origin = turf.centroid(geomObj).geometry.coordinates;
       if (geomObj.type === "Polygon") {
-        return {
-          type: "Polygon",
-          coordinates: geomObj.coordinates.map((r) => scaleRing(r, origin, sx, sy)),
-        };
+        return { type: "Polygon", coordinates: geomObj.coordinates.map((r) => ringFn(r, origin)) };
       }
       if (geomObj.type === "MultiPolygon") {
         return {
           type: "MultiPolygon",
-          coordinates: geomObj.coordinates.map((poly) =>
-            poly.map((r) => scaleRing(r, origin, sx, sy)),
-          ),
+          coordinates: geomObj.coordinates.map((poly) => poly.map((r) => ringFn(r, origin))),
         };
       }
-      throw new Error(`scaleGeometry: unsupported type ${geomObj.type}`);
+      throw new Error(`applyToRings: unsupported type ${geomObj.type}`);
+    }
+    function rotateGeometry(geomObj, degrees) {
+      const radians = (degrees * Math.PI) / 180;
+      return applyToRings(geomObj, (ring, origin) => rotateRing(ring, origin, radians));
+    }
+    function offsetGeometry(geomObj, dxMeters, dyMeters) {
+      return applyToRings(geomObj, (ring, origin) => offsetRing(ring, origin, dxMeters, dyMeters));
+    }
+    function scaleGeometry(geomObj, sx, sy) {
+      return applyToRings(geomObj, (ring, origin) => scaleRing(ring, origin, sx, sy));
     }
     function toFeature(g) {
       return g.type === "Feature" ? g : turf.feature(g);
