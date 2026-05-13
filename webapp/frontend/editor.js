@@ -40,6 +40,8 @@
         this.selection.clear();
         this._refreshAll();
       });
+      document.getElementById("seUseAsPolygon").addEventListener("click", () => this._useAsPolygon());
+      document.getElementById("seDownload").addEventListener("click", () => this._downloadGeoJson());
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
           if (this.activeTool) {
@@ -562,6 +564,42 @@
         this.lastBoolean = null;
         this._refreshButtons();
       }
+    },
+    _useAsPolygon() {
+      if (this.shapes.size !== 1) {
+        this._setStatus("Merge or remove shapes so exactly one remains.");
+        return;
+      }
+      const only = [...this.shapes.values()][0];
+      const geom = only.toGeoJSON().geometry;
+      if (typeof this.onUsePolygon === "function") {
+        this.onUsePolygon(geom);
+        this._setStatus("Polygon sent to bed/zone mapper.");
+      }
+    },
+    _downloadGeoJson() {
+      if (this.shapes.size === 0) {
+        this._setStatus("No shapes to download.");
+        return;
+      }
+      const features = [];
+      for (const layer of this.shapes.values()) {
+        const f = layer.toGeoJSON();
+        f.properties = { ...layer.feature.properties };
+        features.push(f);
+      }
+      const fc = { type: "FeatureCollection", features };
+      const blob = new Blob([JSON.stringify(fc, null, 2)], { type: "application/geo+json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "-");
+      a.href = url;
+      a.download = `shape-builder-${ts}.geojson`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      this._setStatus(`Downloaded ${features.length} shape(s).`);
     },
   };
   window.ShapeEditor = ShapeEditor;
