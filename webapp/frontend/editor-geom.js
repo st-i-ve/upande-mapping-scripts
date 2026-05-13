@@ -74,7 +74,31 @@
       }
       throw new Error(`offsetGeometry: unsupported type ${geomObj.type}`);
     }
-    return { toMetric, fromMetric, rotateGeometry, offsetGeometry };
+    function scaleRing(ring, originLngLat, sx, sy) {
+      return ring.map((pt) => {
+        const [x, y] = toMetric(pt, originLngLat);
+        return fromMetric([x * sx, y * sy], originLngLat);
+      });
+    }
+    function scaleGeometry(geomObj, sx, sy) {
+      const origin = turf.centroid(geomObj).geometry.coordinates;
+      if (geomObj.type === "Polygon") {
+        return {
+          type: "Polygon",
+          coordinates: geomObj.coordinates.map((r) => scaleRing(r, origin, sx, sy)),
+        };
+      }
+      if (geomObj.type === "MultiPolygon") {
+        return {
+          type: "MultiPolygon",
+          coordinates: geomObj.coordinates.map((poly) =>
+            poly.map((r) => scaleRing(r, origin, sx, sy)),
+          ),
+        };
+      }
+      throw new Error(`scaleGeometry: unsupported type ${geomObj.type}`);
+    }
+    return { toMetric, fromMetric, rotateGeometry, offsetGeometry, scaleGeometry };
   }
   if (typeof window !== "undefined") {
     window.EditorGeom = makeEditorGeom(window.turf);

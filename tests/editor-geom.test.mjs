@@ -49,6 +49,27 @@ test("offsetGeometry shifts a polygon by (dx, dy) meters", () => {
   assert.ok(Math.abs(dist - expected) < 1, `dist≈${expected} m, got ${dist} m`);
 });
 
+test("scaleGeometry doubles a square's area when sx=sy=2 around centroid", () => {
+  const square = {
+    type: "Polygon",
+    coordinates: [[
+      [35.5, 0.05],
+      [35.5001, 0.05],
+      [35.5001, 0.0501],
+      [35.5, 0.0501],
+      [35.5, 0.05],
+    ]],
+  };
+  const a1 = turf.area(square);
+  const scaled = geom.scaleGeometry(square, 2, 2);
+  const a2 = turf.area(scaled);
+  // Area scales by sx*sy = 4
+  assert.ok(Math.abs(a2 / a1 - 4) < 0.01, `area ratio ≈4, got ${a2 / a1}`);
+  const c1 = turf.centroid(square).geometry.coordinates;
+  const c2 = turf.centroid(scaled).geometry.coordinates;
+  assert.ok(Math.abs(c1[0] - c2[0]) < 1e-9, "centroid lng unchanged");
+});
+
 test("rotateGeometry rotates a square 90° around its centroid", () => {
   const square = {
     type: "Polygon",
