@@ -30,6 +30,25 @@ test("toMetric handles latitude offset (cos compression)", () => {
   assert.ok(Math.abs(m[0] - 111320) < 100);
 });
 
+test("offsetGeometry shifts a polygon by (dx, dy) meters", () => {
+  const square = {
+    type: "Polygon",
+    coordinates: [[
+      [35.5, 0.05],
+      [35.5001, 0.05],
+      [35.5001, 0.0501],
+      [35.5, 0.0501],
+      [35.5, 0.05],
+    ]],
+  };
+  const shifted = geom.offsetGeometry(square, 100, -50);
+  const c1 = turf.centroid(square).geometry.coordinates;
+  const c2 = turf.centroid(shifted).geometry.coordinates;
+  const dist = turf.distance(turf.point(c1), turf.point(c2), { units: "meters" });
+  const expected = Math.hypot(100, 50);
+  assert.ok(Math.abs(dist - expected) < 1, `dist≈${expected} m, got ${dist} m`);
+});
+
 test("rotateGeometry rotates a square 90° around its centroid", () => {
   const square = {
     type: "Polygon",
