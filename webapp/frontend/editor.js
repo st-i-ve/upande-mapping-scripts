@@ -22,6 +22,7 @@
       document.getElementById("seDelete").addEventListener("click", () => this._deleteSelected());
       document.getElementById("seTool-rotate").addEventListener("click", () => this._toggleRotateTool());
       document.getElementById("seTool-scale").addEventListener("click", () => this._toggleScaleTool());
+      document.getElementById("seDuplicate").addEventListener("click", () => this._duplicateSelected());
       this.map.on("pm:create", (e) => this._onPmCreate(e));
       // Geoman's own toolbar is suppressed by not calling map.pm.addControls().
       this.map.on("click", (e) => {
@@ -333,6 +334,25 @@
       const ids = [...this.selection];
       for (const id of ids) this._removeShape(id);
       this._setStatus(`Deleted ${ids.length} shape(s).`);
+    },
+    _duplicateSelected() {
+      if (this.selection.size === 0) {
+        this._setStatus("Select shapes to duplicate first.");
+        return;
+      }
+      const newIds = [];
+      for (const id of this.selection) {
+        const layer = this.shapes.get(id);
+        const g = layer.toGeoJSON().geometry;
+        const shifted = window.EditorGeom.offsetGeometry(g, 8, -8); // +8m east, -8m south
+        const newLayer = L.geoJSON({ type: "Feature", geometry: shifted }).getLayers()[0];
+        const source = layer.feature.properties.source || "rect";
+        const newId = this._addShape(newLayer, source);
+        newIds.push(newId);
+      }
+      this.selection = new Set(newIds);
+      this._refreshAll();
+      this._setStatus(`Duplicated ${newIds.length} shape(s).`);
     },
   };
   window.ShapeEditor = ShapeEditor;
