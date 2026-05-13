@@ -20,6 +20,7 @@
       const btnRect = document.getElementById("seTool-rect");
       btnRect.addEventListener("click", () => this._toggleRectTool());
       document.getElementById("seDelete").addEventListener("click", () => this._deleteSelected());
+      document.getElementById("seTool-rotate").addEventListener("click", () => this._toggleRotateTool());
       this.map.on("pm:create", (e) => this._onPmCreate(e));
       // Geoman's own toolbar is suppressed by not calling map.pm.addControls().
       this.map.on("click", (e) => {
@@ -35,6 +36,12 @@
         if (e.key === "Escape") {
           if (this.activeTool) {
             this.map.pm.disableDraw();
+            if (this.activeTool === "rotate") {
+              for (const id of this.selection) {
+                const layer = this.shapes.get(id);
+                if (layer && layer.pm && typeof layer.pm.disableRotate === "function") layer.pm.disableRotate();
+              }
+            }
             this._setActiveTool(null);
             this._setStatus("Ready.");
           } else if (this.selection.size > 0) {
@@ -78,6 +85,12 @@
       this.editorLayer.addLayer(layer);
       this._applyStyle(layer, false);
       this._wireShapeClick(layer);
+      layer.on("pm:edit", () => {
+        layer.feature.geometry = layer.toGeoJSON().geometry;
+      });
+      layer.on("pm:rotateend", () => {
+        layer.feature.geometry = layer.toGeoJSON().geometry;
+      });
       this._updateStats();
       this._refreshButtons();
       return id;
@@ -143,6 +156,24 @@
         if (!el) continue;
         el.classList.toggle("active", id === `seTool-${name}`);
       }
+    },
+    _toggleRotateTool() {
+      if (this.selection.size === 0) {
+        this._setStatus("Select shapes to rotate first.");
+        return;
+      }
+      const enabling = this.activeTool !== "rotate";
+      for (const id of this.selection) {
+        const layer = this.shapes.get(id);
+        if (!layer || !layer.pm) continue;
+        if (enabling) {
+          if (typeof layer.pm.enableRotate === "function") layer.pm.enableRotate();
+        } else {
+          if (typeof layer.pm.disableRotate === "function") layer.pm.disableRotate();
+        }
+      }
+      this._setActiveTool(enabling ? "rotate" : null);
+      this._setStatus(enabling ? "Drag the rotation handle. Esc to finish." : "Ready.");
     },
     _toggleRectTool() {
       if (this.activeTool === "rect") {
