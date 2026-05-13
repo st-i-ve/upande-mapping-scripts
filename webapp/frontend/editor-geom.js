@@ -4,7 +4,7 @@
 //  - Node test: import this file as an ES module after `import * as turf from "@turf/turf"`
 //    is in scope; the factory takes turf as an explicit dep.
 
-(function (globalRoot) {
+(function () {
   function makeEditorGeom(turf) {
     return {
       // populated by later tasks
@@ -16,4 +16,4 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { makeEditorGeom };
   }
-})(typeof globalThis !== "undefined" ? globalThis : this);
+})();

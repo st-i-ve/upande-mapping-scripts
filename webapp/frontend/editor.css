@@ -19,14 +19,14 @@
 
 .shape-editor .stat-line {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--text-muted);
   margin: 4px 0;
 }
 
 .shape-editor .status {
   font-size: 11px;
   min-height: 14px;
-  color: var(--muted);
+  color: var(--text-muted);
   margin: 4px 0;
 }
 
