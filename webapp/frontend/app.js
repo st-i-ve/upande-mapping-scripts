@@ -3073,12 +3073,13 @@ window.app.onUsePolygon = function (geom) {
 
 window.app.isMapClickConsumed = function () {
   // True when app.js's own click handler is in "awaiting" mode and will
-  // consume the click for terrace/corner/swap/pivot pick or filter mask draw.
+  // consume the click for terrace/corner/swap/pivot/ref-point pick or filter mask draw.
   return Boolean(
     (typeof awaitingTerracePick !== "undefined" && awaitingTerracePick) ||
     (typeof awaitingCornerPick !== "undefined" && awaitingCornerPick) ||
     (typeof awaitingSwapPick !== "undefined" && awaitingSwapPick) ||
     (typeof awaitingPivotClick !== "undefined" && awaitingPivotClick) ||
+    (typeof awaitingRefPick !== "undefined" && awaitingRefPick) ||
     (typeof awaitingFilterDraw !== "undefined" && awaitingFilterDraw)
   );
 };

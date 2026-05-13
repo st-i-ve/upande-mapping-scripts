@@ -432,10 +432,26 @@
             this._setStatus("Stroke too short — discarded.");
             return;
           }
-          const poly = window.EditorGeom.simplifyAndClose(ring, 0.5);
+          let poly = window.EditorGeom.simplifyAndClose(ring, 0.5);
           if (!poly) {
             this._setStatus("Stroke simplified to too few vertices — discarded.");
             return;
+          }
+          // Self-intersecting freehand strokes break later turf boolean ops.
+          // Run unkinkPolygon and keep the largest non-self-intersecting piece.
+          try {
+            const unkinked = window.turf.unkinkPolygon(window.turf.feature(poly));
+            if (unkinked && unkinked.features && unkinked.features.length > 0) {
+              let best = unkinked.features[0];
+              let bestArea = window.turf.area(best);
+              for (let i = 1; i < unkinked.features.length; i++) {
+                const a = window.turf.area(unkinked.features[i]);
+                if (a > bestArea) { best = unkinked.features[i]; bestArea = a; }
+              }
+              poly = best.geometry;
+            }
+          } catch (err) {
+            // Fall through with the kinked polygon; later boolean ops may surface a clearer error.
           }
           const layer = L.geoJSON({ type: "Feature", geometry: poly }).getLayers()[0];
           const id = this._addShape(layer, "pencil");

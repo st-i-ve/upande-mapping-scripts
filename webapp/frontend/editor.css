@@ -30,11 +30,6 @@
   margin: 4px 0;
 }
 
-/* Selected polygon outline — applied via setStyle in editor.js. */
-.shape-editor-selected {
-  stroke-dasharray: 6 4;
-}
-
 .shape-editor-handle {
   width: 12px;
   height: 12px;
