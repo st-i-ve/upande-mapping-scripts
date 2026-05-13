@@ -17,7 +17,14 @@
       this._updateStats();
     },
     _wireSidebar() {
-      // wired in later tasks
+      const btnRect = document.getElementById("seTool-rect");
+      btnRect.addEventListener("click", () => this._toggleRectTool());
+      document.getElementById("seDelete").addEventListener("click", () => this._deleteSelected());
+      this.map.on("pm:create", (e) => this._onPmCreate(e));
+      // Disable Geoman's own toolbar — we drive it from our buttons.
+      if (this.map.pm && this.map.pm.addControls) {
+        // no-op: we never call addControls, so no Geoman UI shows.
+      }
     },
     _restoreFromLocalStorage() {
       // wired in Task 30
@@ -94,6 +101,51 @@
       document.getElementById("seIntersect").disabled = !have2plus;
       document.getElementById("seUseAsPolygon").disabled = this.shapes.size !== 1;
       document.getElementById("seUndo").disabled = !this.lastBoolean;
+    },
+    _setActiveTool(name) {
+      this.activeTool = name;
+      for (const id of ["seTool-rect", "seTool-pencil", "seTool-rotate", "seTool-scale"]) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        el.classList.toggle("active", id === `seTool-${name}`);
+      }
+    },
+    _toggleRectTool() {
+      if (this.activeTool === "rect") {
+        this.map.pm.disableDraw();
+        this._setActiveTool(null);
+        this._setStatus("Ready.");
+        return;
+      }
+      this.map.pm.disableDraw();
+      this.map.pm.enableDraw("Rectangle", { snappable: false });
+      this._setActiveTool("rect");
+      this._setStatus("Draw a rectangle by dragging.");
+    },
+    _onPmCreate(e) {
+      if (!e || !e.layer) return;
+      // Geoman auto-attaches the new layer directly to the map. Detach it so
+      // it's only ever a member of our editorLayer (single source of truth).
+      this.map.removeLayer(e.layer);
+      if (this.activeTool === "rect") {
+        const id = this._addShape(e.layer, "rect");
+        this.selection = new Set([id]);
+        this._refreshSelectionStyles();
+        this._updateStats();
+        this.map.pm.disableDraw();
+        this._setActiveTool(null);
+        this._setStatus(`Rectangle added.`);
+      }
+      // Any other tool path (pencil) does not use pm:create; we ignore.
+    },
+    _deleteSelected() {
+      if (this.selection.size === 0) {
+        this._setStatus("Nothing selected.");
+        return;
+      }
+      const ids = [...this.selection];
+      for (const id of ids) this._removeShape(id);
+      this._setStatus(`Deleted ${ids.length} shape(s).`);
     },
   };
   window.ShapeEditor = ShapeEditor;
