@@ -21,18 +21,15 @@
       btnRect.addEventListener("click", () => this._toggleRectTool());
       document.getElementById("seDelete").addEventListener("click", () => this._deleteSelected());
       this.map.on("pm:create", (e) => this._onPmCreate(e));
-      // Disable Geoman's own toolbar — we drive it from our buttons.
-      if (this.map.pm && this.map.pm.addControls) {
-        // no-op: we never call addControls, so no Geoman UI shows.
-      }
+      // Geoman's own toolbar is suppressed by not calling map.pm.addControls().
       this.map.on("click", (e) => {
         // Only clear if we're not currently drawing.
         if (this.activeTool === "rect" || this.activeTool === "pencil") return;
+        // Bail if app.js is in an "awaiting" pick mode that consumed this click.
+        if (window.app && typeof window.app.isMapClickConsumed === "function" && window.app.isMapClickConsumed()) return;
         if (this.selection.size === 0) return;
         this.selection.clear();
-        this._refreshSelectionStyles();
-        this._updateStats();
-        this._refreshButtons();
+        this._refreshAll();
       });
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
@@ -42,9 +39,7 @@
             this._setStatus("Ready.");
           } else if (this.selection.size > 0) {
             this.selection.clear();
-            this._refreshSelectionStyles();
-            this._updateStats();
-            this._refreshButtons();
+            this._refreshAll();
           }
         } else if (e.key === "Delete" || e.key === "Backspace") {
           // Only consume Delete if focus is not inside an input/textarea.
@@ -114,9 +109,7 @@
         } else {
           this.selection = new Set([id]);
         }
-        this._refreshSelectionStyles();
-        this._updateStats();
-        this._refreshButtons();
+        this._refreshAll();
       });
     },
     _refreshSelectionStyles() {
@@ -127,11 +120,18 @@
     _refreshButtons() {
       const sel = this.selection.size;
       const have2plus = sel >= 2;
+      const haveAny = sel >= 1;
       document.getElementById("seUnion").disabled = !have2plus;
       document.getElementById("seSubtract").disabled = !have2plus;
       document.getElementById("seIntersect").disabled = !have2plus;
+      document.getElementById("seDelete").disabled = !haveAny;
       document.getElementById("seUseAsPolygon").disabled = this.shapes.size !== 1;
       document.getElementById("seUndo").disabled = !this.lastBoolean;
+    },
+    _refreshAll() {
+      this._refreshSelectionStyles();
+      this._updateStats();
+      this._refreshButtons();
     },
     _setActiveTool(name) {
       this.activeTool = name;
@@ -161,8 +161,7 @@
       if (this.activeTool === "rect") {
         const id = this._addShape(e.layer, "rect");
         this.selection = new Set([id]);
-        this._refreshSelectionStyles();
-        this._updateStats();
+        this._refreshAll();
         this.map.pm.disableDraw();
         this._setActiveTool(null);
         this._setStatus(`Rectangle added.`);

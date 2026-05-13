@@ -3070,3 +3070,15 @@ window.app.onUsePolygon = function (geom) {
   setPolygon(normalized);
   schedulePreview();
 };
+
+window.app.isMapClickConsumed = function () {
+  // True when app.js's own click handler is in "awaiting" mode and will
+  // consume the click for terrace/corner/swap/pivot pick or filter mask draw.
+  return Boolean(
+    (typeof awaitingTerracePick !== "undefined" && awaitingTerracePick) ||
+    (typeof awaitingCornerPick !== "undefined" && awaitingCornerPick) ||
+    (typeof awaitingSwapPick !== "undefined" && awaitingSwapPick) ||
+    (typeof awaitingPivotClick !== "undefined" && awaitingPivotClick) ||
+    (typeof awaitingFilterDraw !== "undefined" && awaitingFilterDraw)
+  );
+};
