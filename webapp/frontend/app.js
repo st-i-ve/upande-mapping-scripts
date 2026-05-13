@@ -2,6 +2,10 @@
 
 const map = L.map("map", { zoomControl: true }).setView([0.0686, 35.748], 16);
 
+// Expose minimal surface for sibling modules (editor.js).
+window.app = window.app || {};
+window.app.map = map;
+
 // Pane for the tree grid — z-index below overlayPane (400) so drawn shapes
 // always render on top of the grid dots.
 map.createPane("gridPane");
@@ -3055,3 +3059,14 @@ const PassThroughControl = L.Control.extend({
 });
 new PassThroughControl().addTo(map);
 applyPassThrough();
+
+// ---- Shape editor bridge --------------------------------------------------
+window.app.onUsePolygon = function (geom) {
+  const normalized = normalizeToPolygonGeometry(geom);
+  if (!normalized) {
+    alert("Shape editor produced no usable polygon.");
+    return;
+  }
+  setPolygon(normalized);
+  schedulePreview();
+};
