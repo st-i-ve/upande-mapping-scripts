@@ -138,6 +138,13 @@
     _removeShape(id) {
       const layer = this.shapes.get(id);
       if (!layer) return;
+      // Disable any active Geoman handles before removing the layer, otherwise
+      // rotation / drag helper markers can stay parented on the map.
+      if (layer.pm) {
+        if (typeof layer.pm.disableRotate === "function") layer.pm.disableRotate();
+        if (typeof layer.pm.disableLayerDrag === "function") layer.pm.disableLayerDrag();
+        if (typeof layer.pm.disable === "function") layer.pm.disable();
+      }
       this.editorLayer.removeLayer(layer);
       this.shapes.delete(id);
       this.selection.delete(id);
