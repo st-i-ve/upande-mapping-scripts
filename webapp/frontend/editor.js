@@ -23,6 +23,8 @@
       document.getElementById("seTool-rotate").addEventListener("click", () => this._toggleRotateTool());
       document.getElementById("seTool-scale").addEventListener("click", () => this._toggleScaleTool());
       document.getElementById("seDuplicate").addEventListener("click", () => this._duplicateSelected());
+      document.getElementById("seTool-pencil").addEventListener("click", () => this._togglePencilTool());
+      document.getElementById("seTogglePencilMode").addEventListener("click", () => this._togglePencilMode());
       this.map.on("pm:create", (e) => this._onPmCreate(e));
       // Geoman's own toolbar is suppressed by not calling map.pm.addControls().
       this.map.on("click", (e) => {
@@ -45,6 +47,9 @@
               }
             } else if (this.activeTool === "scale") {
               this._exitScale();
+              return;
+            } else if (this.activeTool === "pencil") {
+              this._exitPencil();
               return;
             }
             this._setActiveTool(null);
@@ -354,6 +359,87 @@
       this._refreshAll();
       this._setStatus(`Duplicated ${newIds.length} shape(s).`);
     },
+    _togglePencilTool() {
+      if (this.activeTool === "pencil") {
+        this._exitPencil();
+        return;
+      }
+      this._setActiveTool("pencil");
+      if (this.pencilMode === "freehand") this._enterFreehand();
+      else this._enterVertex();
+    },
+    _togglePencilMode() {
+      const wasActive = this.activeTool === "pencil";
+      if (wasActive) this._exitPencil();
+      this.pencilMode = this.pencilMode === "freehand" ? "vertex" : "freehand";
+      const btn = document.getElementById("seTool-pencil");
+      btn.textContent = this.pencilMode === "freehand" ? "✎ Freehand" : "✎ Vertex";
+      this._setStatus(`Pencil mode: ${this.pencilMode}.`);
+      if (wasActive) this._togglePencilTool();
+    },
+    _exitPencil() {
+      this._exitFreehand();
+      this._exitVertex();
+      this._setActiveTool(null);
+      this._setStatus("Ready.");
+    },
+    _enterFreehand() {
+      this._setStatus("Hold mouse + drag to draw a freehand shape.");
+      this.map.dragging.disable();
+      this._fhPoints = null;
+      this._fhPreview = null;
+      this._fhHandlers = {
+        down: (e) => {
+          this._fhPoints = [[e.latlng.lng, e.latlng.lat]];
+          if (this._fhPreview) this.map.removeLayer(this._fhPreview);
+          this._fhPreview = L.polyline([[e.latlng.lat, e.latlng.lng]], { color: "#ea580c", weight: 2 }).addTo(this.map);
+        },
+        move: (e) => {
+          if (!this._fhPoints) return;
+          this._fhPoints.push([e.latlng.lng, e.latlng.lat]);
+          this._fhPreview.addLatLng([e.latlng.lat, e.latlng.lng]);
+        },
+        up: () => {
+          if (!this._fhPoints) return;
+          const ring = this._fhPoints;
+          if (this._fhPreview) { this.map.removeLayer(this._fhPreview); this._fhPreview = null; }
+          this._fhPoints = null;
+          if (ring.length < 4) {
+            this._setStatus("Stroke too short — discarded.");
+            return;
+          }
+          const poly = window.EditorGeom.simplifyAndClose(ring, 0.5);
+          if (!poly) {
+            this._setStatus("Stroke simplified to too few vertices — discarded.");
+            return;
+          }
+          const layer = L.geoJSON({ type: "Feature", geometry: poly }).getLayers()[0];
+          const id = this._addShape(layer, "pencil");
+          this.selection = new Set([id]);
+          this._refreshAll();
+          this._setStatus("Freehand shape added.");
+        },
+      };
+      this.map.on("mousedown", this._fhHandlers.down);
+      this.map.on("mousemove", this._fhHandlers.move);
+      this.map.on("mouseup", this._fhHandlers.up);
+    },
+    _exitFreehand() {
+      if (this._fhHandlers) {
+        this.map.off("mousedown", this._fhHandlers.down);
+        this.map.off("mousemove", this._fhHandlers.move);
+        this.map.off("mouseup", this._fhHandlers.up);
+        this._fhHandlers = null;
+      }
+      if (this._fhPreview) {
+        this.map.removeLayer(this._fhPreview);
+        this._fhPreview = null;
+      }
+      this._fhPoints = null;
+      this.map.dragging.enable();
+    },
+    _enterVertex() { /* implemented in Task 23 */ },
+    _exitVertex() { /* implemented in Task 23 */ },
   };
   window.ShapeEditor = ShapeEditor;
   // Auto-init if app.js has already exposed its map + onUsePolygon hook.
