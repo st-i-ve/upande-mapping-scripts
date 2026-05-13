@@ -34,3 +34,17 @@
 .shape-editor-selected {
   stroke-dasharray: 6 4;
 }
+
+.shape-editor-handle {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border: 2px solid #ea580c;
+  border-radius: 2px;
+  cursor: nwse-resize;
+  margin-left: -6px;
+  margin-top: -6px;
+  box-sizing: border-box;
+}
+.shape-editor-handle.edge-handle { cursor: ew-resize; }
+.shape-editor-handle.edge-handle.vertical { cursor: ns-resize; }

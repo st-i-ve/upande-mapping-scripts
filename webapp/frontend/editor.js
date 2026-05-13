@@ -21,6 +21,7 @@
       btnRect.addEventListener("click", () => this._toggleRectTool());
       document.getElementById("seDelete").addEventListener("click", () => this._deleteSelected());
       document.getElementById("seTool-rotate").addEventListener("click", () => this._toggleRotateTool());
+      document.getElementById("seTool-scale").addEventListener("click", () => this._toggleScaleTool());
       this.map.on("pm:create", (e) => this._onPmCreate(e));
       // Geoman's own toolbar is suppressed by not calling map.pm.addControls().
       this.map.on("click", (e) => {
@@ -41,6 +42,9 @@
                 const layer = this.shapes.get(id);
                 if (layer && layer.pm && typeof layer.pm.disableRotate === "function") layer.pm.disableRotate();
               }
+            } else if (this.activeTool === "scale") {
+              this._exitScale();
+              return;
             }
             this._setActiveTool(null);
             this._setStatus("Ready.");
@@ -174,6 +178,125 @@
       }
       this._setActiveTool(enabling ? "rotate" : null);
       this._setStatus(enabling ? "Drag the rotation handle. Esc to finish." : "Ready.");
+    },
+    _toggleScaleTool() {
+      if (this.activeTool === "scale") {
+        this._exitScale();
+        return;
+      }
+      if (this.selection.size === 0) {
+        this._setStatus("Select shapes to scale first.");
+        return;
+      }
+      this._scaleHandles = L.layerGroup().addTo(this.map);
+      this._buildScaleHandles();
+      this._setActiveTool("scale");
+      this._setStatus("Drag a corner or edge handle to scale. Esc to finish.");
+    },
+    _exitScale() {
+      if (this._scaleHandles) {
+        this.map.removeLayer(this._scaleHandles);
+        this._scaleHandles = null;
+      }
+      this._setActiveTool(null);
+      this._setStatus("Ready.");
+    },
+    _selectionBboxLngLat() {
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      for (const id of this.selection) {
+        const layer = this.shapes.get(id);
+        const b = layer.getBounds();
+        minLng = Math.min(minLng, b.getWest());
+        minLat = Math.min(minLat, b.getSouth());
+        maxLng = Math.max(maxLng, b.getEast());
+        maxLat = Math.max(maxLat, b.getNorth());
+      }
+      return { minLng, minLat, maxLng, maxLat };
+    },
+    _buildScaleHandles() {
+      this._scaleHandles.clearLayers();
+      const bb = this._selectionBboxLngLat();
+      const positions = [
+        { key: "nw", lat: bb.maxLat, lng: bb.minLng, klass: "" },
+        { key: "ne", lat: bb.maxLat, lng: bb.maxLng, klass: "" },
+        { key: "se", lat: bb.minLat, lng: bb.maxLng, klass: "" },
+        { key: "sw", lat: bb.minLat, lng: bb.minLng, klass: "" },
+        { key: "n",  lat: bb.maxLat, lng: (bb.minLng + bb.maxLng) / 2, klass: "edge-handle vertical" },
+        { key: "s",  lat: bb.minLat, lng: (bb.minLng + bb.maxLng) / 2, klass: "edge-handle vertical" },
+        { key: "e",  lat: (bb.minLat + bb.maxLat) / 2, lng: bb.maxLng, klass: "edge-handle" },
+        { key: "w",  lat: (bb.minLat + bb.maxLat) / 2, lng: bb.minLng, klass: "edge-handle" },
+      ];
+      for (const p of positions) {
+        const icon = L.divIcon({ className: `shape-editor-handle ${p.klass}` });
+        const m = L.marker([p.lat, p.lng], { icon, draggable: true, keyboard: false });
+        m._handleKey = p.key;
+        m._bboxAtStart = null;
+        m.on("dragstart", () => {
+          m._bboxAtStart = this._selectionBboxLngLat();
+          m._snapshotsAtStart = new Map();
+          for (const id of this.selection) {
+            m._snapshotsAtStart.set(id, this.shapes.get(id).toGeoJSON().geometry);
+          }
+        });
+        m.on("drag", (ev) => this._onScaleHandleDrag(m, ev));
+        m.on("dragend", () => this._rebuildHandlesAfterScale());
+        this._scaleHandles.addLayer(m);
+      }
+    },
+    _rebuildHandlesAfterScale() {
+      // Rebuild handle positions to match the new bbox.
+      this._buildScaleHandles();
+    },
+    _onScaleHandleDrag(handle, ev) {
+      const key = handle._handleKey;
+      const bb0 = handle._bboxAtStart;
+      if (!bb0) return;
+      const newLatLng = handle.getLatLng();
+      let minLng = bb0.minLng, minLat = bb0.minLat, maxLng = bb0.maxLng, maxLat = bb0.maxLat;
+      if (key.includes("n")) maxLat = newLatLng.lat;
+      if (key.includes("s")) minLat = newLatLng.lat;
+      if (key.includes("e")) maxLng = newLatLng.lng;
+      if (key.includes("w")) minLng = newLatLng.lng;
+      // Guard against flipping past origin.
+      if (maxLng <= minLng || maxLat <= minLat) return;
+      const sx = (maxLng - minLng) / (bb0.maxLng - bb0.minLng);
+      const sy = (maxLat - minLat) / (bb0.maxLat - bb0.minLat);
+      // Origin of the transform = the OPPOSITE corner of the dragged handle in lng/lat space.
+      const anchorLng = key.includes("e") ? bb0.minLng : key.includes("w") ? bb0.maxLng : (bb0.minLng + bb0.maxLng) / 2;
+      const anchorLat = key.includes("n") ? bb0.minLat : key.includes("s") ? bb0.maxLat : (bb0.minLat + bb0.maxLat) / 2;
+      for (const id of this.selection) {
+        const layer = this.shapes.get(id);
+        const original = handle._snapshotsAtStart.get(id);
+        const transformed = this._scaleAroundLatLng(original, anchorLng, anchorLat, sx, sy);
+        // Replace coordinates on the existing layer in place.
+        if (transformed.type === "Polygon") {
+          layer.setLatLngs(this._geojsonToLatLngs(transformed.coordinates));
+        } else if (transformed.type === "MultiPolygon") {
+          layer.setLatLngs(transformed.coordinates.map((p) => this._geojsonToLatLngs(p)));
+        }
+        layer.feature.geometry = transformed;
+      }
+    },
+    _scaleAroundLatLng(geomObj, anchorLng, anchorLat, sx, sy) {
+      const map = (ring) =>
+        ring.map(([lng, lat]) => [
+          anchorLng + (lng - anchorLng) * sx,
+          anchorLat + (lat - anchorLat) * sy,
+        ]);
+      if (geomObj.type === "Polygon") {
+        return { type: "Polygon", coordinates: geomObj.coordinates.map(map) };
+      }
+      if (geomObj.type === "MultiPolygon") {
+        return {
+          type: "MultiPolygon",
+          coordinates: geomObj.coordinates.map((poly) => poly.map(map)),
+        };
+      }
+      return geomObj;
+    },
+    _geojsonToLatLngs(rings) {
+      // rings = [outer, hole1, hole2, ...]; each ring is [[lng,lat], ...]
+      return rings.map((ring) => ring.slice(0, -1).map(([lng, lat]) => [lat, lng]));
     },
     _toggleRectTool() {
       if (this.activeTool === "rect") {
