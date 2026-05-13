@@ -21,7 +21,36 @@
       const lat = origin[1] + m[1] / M_PER_DEG_LAT;
       return [lng, lat];
     }
-    return { toMetric, fromMetric };
+    function rotateRing(ring, originLngLat, radians) {
+      const cosA = Math.cos(radians);
+      const sinA = Math.sin(radians);
+      return ring.map((pt) => {
+        const [x, y] = toMetric(pt, originLngLat);
+        const xr = x * cosA - y * sinA;
+        const yr = x * sinA + y * cosA;
+        return fromMetric([xr, yr], originLngLat);
+      });
+    }
+    function rotateGeometry(geomObj, degrees) {
+      const radians = (degrees * Math.PI) / 180;
+      const origin = turf.centroid(geomObj).geometry.coordinates;
+      if (geomObj.type === "Polygon") {
+        return {
+          type: "Polygon",
+          coordinates: geomObj.coordinates.map((r) => rotateRing(r, origin, radians)),
+        };
+      }
+      if (geomObj.type === "MultiPolygon") {
+        return {
+          type: "MultiPolygon",
+          coordinates: geomObj.coordinates.map((poly) =>
+            poly.map((r) => rotateRing(r, origin, radians)),
+          ),
+        };
+      }
+      throw new Error(`rotateGeometry: unsupported type ${geomObj.type}`);
+    }
+    return { toMetric, fromMetric, rotateGeometry };
   }
   if (typeof window !== "undefined") {
     window.EditorGeom = makeEditorGeom(window.turf);
