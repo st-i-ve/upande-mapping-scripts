@@ -158,3 +158,25 @@ test("intersectAll returns null when shapes don't overlap", () => {
   const out = geom.intersectAll([a, b]);
   assert.equal(out, null);
 });
+
+test("simplifyAndClose decimates a dense ring and returns a closed Polygon", () => {
+  // Build a noisy 20-point square-ish loop
+  const ring = [];
+  for (let i = 0; i < 20; i++) {
+    const t = i / 20;
+    ring.push([35.5 + Math.cos(t * 2 * Math.PI) * 1e-5, 0.05 + Math.sin(t * 2 * Math.PI) * 1e-5]);
+  }
+  const poly = geom.simplifyAndClose(ring, 0.5 /* meters tolerance */);
+  assert.equal(poly.type, "Polygon");
+  // First and last vertex are equal (closed)
+  const first = poly.coordinates[0][0];
+  const last = poly.coordinates[0][poly.coordinates[0].length - 1];
+  assert.deepEqual(first, last);
+  // Simplified should have fewer vertices than input (was 20 in a circle ≈ 1 m radius)
+  assert.ok(poly.coordinates[0].length <= 20, "vertex count not increased");
+});
+
+test("simplifyAndClose returns null for fewer than 3 distinct points", () => {
+  const ring = [[35.5, 0.05], [35.50001, 0.05]];
+  assert.equal(geom.simplifyAndClose(ring, 0.5), null);
+});

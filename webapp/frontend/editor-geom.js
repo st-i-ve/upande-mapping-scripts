@@ -134,10 +134,31 @@
       }
       return resultFeat.geometry;
     }
+    function simplifyAndClose(ring, toleranceMeters) {
+      // Drop consecutive duplicate points first.
+      const cleaned = [];
+      for (const pt of ring) {
+        const last = cleaned[cleaned.length - 1];
+        if (!last || last[0] !== pt[0] || last[1] !== pt[1]) cleaned.push(pt);
+      }
+      if (cleaned.length < 3) return null;
+      // Close if not closed.
+      const first = cleaned[0];
+      const lastPt = cleaned[cleaned.length - 1];
+      if (first[0] !== lastPt[0] || first[1] !== lastPt[1]) cleaned.push([first[0], first[1]]);
+      const line = turf.lineString(cleaned);
+      // Convert meters tolerance to degrees roughly (1 deg ≈ 111000 m)
+      const toleranceDeg = toleranceMeters / 111000;
+      const simplified = turf.simplify(line, { tolerance: toleranceDeg, highQuality: false });
+      const simpleCoords = simplified.geometry.coordinates;
+      if (simpleCoords.length < 4) return null; // need at least 3 unique + closing
+      return { type: "Polygon", coordinates: [simpleCoords] };
+    }
     return {
       toMetric, fromMetric,
       rotateGeometry, offsetGeometry, scaleGeometry,
       unionAll, subtractFromBase, intersectAll,
+      simplifyAndClose,
     };
   }
   if (typeof window !== "undefined") {
