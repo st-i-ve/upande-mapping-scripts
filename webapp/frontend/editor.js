@@ -25,6 +25,37 @@
       if (this.map.pm && this.map.pm.addControls) {
         // no-op: we never call addControls, so no Geoman UI shows.
       }
+      this.map.on("click", (e) => {
+        // Only clear if we're not currently drawing.
+        if (this.activeTool === "rect" || this.activeTool === "pencil") return;
+        if (this.selection.size === 0) return;
+        this.selection.clear();
+        this._refreshSelectionStyles();
+        this._updateStats();
+        this._refreshButtons();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          if (this.activeTool) {
+            this.map.pm.disableDraw();
+            this._setActiveTool(null);
+            this._setStatus("Ready.");
+          } else if (this.selection.size > 0) {
+            this.selection.clear();
+            this._refreshSelectionStyles();
+            this._updateStats();
+            this._refreshButtons();
+          }
+        } else if (e.key === "Delete" || e.key === "Backspace") {
+          // Only consume Delete if focus is not inside an input/textarea.
+          const tag = document.activeElement && document.activeElement.tagName;
+          if (tag === "INPUT" || tag === "TEXTAREA") return;
+          if (this.selection.size > 0) {
+            e.preventDefault();
+            this._deleteSelected();
+          }
+        }
+      });
     },
     _restoreFromLocalStorage() {
       // wired in Task 30
