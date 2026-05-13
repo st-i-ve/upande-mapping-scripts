@@ -1,0 +1,36 @@
+/* Shape editor — scoped to .shape-editor namespace. */
+
+.shape-editor .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.shape-editor .toolbar button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.shape-editor .toolbar button.active {
+  background: var(--accent);
+  color: white;
+}
+
+.shape-editor .stat-line {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 4px 0;
+}
+
+.shape-editor .status {
+  font-size: 11px;
+  min-height: 14px;
+  color: var(--muted);
+  margin: 4px 0;
+}
+
+/* Selected polygon outline — applied via setStyle in editor.js. */
+.shape-editor-selected {
+  stroke-dasharray: 6 4;
+}
