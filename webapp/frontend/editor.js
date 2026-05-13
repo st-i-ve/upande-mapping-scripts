@@ -438,8 +438,74 @@
       this._fhPoints = null;
       this.map.dragging.enable();
     },
-    _enterVertex() { /* implemented in Task 23 */ },
-    _exitVertex() { /* implemented in Task 23 */ },
+    _enterVertex() {
+      this._setStatus("Click to add vertices. Enter or click first to close. Esc to cancel.");
+      this._vxPoints = [];
+      this._vxLine = null;
+      this._vxRubber = null;
+      this._vxHandlers = {
+        click: (e) => {
+          L.DomEvent.stopPropagation(e);
+          // Close if click is near the first vertex.
+          if (this._vxPoints.length >= 3) {
+            const first = this._vxPoints[0];
+            const pxA = this.map.latLngToLayerPoint([first[1], first[0]]);
+            const pxB = this.map.latLngToLayerPoint(e.latlng);
+            if (pxA.distanceTo(pxB) < 12) {
+              this._commitVertexPolygon();
+              return;
+            }
+          }
+          this._vxPoints.push([e.latlng.lng, e.latlng.lat]);
+          this._redrawVxPreview();
+        },
+        move: (e) => {
+          if (this._vxPoints.length === 0) return;
+          if (!this._vxRubber) {
+            this._vxRubber = L.polyline([], { color: "#ea580c", weight: 1, dashArray: "4 4" }).addTo(this.map);
+          }
+          const last = this._vxPoints[this._vxPoints.length - 1];
+          this._vxRubber.setLatLngs([[last[1], last[0]], [e.latlng.lat, e.latlng.lng]]);
+        },
+        keyEnter: (e) => {
+          if (e.key === "Enter" && this._vxPoints.length >= 3) this._commitVertexPolygon();
+        },
+      };
+      this.map.on("click", this._vxHandlers.click);
+      this.map.on("mousemove", this._vxHandlers.move);
+      document.addEventListener("keydown", this._vxHandlers.keyEnter);
+    },
+    _redrawVxPreview() {
+      if (this._vxLine) this.map.removeLayer(this._vxLine);
+      if (this._vxPoints.length < 2) return;
+      this._vxLine = L.polyline(this._vxPoints.map(([lng, lat]) => [lat, lng]), { color: "#ea580c", weight: 2 }).addTo(this.map);
+    },
+    _commitVertexPolygon() {
+      const ring = [...this._vxPoints, [this._vxPoints[0][0], this._vxPoints[0][1]]];
+      this._exitVertex();
+      if (ring.length < 4) {
+        this._setStatus("Need at least 3 vertices.");
+        this._setActiveTool(null);
+        return;
+      }
+      const layer = L.geoJSON({ type: "Feature", geometry: { type: "Polygon", coordinates: [ring] } }).getLayers()[0];
+      const id = this._addShape(layer, "pencil");
+      this.selection = new Set([id]);
+      this._refreshAll();
+      this._setActiveTool(null);
+      this._setStatus("Vertex polygon added.");
+    },
+    _exitVertex() {
+      if (this._vxHandlers) {
+        this.map.off("click", this._vxHandlers.click);
+        this.map.off("mousemove", this._vxHandlers.move);
+        document.removeEventListener("keydown", this._vxHandlers.keyEnter);
+        this._vxHandlers = null;
+      }
+      if (this._vxLine) { this.map.removeLayer(this._vxLine); this._vxLine = null; }
+      if (this._vxRubber) { this.map.removeLayer(this._vxRubber); this._vxRubber = null; }
+      this._vxPoints = [];
+    },
   };
   window.ShapeEditor = ShapeEditor;
   // Auto-init if app.js has already exposed its map + onUsePolygon hook.
