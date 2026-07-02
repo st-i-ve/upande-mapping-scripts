@@ -31,11 +31,13 @@ export default function LeafletMap() {
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const genResult = useAppStore((s) => s.genResult);
+  const treeGrid = useAppStore((s) => s.treeGrid);
   const setHandle = useMapBridge((s) => s.setHandle);
   const setPicking = useMapBridge((s) => s.setPicking);
 
   const workingLayerRef = useRef<L.LayerGroup | null>(null);
   const genLayerRef = useRef<L.LayerGroup | null>(null);
+  const treeLayerRef = useRef<L.LayerGroup | null>(null);
 
   // ---- map bootstrap (once) ----
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function LeafletMap() {
     shapeLayerRef.current = L.layerGroup().addTo(map);
     workingLayerRef.current = L.layerGroup().addTo(map);
     genLayerRef.current = L.layerGroup().addTo(map);
+    treeLayerRef.current = L.layerGroup().addTo(map);
     refLayerRef.current = L.layerGroup().addTo(map);
 
     const onMove = () => {
@@ -229,6 +232,22 @@ export default function LeafletMap() {
       },
     }).addTo(grp);
   }, [genResult]);
+
+  // ---- tree grid points ----
+  useEffect(() => {
+    const grp = treeLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    for (const p of treeGrid) {
+      L.circleMarker([p.lat, p.lon], {
+        radius: 2.5,
+        color: "#a3e635",
+        weight: 1,
+        fillColor: "#a3e635",
+        fillOpacity: 0.9,
+      }).addTo(grp);
+    }
+  }, [treeGrid]);
 
   return (
     <div className="relative h-full w-full">

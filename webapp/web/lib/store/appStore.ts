@@ -12,6 +12,7 @@ import type {
   RefPoint,
   SavedShape,
 } from "@/lib/types";
+import type { TreePoint } from "@/lib/geometry/treeGrid";
 
 /** Bed/zone generation parameters (mirror the backend GenerateRequest). */
 export interface GenParams {
@@ -60,6 +61,10 @@ export interface AppState {
   setGenParams: (patch: Partial<GenParams>) => void;
   setGenResult: (result: FeatureCollection | null, filename: string | null) => void;
 
+  // ---- tree grid ----
+  treeGrid: TreePoint[];
+  setTreeGrid: (pts: TreePoint[]) => void;
+
   // ---- reference-point actions ----
   addRefPoint: (p: RefPoint) => void;
   removeRefPoint: (name: string) => void;
@@ -100,6 +105,9 @@ export const useAppStore = create<AppState>()(
       setWorkingPolygon: (workingPolygon) => set({ workingPolygon }),
       setGenParams: (patch) => set((s) => ({ genParams: { ...s.genParams, ...patch } })),
       setGenResult: (genResult, genFilename) => set({ genResult, genFilename }),
+
+      treeGrid: [],
+      setTreeGrid: (treeGrid) => set({ treeGrid }),
 
       addRefPoint: (p) =>
         set((s) => ({
