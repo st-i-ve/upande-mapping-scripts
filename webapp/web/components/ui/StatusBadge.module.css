@@ -1,0 +1,16 @@
+.badge {
+  font-size: 12px;
+  font-weight: 500;
+}
+.idle {
+  color: var(--text-faint);
+}
+.busy {
+  color: var(--status-busy);
+}
+.ok {
+  color: var(--status-ok);
+}
+.error {
+  color: var(--danger);
+}
