@@ -35,12 +35,17 @@ export interface GenerateParams {
   [key: string]: unknown;
 }
 
+export interface GenerateResponse {
+  filename: string;
+  result: FeatureCollection;
+}
+
 export const api = {
   health: () => request<{ ok: boolean }>("/health"),
 
   /** Generate beds & zones. Pass an AbortSignal to support Cancel. */
   generate: (params: GenerateParams, signal?: AbortSignal) =>
-    request<FeatureCollection>("/generate", {
+    request<GenerateResponse>("/generate", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(params),

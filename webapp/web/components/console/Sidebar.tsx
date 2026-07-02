@@ -2,13 +2,14 @@
 
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
-import { Grid3x3, Play } from "lucide-react";
+import { Grid3x3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { SectionCard } from "./SectionCard";
 import { ReferencePointsPanel } from "@/components/panels/ReferencePointsPanel";
 import { SavedShapesPanel } from "@/components/panels/SavedShapesPanel";
+import { ParametersPanel } from "@/components/panels/ParametersPanel";
+import { GeneratePanel } from "@/components/panels/GeneratePanel";
 
 function Reveal({ i, id, children }: { i: number; id?: string; children: ReactNode }) {
   return (
@@ -35,7 +36,15 @@ export function Sidebar() {
         <SavedShapesPanel />
       </Reveal>
 
-      <Reveal i={2} id="sec-grid">
+      <Reveal i={2} id="sec-params">
+        <ParametersPanel />
+      </Reveal>
+
+      <Reveal i={3} id="sec-generate">
+        <GeneratePanel />
+      </Reveal>
+
+      <Reveal i={4} id="sec-grid">
         <SectionCard
           title={<span className="inline-flex items-center gap-1.5"><Grid3x3 size={12} /> Tree grid</span>}
           index="06"
@@ -52,25 +61,6 @@ export function Sidebar() {
           </div>
           <Button variant="secondary" className="mt-3 w-full">Generate grid</Button>
           <p className="mt-2 text-[10px] text-muted-foreground/60">Wiring lands in M6.</p>
-        </SectionCard>
-      </Reveal>
-
-      <Reveal i={3} id="sec-generate">
-        <SectionCard
-          title={<span className="inline-flex items-center gap-1.5"><Play size={12} /> Generate</span>}
-          index="05"
-        >
-          <Button className="w-full">Generate beds &amp; zones</Button>
-          <Separator className="my-3" />
-          <div className="tabular grid grid-cols-3 gap-2 text-center">
-            {[["beds", "—"], ["zones", "—"], ["blocks", "—"]].map(([k, v]) => (
-              <div key={k} className="rounded-md border border-border bg-secondary/40 py-2">
-                <div className="text-base font-semibold text-primary">{v}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-[10px] text-muted-foreground/60">Wiring lands in M4.</p>
         </SectionCard>
       </Reveal>
     </aside>

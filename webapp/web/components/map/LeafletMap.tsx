@@ -27,8 +27,13 @@ export default function LeafletMap() {
   const savedShapes = useAppStore((s) => s.savedShapes);
   const shapesVisible = useAppStore((s) => s.shapesVisible);
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
+  const workingPolygon = useAppStore((s) => s.workingPolygon);
+  const genResult = useAppStore((s) => s.genResult);
   const setHandle = useMapBridge((s) => s.setHandle);
   const setPicking = useMapBridge((s) => s.setPicking);
+
+  const workingLayerRef = useRef<L.LayerGroup | null>(null);
+  const genLayerRef = useRef<L.LayerGroup | null>(null);
 
   // ---- map bootstrap (once) ----
   useEffect(() => {
@@ -58,8 +63,10 @@ export default function LeafletMap() {
       .addTo(map);
     L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
 
-    refLayerRef.current = L.layerGroup().addTo(map);
     shapeLayerRef.current = L.layerGroup().addTo(map);
+    workingLayerRef.current = L.layerGroup().addTo(map);
+    genLayerRef.current = L.layerGroup().addTo(map);
+    refLayerRef.current = L.layerGroup().addTo(map);
 
     const onMove = () => {
       const c = map.getCenter();
@@ -145,6 +152,38 @@ export default function LeafletMap() {
       }).addTo(grp);
     }
   }, [savedShapes, shapesVisible, shapeOpacity]);
+
+  // ---- working polygon (dashed outline of what will be generated) ----
+  useEffect(() => {
+    const grp = workingLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    if (!workingPolygon) return;
+    L.geoJSON(workingPolygon as never, {
+      style: { color: ACCENT, weight: 2, dashArray: "5 4", fill: false },
+    }).addTo(grp);
+  }, [workingPolygon]);
+
+  // ---- generated beds & zones ----
+  useEffect(() => {
+    const grp = genLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    if (!genResult) return;
+    L.geoJSON(genResult as never, {
+      style: (feature) => {
+        const kind = (feature?.properties as { kind?: string })?.kind;
+        if (kind === "zone") return { color: "#34d399", weight: 1.5, opacity: 0.95 };
+        if (kind === "bed") return { color: "#38bdf8", weight: 1, fillColor: "#38bdf8", fillOpacity: 0.12 };
+        return { color: "#fbbf24", weight: 1.2, fillOpacity: 0.05 };
+      },
+      onEachFeature: (feature, layer) => {
+        const p = (feature.properties ?? {}) as { bed_id?: string; block_id?: string; kind?: string };
+        const label = [p.block_id, p.bed_id].filter(Boolean).join(" · ");
+        if (label) layer.bindTooltip(label, { sticky: true, className: "ref-tip" });
+      },
+    }).addTo(grp);
+  }, [genResult]);
 
   return (
     <div className="relative h-full w-full">

@@ -7,10 +7,36 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   BasemapKeys,
+  FeatureCollection,
   GeoGeometry,
   RefPoint,
   SavedShape,
 } from "@/lib/types";
+
+/** Bed/zone generation parameters (mirror the backend GenerateRequest). */
+export interface GenParams {
+  name: string;
+  bed_spacing: number;
+  zone_length: number;
+  buffer_m: number;
+  direction: "along_long_axis" | "across_long_axis";
+  n_blocks: number;
+  split_axis: "none" | "longest" | "shortest";
+  start_corner: "NW" | "NE" | "SW" | "SE";
+  block_end_beds_text: string;
+}
+
+export const DEFAULT_GEN_PARAMS: GenParams = {
+  name: "",
+  bed_spacing: 1.5,
+  zone_length: 4,
+  buffer_m: 1,
+  direction: "along_long_axis",
+  n_blocks: 1,
+  split_axis: "none",
+  start_corner: "NW",
+  block_end_beds_text: "",
+};
 
 export interface AppState {
   // ---- persisted data ----
@@ -22,6 +48,15 @@ export interface AppState {
   refOpacity: number; // 0..1
   shapesVisible: boolean;
   shapeOpacity: number; // 0..1
+
+  // ---- generation ----
+  workingPolygon: GeoGeometry | null;
+  genParams: GenParams;
+  genResult: FeatureCollection | null;
+  genFilename: string | null;
+  setWorkingPolygon: (geom: GeoGeometry | null) => void;
+  setGenParams: (patch: Partial<GenParams>) => void;
+  setGenResult: (result: FeatureCollection | null, filename: string | null) => void;
 
   // ---- reference-point actions ----
   addRefPoint: (p: RefPoint) => void;
@@ -53,6 +88,14 @@ export const useAppStore = create<AppState>()(
       refOpacity: 0.9,
       shapesVisible: true,
       shapeOpacity: 0.4,
+
+      workingPolygon: null,
+      genParams: DEFAULT_GEN_PARAMS,
+      genResult: null,
+      genFilename: null,
+      setWorkingPolygon: (workingPolygon) => set({ workingPolygon }),
+      setGenParams: (patch) => set((s) => ({ genParams: { ...s.genParams, ...patch } })),
+      setGenResult: (genResult, genFilename) => set({ genResult, genFilename }),
 
       addRefPoint: (p) =>
         set((s) => ({
@@ -102,6 +145,8 @@ export const useAppStore = create<AppState>()(
         refOpacity: s.refOpacity,
         shapesVisible: s.shapesVisible,
         shapeOpacity: s.shapeOpacity,
+        workingPolygon: s.workingPolygon,
+        genParams: s.genParams,
       }),
     },
   ),

@@ -43,6 +43,7 @@ export function SavedShapesPanel() {
   const toggleShapeVisible = useAppStore((s) => s.toggleShapeVisible);
   const setShapesVisible = useAppStore((s) => s.setShapesVisible);
   const setShapeOpacity = useAppStore((s) => s.setShapeOpacity);
+  const setWorkingPolygon = useAppStore((s) => s.setWorkingPolygon);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
 
   const [name, setName] = useState("");
@@ -130,6 +131,7 @@ export function SavedShapesPanel() {
                   <>
                     <button className="text-muted-foreground hover:text-primary" onClick={() => toggleShapeVisible(s.name)}>{s.visible ? "hide" : "show"}</button>
                     <button className="text-muted-foreground hover:text-primary" onClick={() => fitGeometry?.(s.geometry)}>zoom</button>
+                    <button className="text-muted-foreground hover:text-primary" title="Use as working polygon" onClick={() => setWorkingPolygon(s.geometry)}>use</button>
                     <button className="text-muted-foreground hover:text-destructive" onClick={() => removeSavedShape(s.name)}>delete</button>
                   </>
                 }
