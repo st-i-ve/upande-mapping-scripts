@@ -1,0 +1,50 @@
+# Next.js migration — status & cutover runbook
+
+The Next.js/TypeScript frontend (`webapp/web`) is built per the design in
+`docs/superpowers/specs/2026-07-02-nextjs-migration-design.md`. The FastAPI
+backend is unchanged.
+
+## Where it runs
+
+- **Live vanilla app:** `https://mapping.132.145.21.55.nip.io/` (FastAPI, port 8765) — untouched.
+- **Next.js preview:** `https://mapping.132.145.21.55.nip.io/next` (`mapping-next.service`, port 3100, built with `NEXT_BASE_PATH=/next`).
+
+## Milestone status
+
+| M  | Scope | State |
+|----|-------|-------|
+| M0 | Scaffold, tokens, shadcn/Tailwind, UI primitives | ✅ |
+| M1 | App shell / layout | ✅ |
+| M2 | Field Console theme + live Leaflet map | ✅ |
+| M3 | Reference points + Saved shapes (store + overlays) | ✅ |
+| M4 | Polygon + Parameters + Generate (`/api/generate`) | ✅ |
+| M5 | Shape builder (Geoman draw/edit) | ✅ baseline — boolean ops (∪ − ∩) deferred |
+| M6 | Tree grid (client geometry) | ✅ baseline — rotation / masks / pivot deferred |
+| M7 | Saved outputs (list / view / delete) | ✅ |
+| M8 | 3D view | ✅ reuses `3d.html` verbatim via iframe |
+| M9 | Deploy artifacts + cutover runbook | ✅ (this file) — **root cutover not yet performed** |
+
+## Deferred to reach full parity (before root cutover)
+
+- Shape-builder boolean ops (union / subtract / intersect) + custom rotate/scale/snap handles.
+- Tree-grid rotation, interactive pivot, and positive/negative masks.
+- Terrace mode (stepped-edge sectioning, block grouping, per-sub corners).
+- Basemap API-key panel (Mapbox / MapTiler / Stadia) + reference-point colors.
+- Side-by-side parity QA against the live vanilla app.
+
+## Cutover (when parity is confirmed)
+
+1. Rebuild for root: `cd webapp/web && npm run build` (no `NEXT_BASE_PATH`).
+2. Update `mapping-next.service`: remove the `NEXT_BASE_PATH=/next` line; `daemon-reload` + `restart`.
+3. Swap the nginx locations per the CUTOVER block in `deploy/nginx.mapping.conf`
+   (`/api` + `/tiles` + `/legacy` → FastAPI; `/` → Next), `nginx -t`, reload.
+4. Smoke-test `/`, `/api/health`, `/legacy`, then announce.
+5. **Rollback:** point nginx `/` back at `127.0.0.1:8765`, reload.
+
+## Dev
+
+```bash
+cd webapp/web
+npm run dev          # http://localhost:3000 ; /api proxied to uvicorn :8765
+npm run typecheck && npm test && npm run build
+```
