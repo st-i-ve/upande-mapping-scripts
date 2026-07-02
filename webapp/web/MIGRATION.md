@@ -24,11 +24,18 @@ backend is unchanged.
 | M8 | 3D view | ✅ reuses `3d.html` verbatim via iframe |
 | M9 | Deploy artifacts + cutover runbook | ✅ (this file) — **root cutover not yet performed** |
 
-## Deferred to reach full parity (before root cutover)
+## Parity progress (post-M9)
 
+- ✅ **Terrace mode** — pick stepped edge, block grouping (`1-3, 4, 5-7`),
+  preview sections/blocks, feeds `custom_blocks` into Generate. Advanced
+  grouping sugar (per-sub `@corners`, `[Nx longest]`, swap/reverse,
+  click-to-pick block corner) still to follow.
+
+## Still deferred to reach full parity (before root cutover)
+
+- Terrace advanced grouping sugar (per-sub corners / sub-splits / swap / pick-corner).
 - Shape-builder boolean ops (union / subtract / intersect) + custom rotate/scale/snap handles.
 - Tree-grid rotation, interactive pivot, and positive/negative masks.
-- Terrace mode (stepped-edge sectioning, block grouping, per-sub corners).
 - Basemap API-key panel (Mapbox / MapTiler / Stadia) + reference-point colors.
 - Side-by-side parity QA against the live vanilla app.
 
