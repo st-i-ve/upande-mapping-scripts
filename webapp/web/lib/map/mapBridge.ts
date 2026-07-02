@@ -16,6 +16,13 @@ export interface MapHandle {
   pickPoint: (cb: (lat: number, lon: number) => void) => void;
   cancelPick: () => void;
   isPicking: () => boolean;
+  // ---- shape builder (Geoman) ----
+  draw: (shape: "Polygon" | "Rectangle") => void;
+  editMode: () => void;
+  dragMode: () => void;
+  eraseMode: () => void;
+  stopModes: () => void;
+  clearDrawn: () => void;
 }
 
 interface MapBridge {

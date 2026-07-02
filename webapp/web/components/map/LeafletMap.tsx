@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "@geoman-io/leaflet-geoman-free";
+import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import type { GeoGeometry } from "@/lib/types";
@@ -86,6 +88,29 @@ export default function LeafletMap() {
       }
     });
 
+    // ---- Geoman shape builder ----
+    const drawnGroup = L.featureGroup().addTo(map);
+    const drawnRef = { layer: null as L.Layer | null };
+    const syncDrawn = () => {
+      const lyr = drawnRef.layer as { toGeoJSON?: () => { geometry: unknown } } | null;
+      const geom = lyr?.toGeoJSON?.().geometry ?? null;
+      useAppStore.getState().setDrawnGeometry(geom as never);
+    };
+    map.pm.setGlobalOptions({ snappable: true, snapDistance: 15 });
+    map.on("pm:create", (e: { layer: L.Layer }) => {
+      if (drawnRef.layer) drawnGroup.removeLayer(drawnRef.layer);
+      drawnRef.layer = e.layer;
+      drawnGroup.addLayer(e.layer);
+      if ("setStyle" in e.layer) (e.layer as L.Path).setStyle({ color: ACCENT, weight: 2, fillOpacity: 0.1 });
+      e.layer.on("pm:edit pm:dragend", syncDrawn);
+      syncDrawn();
+      map.pm.disableDraw();
+    });
+    map.on("pm:remove", () => {
+      drawnRef.layer = null;
+      useAppStore.getState().setDrawnGeometry(null);
+    });
+
     // Register the imperative command handle for panels.
     setHandle({
       flyTo: (lat, lon, z) => map.flyTo([lat, lon], z ?? Math.max(map.getZoom(), 18)),
@@ -108,6 +133,26 @@ export default function LeafletMap() {
         L.DomUtil.removeClass(map.getContainer(), "picking");
       },
       isPicking: () => pickCbRef.current != null,
+      draw: (shape) => {
+        map.pm.disableGlobalEditMode();
+        map.pm.disableGlobalDragMode();
+        map.pm.disableGlobalRemovalMode();
+        map.pm.enableDraw(shape, { pathOptions: { color: ACCENT, weight: 2, fillOpacity: 0.1 } });
+      },
+      editMode: () => map.pm.toggleGlobalEditMode(),
+      dragMode: () => map.pm.toggleGlobalDragMode(),
+      eraseMode: () => map.pm.toggleGlobalRemovalMode(),
+      stopModes: () => {
+        map.pm.disableDraw();
+        map.pm.disableGlobalEditMode();
+        map.pm.disableGlobalDragMode();
+        map.pm.disableGlobalRemovalMode();
+      },
+      clearDrawn: () => {
+        if (drawnRef.layer) drawnGroup.removeLayer(drawnRef.layer);
+        drawnRef.layer = null;
+        useAppStore.getState().setDrawnGeometry(null);
+      },
     });
 
     return () => {

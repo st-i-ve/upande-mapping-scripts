@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { SectionCard } from "./SectionCard";
 import { ReferencePointsPanel } from "@/components/panels/ReferencePointsPanel";
 import { SavedShapesPanel } from "@/components/panels/SavedShapesPanel";
+import { ShapeBuilderPanel } from "@/components/panels/ShapeBuilderPanel";
 import { ParametersPanel } from "@/components/panels/ParametersPanel";
 import { GeneratePanel } from "@/components/panels/GeneratePanel";
 
@@ -36,15 +37,19 @@ export function Sidebar() {
         <SavedShapesPanel />
       </Reveal>
 
-      <Reveal i={2} id="sec-params">
+      <Reveal i={2} id="sec-build">
+        <ShapeBuilderPanel />
+      </Reveal>
+
+      <Reveal i={3} id="sec-params">
         <ParametersPanel />
       </Reveal>
 
-      <Reveal i={3} id="sec-generate">
+      <Reveal i={4} id="sec-generate">
         <GeneratePanel />
       </Reveal>
 
-      <Reveal i={4} id="sec-grid">
+      <Reveal i={5} id="sec-grid">
         <SectionCard
           title={<span className="inline-flex items-center gap-1.5"><Grid3x3 size={12} /> Tree grid</span>}
           index="06"

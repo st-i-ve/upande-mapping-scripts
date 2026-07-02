@@ -51,9 +51,11 @@ export interface AppState {
 
   // ---- generation ----
   workingPolygon: GeoGeometry | null;
+  drawnGeometry: GeoGeometry | null; // transient: current shape-builder drawing
   genParams: GenParams;
   genResult: FeatureCollection | null;
   genFilename: string | null;
+  setDrawnGeometry: (geom: GeoGeometry | null) => void;
   setWorkingPolygon: (geom: GeoGeometry | null) => void;
   setGenParams: (patch: Partial<GenParams>) => void;
   setGenResult: (result: FeatureCollection | null, filename: string | null) => void;
@@ -90,9 +92,11 @@ export const useAppStore = create<AppState>()(
       shapeOpacity: 0.4,
 
       workingPolygon: null,
+      drawnGeometry: null,
       genParams: DEFAULT_GEN_PARAMS,
       genResult: null,
       genFilename: null,
+      setDrawnGeometry: (drawnGeometry) => set({ drawnGeometry }),
       setWorkingPolygon: (workingPolygon) => set({ workingPolygon }),
       setGenParams: (patch) => set((s) => ({ genParams: { ...s.genParams, ...patch } })),
       setGenResult: (genResult, genFilename) => set({ genResult, genFilename }),
