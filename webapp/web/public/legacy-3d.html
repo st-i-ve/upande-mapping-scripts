@@ -1,0 +1,1713 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lokitela 3D</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #panel {
+      position: absolute; top: 12px; left: 12px; z-index: 5;
+      background: #ffffffee; border: 1px solid #d4d4d8; border-radius: 6px;
+      padding: 10px 12px; font-size: 12px; min-width: 240px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    #panel h1 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+    #panel a { color: #2563eb; text-decoration: none; }
+    #panel a:hover { text-decoration: underline; }
+    #panel label { display: block; margin: 6px 0 2px; color: #525252; }
+    #panel input[type="range"] { width: 100%; }
+    #panel button {
+      margin-top: 6px; padding: 6px 10px; border: 1px solid #d4d4d8;
+      border-radius: 4px; background: #ffffff; cursor: pointer; font-size: 12px;
+    }
+    #panel button:hover { background: #f3f4f6; }
+    #status { margin-top: 6px; color: #6b7280; font-size: 11px; }
+    .hint { color: #6b7280; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <h1>Lokitela — 3D preview</h1>
+    <a href="/">← back to 2D mapper</a>
+    <div class="hint" style="margin-top:6px">
+      Zoom out (scroll down / press <code>−</code>) to see the globe.
+    </div>
+    <button id="flyToLokitela">Fly to Lokitela</button>
+    <label>Pitch <span id="pitchVal">60°</span></label>
+    <input id="pitch" type="range" min="0" max="85" step="1" value="60" />
+    <label>Tile opacity <span id="opVal">100%</span></label>
+    <input id="opacity" type="range" min="0" max="100" step="1" value="100" />
+    <label><input id="terrainToggle" type="checkbox" /> Terrain (AWS open data)</label>
+    <label>Exaggeration <span id="exagVal">1.5×</span></label>
+    <input id="exag" type="range" min="1" max="5" step="0.1" value="1.5" />
+    <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
+    <strong style="font-size:12px">Trees</strong>
+    <label>Load GeoJSON points (pick many)
+      <input id="treesFile" type="file" multiple accept=".geojson,.json,application/geo+json,application/json" />
+    </label>
+    <div class="hint">Select several .geojson files at once — they get merged into one InstancedMesh.</div>
+    <label>Trunk height (m) <input id="trunkH" type="number" step="0.1" value="1.5" /></label>
+    <label>Canopy height (m) <input id="canopyH" type="number" step="0.1" value="2.5" /></label>
+    <label>Canopy radius (m) <input id="canopyR" type="number" step="0.1" value="1.2" /></label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button id="previewTrees">Preview trees</button>
+      <button id="rebuildTrees">Rebuild</button>
+      <button id="clearTrees">Clear</button>
+      <button id="flyToTrees">Fly to trees</button>
+    </div>
+    <label class="toggle" style="display:flex;align-items:center;gap:6px;margin-top:8px">
+      <input id="topDownToggle" type="checkbox" />
+      <span>Top-down view</span>
+    </label>
+    <label class="toggle" style="display:flex;align-items:center;gap:6px;margin-top:4px">
+      <input id="rowArrowsToggle" type="checkbox" />
+      <span>Row direction arrows</span>
+    </label>
+    <div style="margin-top:6px">
+      <strong style="font-size:12px">Scout path</strong>
+      <div class="hint">Pencil mode: drag on the map to sketch a freeform path, then Snap to trees.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        <button id="pencilToggle">Pencil mode</button>
+        <button id="pathSnap">Snap to trees</button>
+        <button id="pathClear">Clear path</button>
+      </div>
+      <label>Snap radius (m) <input id="snapRadius" type="number" step="0.5" min="0.5" value="3" /></label>
+      <div id="pathStatus" class="hint" style="margin-top:4px"></div>
+    </div>
+    <div id="treesStatus" class="hint" style="margin-top:6px"></div>
+    <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
+    <strong style="font-size:12px">Block boundaries</strong>
+    <div class="hint">Concave hull (alpha shape) per block — follows the actual tree footprint, not the convex envelope.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+      <button id="generateBlocks">Generate</button>
+      <button id="viewBlocks">View</button>
+      <button id="exportBlocks">Export combined</button>
+      <button id="exportBlocksEach">Export each</button>
+    </div>
+    <label>Pad (m) <input id="blockPad" type="number" step="0.5" value="2" /></label>
+    <label>Max edge (m) <input id="blockMaxEdge" type="number" step="0.5" value="8" /></label>
+    <div class="hint">Triangle edges longer than Max edge get cut — pinches into concavities. 0 = auto.</div>
+    <label>Name suffix <input id="blockSuffix" type="text" value=" - KL" placeholder=" - KL" /></label>
+    <div class="hint">e.g. <code>MIMABLK10</code> → <code>MIMA BLK 10 - KL</code>.</div>
+    <div id="blocksStatus" class="hint" style="margin-top:4px"></div>
+    <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
+    <strong style="font-size:12px">Irrigation valves</strong>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+      <button id="previewValves">Preview valves</button>
+      <button id="clearValves">Clear</button>
+      <button id="flyToValves">Fly to valves</button>
+    </div>
+    <label>Load valves GeoJSON
+      <input id="valvesFile" type="file" multiple accept=".geojson,.json,application/geo+json,application/json" />
+    </label>
+    <div id="valvesStatus" class="hint" style="margin-top:4px"></div>
+    <div id="fps" class="hint" style="margin-top:2px"></div>
+    <div id="status"></div>
+    <div class="hint" style="margin-top:8px">
+      Basemap © OpenFreeMap / OpenMapTiles (OSM, ODbL).
+      Terrain © Mapzen / AWS Open Terrain Tiles.
+    </div>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/delaunator@5.0.1/delaunator.min.js"></script>
+  <script type="module">
+    import * as THREE from "three";
+
+    // Tile bounds derived from the on-disk pyramid at /tiles/lokitela/lokitela/.
+    const TILE_BOUNDS = [34.8486, 0.9777, 34.8761, 0.9997]; // [west, south, east, north]
+    const CENTER = [34.8624, 0.9887];
+
+    const map = new maplibregl.Map({
+      container: "map",
+      // OpenFreeMap — free, commercial-OK, no key. "liberty" is the streets style.
+      style: "https://tiles.openfreemap.org/styles/liberty",
+      center: CENTER,
+      zoom: 15,
+      pitch: 60,
+      bearing: 0,
+      hash: true,
+    });
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new maplibregl.ScaleControl(), "bottom-left");
+
+    const setStatus = (m) => { document.getElementById("status").textContent = m || ""; };
+
+    map.on("style.load", () => {
+      // Globe projection — vertical-perspective sphere at low zoom that
+      // smoothly transitions to mercator as you zoom in. Has to be set
+      // *after* the style URL loads, since the loaded style replaces any
+      // projection set in the constructor.
+      map.setProjection({ type: "globe" });
+
+      // Drape the local Lokitela orthomosaic on top of the OpenFreeMap basemap.
+      map.addSource("lokitela", {
+        type: "raster",
+        tiles: [location.origin + "/tiles/lokitela/lokitela/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        minzoom: 12,
+        maxzoom: 16,
+        bounds: TILE_BOUNDS,
+        attribution: "Lokitela imagery",
+      });
+      map.addLayer({ id: "lokitela", type: "raster", source: "lokitela" });
+
+      // AWS Open Terrain Tiles (Mapzen-style terrarium-encoded DEM, public bucket).
+      map.addSource("terrain-dem", {
+        type: "raster-dem",
+        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        encoding: "terrarium",
+        maxzoom: 15,
+        attribution: "© Mapzen, AWS Open Terrain Tiles",
+      });
+
+      // Atmospheric look for the globe view.
+      map.setSky({
+        "sky-color": "#7ab1ff",
+        "sky-horizon-blend": 0.5,
+        "horizon-color": "#dfe8f5",
+        "horizon-fog-blend": 0.5,
+        "fog-color": "#ffffff",
+        "fog-ground-blend": 0.5,
+      });
+    });
+
+    // ---- Controls --------------------------------------------------------
+
+    const pitch = document.getElementById("pitch");
+    const pitchVal = document.getElementById("pitchVal");
+    pitch.addEventListener("input", () => {
+      const v = parseFloat(pitch.value);
+      pitchVal.textContent = v + "°";
+      map.easeTo({ pitch: v, duration: 100 });
+    });
+    map.on("pitch", () => {
+      const v = Math.round(map.getPitch());
+      pitch.value = String(v);
+      pitchVal.textContent = v + "°";
+    });
+
+    const op = document.getElementById("opacity");
+    const opVal = document.getElementById("opVal");
+    op.addEventListener("input", () => {
+      const v = parseInt(op.value, 10) / 100;
+      opVal.textContent = op.value + "%";
+      if (map.getLayer("lokitela")) {
+        map.setPaintProperty("lokitela", "raster-opacity", v);
+      }
+    });
+
+    const terrainToggle = document.getElementById("terrainToggle");
+    const exag = document.getElementById("exag");
+    const exagVal = document.getElementById("exagVal");
+    function applyTerrain() {
+      if (!map.getSource("terrain-dem")) return;
+      if (terrainToggle.checked) {
+        map.setTerrain({ source: "terrain-dem", exaggeration: parseFloat(exag.value) });
+      } else {
+        map.setTerrain(null);
+      }
+    }
+    terrainToggle.addEventListener("change", applyTerrain);
+    exag.addEventListener("input", () => {
+      exagVal.textContent = exag.value + "×";
+      if (terrainToggle.checked) applyTerrain();
+    });
+
+    document.getElementById("flyToLokitela").addEventListener("click", () => {
+      map.flyTo({
+        center: CENTER,
+        zoom: 15,
+        pitch: 60,
+        bearing: 0,
+        speed: 0.9,
+        curve: 1.6,
+        essential: true,
+      });
+    });
+
+    // Lightweight FPS counter — useful when stress-testing tree counts.
+    (() => {
+      const out = document.getElementById("fps");
+      let frames = 0, last = performance.now();
+      function tick(now) {
+        frames++;
+        if (now - last >= 500) {
+          const fps = (frames * 1000) / (now - last);
+          out.textContent = `~${fps.toFixed(0)} fps`;
+          frames = 0; last = now;
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    })();
+
+    map.on("error", (e) => {
+      const msg = e && e.error && e.error.message ? e.error.message : "map error";
+      console.warn(msg);
+      setStatus(msg);
+    });
+
+    // =====================================================================
+    // Tree instancing — three.js InstancedMesh inside a MapLibre custom layer.
+    // One trunk geometry + one canopy geometry, N transforms each, one draw
+    // call per mesh. Comfortable up to ~100k trees on a laptop.
+    // =====================================================================
+
+    class TreesLayer {
+      constructor(features, opts = {}) {
+        this.id = "trees";
+        this.type = "custom";
+        this.renderingMode = "3d";
+        this.features = features;
+        this.trunkH = opts.trunkH ?? 1.5;
+        this.canopyH = opts.canopyH ?? 2.5;
+        this.canopyR = opts.canopyR ?? 1.2;
+      }
+
+      onAdd(map, gl) {
+        console.log("[TreesLayer] onAdd, count =", this.features.length);
+        this.map = map;
+        this.camera = new THREE.Camera();
+        this.scene = new THREE.Scene();
+
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+        sun.position.set(0.4, 1, 0.6);
+        this.scene.add(sun);
+
+        // Anchor: first feature's coord. All other trees are positioned
+        // relative to it in metres, then the world matrix scales metres into
+        // mercator units in render().
+        const [lng0, lat0] = this.features[0].geometry.coordinates;
+        this.anchor = maplibregl.MercatorCoordinate.fromLngLat([lng0, lat0], 0);
+
+        // Trunk: a thin square prism (Roblox-style). BoxGeometry = 12 tris,
+        // base at y=0 so it sits on the ground.
+        const trunkGeo = new THREE.BoxGeometry(0.2, this.trunkH, 0.2);
+        trunkGeo.translate(0, this.trunkH / 2, 0);
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b3f1e });
+        const trunkMesh = new THREE.InstancedMesh(
+          trunkGeo, trunkMat, this.features.length,
+        );
+
+        // Canopy: a single chunky box stacked on the trunk. 12 tris per
+        // flower — same family of poly cost as a Roblox part. No jitter,
+        // no smoothing, flat shading sells the blocky look.
+        const canopyGeo = new THREE.BoxGeometry(
+          this.canopyR * 2,
+          this.canopyH,
+          this.canopyR * 2,
+        );
+        canopyGeo.translate(0, this.trunkH + this.canopyH / 2, 0);
+        const canopyMat = new THREE.MeshLambertMaterial({
+          color: 0x2a8a2a,
+          flatShading: true,
+        });
+        const canopyMesh = new THREE.InstancedMesh(
+          canopyGeo, canopyMat, this.features.length,
+        );
+
+        const meter = this.anchor.meterInMercatorCoordinateUnits();
+        const tmp = new THREE.Matrix4();
+        for (let i = 0; i < this.features.length; i++) {
+          const [lng, lat] = this.features[i].geometry.coordinates;
+          const m = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
+          // Three.js local coords are in metres; the world matrix takes care
+          // of metres→mercator. (mercator.x - anchor.x)/meter = east offset.
+          const dx = (m.x - this.anchor.x) / meter;
+          const dz = (m.y - this.anchor.y) / meter; // +z = south after world transform
+          tmp.makeTranslation(dx, 0, dz);
+          trunkMesh.setMatrixAt(i, tmp);
+          canopyMesh.setMatrixAt(i, tmp);
+        }
+        trunkMesh.instanceMatrix.needsUpdate = true;
+        canopyMesh.instanceMatrix.needsUpdate = true;
+        this.scene.add(trunkMesh);
+        this.scene.add(canopyMesh);
+
+        // Share MapLibre's WebGL context so depth/blend stay consistent.
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+        });
+        this.renderer.autoClear = false;
+      }
+
+      render(gl, args) {
+        // MapLibre v5 changed the second arg from a raw matrix to a
+        // CustomRenderMethodInput object with `defaultProjectionData.mainMatrix`.
+        // Earlier versions pass the matrix directly. Accept either.
+        let matrix = args;
+        if (args && !Array.isArray(args) && typeof args !== "function") {
+          matrix =
+            (args.defaultProjectionData &&
+              (args.defaultProjectionData.mainMatrix ||
+                args.defaultProjectionData.matrix)) ||
+            args.matrix ||
+            args;
+        }
+        if (!matrix || matrix.length !== 16) {
+          if (!this._warnedMatrix) {
+            console.warn("[TreesLayer] no usable matrix in render args", args);
+            this._warnedMatrix = true;
+          }
+          return;
+        }
+
+        const meter = this.anchor.meterInMercatorCoordinateUnits();
+        // Rotate three.js Y-up to mercator Z-up, scale metres→mercator
+        // (Y flipped — mercator y grows southward), translate to the anchor.
+        const rotX = new THREE.Matrix4().makeRotationAxis(
+          new THREE.Vector3(1, 0, 0), Math.PI / 2,
+        );
+        const world = new THREE.Matrix4()
+          .makeTranslation(this.anchor.x, this.anchor.y, this.anchor.z)
+          .scale(new THREE.Vector3(meter, -meter, meter))
+          .multiply(rotX);
+
+        const mvp = new THREE.Matrix4().fromArray(matrix).multiply(world);
+        this.camera.projectionMatrix = mvp;
+
+        this.renderer.resetState();
+        this.renderer.render(this.scene, this.camera);
+        this.map.triggerRepaint();
+      }
+
+      onRemove() {
+        this.scene.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) o.material.dispose();
+        });
+      }
+    }
+
+    // =====================================================================
+    // Irrigation valves — same instancing pattern as trees, different model.
+    // Pipe (horizontal cylinder) + stem (vertical cylinder) + red torus wheel.
+    // =====================================================================
+    class ValvesLayer {
+      constructor(features) {
+        this.id = "valves";
+        this.type = "custom";
+        this.renderingMode = "3d";
+        this.features = features;
+      }
+
+      onAdd(map, gl) {
+        this.map = map;
+        this.camera = new THREE.Camera();
+        this.scene = new THREE.Scene();
+        this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+        sun.position.set(0.4, 1, 0.6);
+        this.scene.add(sun);
+
+        const [lng0, lat0] = this.features[0].geometry.coordinates;
+        this.anchor = maplibregl.MercatorCoordinate.fromLngLat([lng0, lat0], 0);
+
+        // Bumped-up size so valves are visible at typical inspection zooms.
+        // Pipe — horizontal cylinder lying east-west.
+        const pipeH = 4.0, pipeR = 0.4;
+        const pipeGeo = new THREE.CylinderGeometry(pipeR, pipeR, pipeH, 16);
+        pipeGeo.rotateZ(Math.PI / 2); // axis from Y to X — pipe lies flat
+        pipeGeo.translate(0, pipeR, 0); // sit above ground
+        const pipeMat = new THREE.MeshLambertMaterial({ color: 0x4b5563 });
+        const pipeMesh = new THREE.InstancedMesh(pipeGeo, pipeMat, this.features.length);
+
+        // Stem — vertical cylinder rising out of the pipe.
+        const stemH = 2.0, stemR = 0.2;
+        const stemGeo = new THREE.CylinderGeometry(stemR, stemR, stemH, 12);
+        stemGeo.translate(0, pipeR + stemH / 2, 0);
+        const stemMat = new THREE.MeshLambertMaterial({ color: 0x6b7280 });
+        const stemMesh = new THREE.InstancedMesh(stemGeo, stemMat, this.features.length);
+
+        // Wheel — red torus parallel to the ground, on top of the stem.
+        const wheelR = 0.8, wheelTube = 0.12;
+        const wheelGeo = new THREE.TorusGeometry(wheelR, wheelTube, 8, 24);
+        wheelGeo.rotateX(Math.PI / 2); // make it lie flat
+        wheelGeo.translate(0, pipeR + stemH + wheelTube, 0);
+        const wheelMat = new THREE.MeshLambertMaterial({ color: 0xdc2626 });
+        const wheelMesh = new THREE.InstancedMesh(wheelGeo, wheelMat, this.features.length);
+
+        const meter = this.anchor.meterInMercatorCoordinateUnits();
+        const tmp = new THREE.Matrix4();
+        for (let i = 0; i < this.features.length; i++) {
+          const [lng, lat] = this.features[i].geometry.coordinates;
+          const m = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
+          const dx = (m.x - this.anchor.x) / meter;
+          const dz = (m.y - this.anchor.y) / meter;
+          tmp.makeTranslation(dx, 0, dz);
+          pipeMesh.setMatrixAt(i, tmp);
+          stemMesh.setMatrixAt(i, tmp);
+          wheelMesh.setMatrixAt(i, tmp);
+        }
+        pipeMesh.instanceMatrix.needsUpdate = true;
+        stemMesh.instanceMatrix.needsUpdate = true;
+        wheelMesh.instanceMatrix.needsUpdate = true;
+        this.scene.add(pipeMesh, stemMesh, wheelMesh);
+
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: map.getCanvas(),
+          context: gl,
+          antialias: true,
+        });
+        this.renderer.autoClear = false;
+      }
+
+      render(gl, args) {
+        let matrix = args;
+        if (args && !Array.isArray(args) && typeof args !== "function") {
+          matrix =
+            (args.defaultProjectionData &&
+              (args.defaultProjectionData.mainMatrix ||
+                args.defaultProjectionData.matrix)) ||
+            args.matrix ||
+            args;
+        }
+        if (!matrix || matrix.length !== 16) return;
+
+        const meter = this.anchor.meterInMercatorCoordinateUnits();
+        const rotX = new THREE.Matrix4().makeRotationAxis(
+          new THREE.Vector3(1, 0, 0), Math.PI / 2,
+        );
+        const world = new THREE.Matrix4()
+          .makeTranslation(this.anchor.x, this.anchor.y, this.anchor.z)
+          .scale(new THREE.Vector3(meter, -meter, meter))
+          .multiply(rotX);
+        this.camera.projectionMatrix = new THREE.Matrix4().fromArray(matrix).multiply(world);
+        this.renderer.resetState();
+        this.renderer.render(this.scene, this.camera);
+        this.map.triggerRepaint();
+      }
+
+      onRemove() {
+        this.scene.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) o.material.dispose();
+        });
+      }
+    }
+
+    function extractPointFeatures(geojson) {
+      const out = [];
+      const visit = (f) => {
+        if (!f || !f.geometry) return;
+        if (f.geometry.type === "Point") out.push(f);
+      };
+      if (geojson.type === "FeatureCollection") {
+        (geojson.features || []).forEach(visit);
+      } else if (geojson.type === "Feature") {
+        visit(geojson);
+      } else if (geojson.type === "Point") {
+        out.push({ type: "Feature", geometry: geojson, properties: {} });
+      }
+      return out;
+    }
+
+    let activeTrees = null;
+    let lastFeatures = null;
+
+    function buildTrees(features) {
+      if (!features.length) {
+        document.getElementById("treesStatus").textContent = "No points found.";
+        return;
+      }
+      if (activeTrees && map.getLayer("trees")) map.removeLayer("trees");
+      activeTrees = new TreesLayer(features, {
+        trunkH: parseFloat(document.getElementById("trunkH").value) || 1.5,
+        canopyH: parseFloat(document.getElementById("canopyH").value) || 2.5,
+        canopyR: parseFloat(document.getElementById("canopyR").value) || 1.2,
+      });
+      map.addLayer(activeTrees);
+      document.getElementById("treesStatus").textContent =
+        `${features.length} trees instanced.`;
+      if (document.getElementById("rowArrowsToggle").checked) showRowArrows();
+    }
+
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+        r.readAsText(file);
+      });
+    }
+
+    document.getElementById("treesFile").addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      document.getElementById("treesStatus").textContent =
+        `Reading ${files.length} file${files.length === 1 ? "" : "s"}…`;
+
+      const t0 = performance.now();
+      const merged = [];
+      const breakdown = [];
+      const errors = [];
+      const results = await Promise.all(
+        files.map((f) => readFileAsText(f).catch((err) => ({ __err: err, name: f.name }))),
+      );
+      for (let i = 0; i < files.length; i++) {
+        const res = results[i];
+        if (res && res.__err) {
+          errors.push(`${files[i].name}: ${res.__err.message || res.__err}`);
+          continue;
+        }
+        try {
+          const gj = JSON.parse(res);
+          const pts = extractPointFeatures(gj);
+          breakdown.push(`${files[i].name}: ${pts.length}`);
+          for (const p of pts) merged.push(p);
+        } catch (err) {
+          errors.push(`${files[i].name}: ${err.message}`);
+        }
+      }
+      const tParse = (performance.now() - t0).toFixed(0);
+
+      lastFeatures = merged;
+      const status = document.getElementById("treesStatus");
+      if (!merged.length) {
+        status.textContent = "No points found. " + errors.join(" | ");
+        return;
+      }
+
+      const t1 = performance.now();
+      buildTrees(merged);
+      const tBuild = (performance.now() - t1).toFixed(0);
+
+      status.textContent =
+        `${files.length} files · ${merged.length.toLocaleString()} trees · ` +
+        `parse ${tParse} ms · build ${tBuild} ms` +
+        (errors.length ? ` · ${errors.length} error(s)` : "");
+      if (errors.length) console.warn("Tree load errors:", errors);
+      flyToTrees();
+    });
+
+    document.getElementById("rebuildTrees").addEventListener("click", () => {
+      if (lastFeatures && lastFeatures.length) buildTrees(lastFeatures);
+    });
+
+    document.getElementById("clearTrees").addEventListener("click", () => {
+      if (map.getLayer("trees")) map.removeLayer("trees");
+      activeTrees = null;
+      clearPath();
+      hideRowArrows();
+      document.getElementById("rowArrowsToggle").checked = false;
+      document.getElementById("treesStatus").textContent = "Cleared.";
+    });
+
+    document.getElementById("previewTrees").addEventListener("click", () => {
+      // 5×4 grid of points centred on Lokitela, ~5 m spacing.
+      const COLS = 5, ROWS = 4;
+      const dLat = 5 / 111320;                                // 5 m in degrees lat
+      const dLon = 5 / (111320 * Math.cos(CENTER[1] * Math.PI / 180));
+      const features = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const lng = CENTER[0] + (c - (COLS - 1) / 2) * dLon;
+          const lat = CENTER[1] + (r - (ROWS - 1) / 2) * dLat;
+          features.push({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [lng, lat] },
+            properties: { name: `SAMPLE_R${r + 1}_T${c + 1}` },
+          });
+        }
+      }
+      lastFeatures = features;
+      buildTrees(features);
+      flyToTrees();
+    });
+
+    // ---- Irrigation valves ---------------------------------------------
+    // The 8 sample coordinates the user provided (originally lat,lon — here
+    // flipped to GeoJSON [lon, lat]).
+    const SAMPLE_VALVE_COORDS = [
+      [34.8449,    0.99028],
+      [34.8450,    0.99028],
+      [34.85567,   0.97789],
+      [34.8571,    0.97601],
+      [34.85619,   0.97588],
+      [34.857188,  0.97597],
+      [34.85485,   0.97539],
+      [34.85886,   0.97916],
+    ].map((c, i) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: c },
+      properties: { name: `VALVE_${i + 1}` },
+    }));
+
+    let activeValves = null;
+    let lastValveFeatures = null;
+
+    function buildValves(features) {
+      if (!features.length) {
+        document.getElementById("valvesStatus").textContent = "No valve points.";
+        return;
+      }
+      if (activeValves && map.getLayer("valves")) map.removeLayer("valves");
+      activeValves = new ValvesLayer(features);
+      map.addLayer(activeValves);
+
+      // Always-visible markers so the valves don't disappear when zoomed out.
+      // The 3D model still renders on top when you're close enough to see it.
+      const fc = { type: "FeatureCollection", features };
+      if (!map.getSource("valve-markers")) {
+        map.addSource("valve-markers", { type: "geojson", data: fc });
+        map.addLayer({
+          id: "valve-markers",
+          type: "circle",
+          source: "valve-markers",
+          paint: {
+            "circle-radius": 12,
+            "circle-color": "#dc2626",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 2.5,
+          },
+        });
+        map.addLayer({
+          id: "valve-marker-labels",
+          type: "symbol",
+          source: "valve-markers",
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 11,
+            "text-offset": [0, 1.4],
+            "text-anchor": "top",
+          },
+          paint: {
+            "text-color": "#1f2937",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5,
+          },
+        });
+      } else {
+        map.getSource("valve-markers").setData(fc);
+      }
+
+      document.getElementById("valvesStatus").textContent =
+        `${features.length} valves placed.`;
+    }
+
+    document.getElementById("previewValves").addEventListener("click", () => {
+      lastValveFeatures = SAMPLE_VALVE_COORDS;
+      buildValves(lastValveFeatures);
+      flyToValves();
+    });
+
+    document.getElementById("clearValves").addEventListener("click", () => {
+      if (map.getLayer("valves")) map.removeLayer("valves");
+      for (const id of ["valve-marker-labels", "valve-markers"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      if (map.getSource("valve-markers")) map.removeSource("valve-markers");
+      activeValves = null;
+      lastValveFeatures = null;
+      document.getElementById("valvesStatus").textContent = "Cleared.";
+    });
+
+    document.getElementById("valvesFile").addEventListener("change", async (e) => {
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const merged = [];
+      for (const f of files) {
+        try {
+          const txt = await readFileAsText(f);
+          const gj = JSON.parse(txt);
+          for (const p of extractPointFeatures(gj)) merged.push(p);
+        } catch (err) {
+          console.warn(`Valve file ${f.name}:`, err);
+        }
+      }
+      if (!merged.length) {
+        document.getElementById("valvesStatus").textContent = "No points found.";
+        return;
+      }
+      lastValveFeatures = merged;
+      buildValves(merged);
+      flyToValves();
+    });
+
+    function flyToValves() {
+      if (!lastValveFeatures || !lastValveFeatures.length) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const f of lastValveFeatures) {
+        const [x, y] = f.geometry.coordinates;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+      // Single point → tiny bbox. Pad with a small delta so fitBounds works.
+      if (maxX - minX < 1e-6) { minX -= 1e-4; maxX += 1e-4; }
+      if (maxY - minY < 1e-6) { minY -= 1e-4; maxY += 1e-4; }
+      map.fitBounds([[minX, minY], [maxX, maxY]], {
+        padding: 80, pitch: 60, duration: 1200,
+      });
+    }
+    document.getElementById("flyToValves").addEventListener("click", flyToValves);
+
+    function flyToTrees() {
+      if (!lastFeatures || !lastFeatures.length) return;
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const f of lastFeatures) {
+        const [x, y] = f.geometry.coordinates;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+      map.fitBounds([[minX, minY], [maxX, maxY]], {
+        padding: 60, pitch: 60, duration: 1200,
+      });
+    }
+    document.getElementById("flyToTrees").addEventListener("click", flyToTrees);
+
+    // ---- Top-down toggle -----------------------------------------------
+    // Plan view at pitch=0 — closest MapLibre comes to orthographic without
+    // a camera swap. Toggling restores the previously-active pitch so the
+    // user can pop in/out of plan view without losing their angle.
+    let savedPitch = 60;
+    let savedBearing = 0;
+    document.getElementById("topDownToggle").addEventListener("change", (e) => {
+      if (e.target.checked) {
+        savedPitch = map.getPitch();
+        savedBearing = map.getBearing();
+        map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+      } else {
+        map.easeTo({ pitch: savedPitch, bearing: savedBearing, duration: 600 });
+      }
+    });
+    // Sync the checkbox if the user changes pitch via the nav control / drag.
+    map.on("pitchend", () => {
+      const cb = document.getElementById("topDownToggle");
+      const isFlat = map.getPitch() < 1;
+      if (cb.checked !== isFlat) cb.checked = isFlat;
+    });
+
+    // ---- Click-to-name --------------------------------------------------
+    // Brute-force pixel-distance lookup against the projected feature set.
+    // Fast enough up to ~100k trees because we only run on click, not per frame.
+    function nearestTreeAt(point, maxPx = 25) {
+      if (!lastFeatures || !lastFeatures.length) return null;
+      const px = point.x, py = point.y;
+      let best = null, bestD = Infinity;
+      for (const f of lastFeatures) {
+        const p = map.project(f.geometry.coordinates);
+        const d = (p.x - px) ** 2 + (p.y - py) ** 2;
+        if (d < bestD) { bestD = d; best = f; }
+      }
+      if (best && bestD < maxPx * maxPx) return best;
+      return null;
+    }
+
+    function nearestFeatureAt(point, featureLists, maxPx = 25) {
+      const px = point.x, py = point.y;
+      let best = null, bestD = Infinity;
+      for (const list of featureLists) {
+        if (!list || !list.length) continue;
+        for (const f of list) {
+          const p = map.project(f.geometry.coordinates);
+          const d = (p.x - px) ** 2 + (p.y - py) ** 2;
+          if (d < bestD) { bestD = d; best = f; }
+        }
+      }
+      return best && bestD < maxPx * maxPx ? best : null;
+    }
+
+    map.on("click", (e) => {
+      // Pencil mode owns the canvas pointer events; suppress popups there.
+      if (pencilActive) return;
+      const f = nearestFeatureAt(e.point, [lastFeatures, lastValveFeatures], 30);
+      if (!f) return;
+      const name = (f.properties && f.properties.name) || "(unnamed)";
+      new maplibregl.Popup({ closeOnClick: true })
+        .setLngLat(f.geometry.coordinates)
+        .setText(name)
+        .addTo(map);
+    });
+    map.on("mousemove", (e) => {
+      if (!lastFeatures || !lastFeatures.length) {
+        map.getCanvas().style.cursor = "";
+        return;
+      }
+      const px = e.point.x, py = e.point.y;
+      let near = false;
+      // Sample-stride: at very high counts we don't need to inspect every
+      // tree on every mouse move — every Nth keeps cursor responsive.
+      const stride = Math.max(1, Math.floor(lastFeatures.length / 5000));
+      for (let i = 0; i < lastFeatures.length; i += stride) {
+        const f = lastFeatures[i];
+        const p = map.project(f.geometry.coordinates);
+        const d = (p.x - px) ** 2 + (p.y - py) ** 2;
+        if (d < 25 * 25) { near = true; break; }
+      }
+      map.getCanvas().style.cursor = near ? "pointer" : "";
+    });
+
+    // ---- Scout path (pencil + snap-to-trees-along-the-line) ------------
+    // Workflow: user toggles Pencil mode → drag on the map to sketch a
+    // freeform polyline (rough-path layer). Then Snap → for every tree
+    // within `snapRadius` metres of the drawn polyline, mark it covered;
+    // order matches by progression along the line so the resulting scout
+    // path walks tree-to-tree in the order they were swept.
+    let pencilActive = false;
+    let isDrawing = false;
+    let rawPath = [];          // [[lng, lat], ...] freeform sketch
+    let snappedFeatures = [];  // ordered list of trees within radius
+    const pathStatus = document.getElementById("pathStatus");
+
+    function setPencilMode(on) {
+      pencilActive = on;
+      const btn = document.getElementById("pencilToggle");
+      if (on) {
+        // Disable map gestures so dragging draws instead of pans.
+        map.dragPan.disable();
+        map.boxZoom.disable();
+        map.doubleClickZoom.disable();
+        map.touchZoomRotate.disable();
+        map.getCanvas().style.cursor = "crosshair";
+        btn.textContent = "Exit pencil";
+        pathStatus.textContent = "Drag on the map to draw, release to stop.";
+      } else {
+        map.dragPan.enable();
+        map.boxZoom.enable();
+        map.doubleClickZoom.enable();
+        map.touchZoomRotate.enable();
+        map.getCanvas().style.cursor = "";
+        btn.textContent = "Pencil mode";
+        isDrawing = false;
+      }
+    }
+
+    document.getElementById("pencilToggle").addEventListener("click", () => {
+      setPencilMode(!pencilActive);
+    });
+
+    // Pencil events — pointer events let us catch mouse + touch + pen.
+    const canvasEl = map.getCanvas();
+    canvasEl.addEventListener("pointerdown", (e) => {
+      if (!pencilActive) return;
+      isDrawing = true;
+      rawPath = [];
+      const ll = map.unproject([e.offsetX, e.offsetY]);
+      rawPath.push([ll.lng, ll.lat]);
+      refreshRoughPath();
+      try { canvasEl.setPointerCapture(e.pointerId); } catch {}
+    });
+    canvasEl.addEventListener("pointermove", (e) => {
+      if (!pencilActive || !isDrawing) return;
+      const ll = map.unproject([e.offsetX, e.offsetY]);
+      // Skip near-duplicate samples to keep the polyline reasonable.
+      const last = rawPath[rawPath.length - 1];
+      if (last) {
+        const dx = (ll.lng - last[0]) * 111320 * Math.cos(ll.lat * Math.PI / 180);
+        const dy = (ll.lat - last[1]) * 111320;
+        if (Math.hypot(dx, dy) < 0.5) return; // < 0.5 m — skip
+      }
+      rawPath.push([ll.lng, ll.lat]);
+      refreshRoughPath();
+    });
+    canvasEl.addEventListener("pointerup", () => {
+      if (!pencilActive) return;
+      isDrawing = false;
+      pathStatus.textContent =
+        `Drew ${rawPath.length} samples. Hit Snap to round onto trees.`;
+    });
+    canvasEl.addEventListener("pointerleave", () => {
+      isDrawing = false;
+    });
+
+    function refreshRoughPath() {
+      const data = {
+        type: "FeatureCollection",
+        features: rawPath.length >= 2 ? [{
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: rawPath },
+          properties: {},
+        }] : [],
+      };
+      if (!map.getSource("rough-path")) {
+        map.addSource("rough-path", { type: "geojson", data });
+        map.addLayer({
+          id: "rough-path",
+          type: "line",
+          source: "rough-path",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#3b82f6",
+            "line-width": 2,
+            "line-dasharray": [2, 2],
+            "line-opacity": 0.7,
+          },
+        });
+      } else {
+        map.getSource("rough-path").setData(data);
+      }
+    }
+
+    function refreshSnappedPath() {
+      const coords = snappedFeatures.map((f) => f.geometry.coordinates);
+      const lineData = {
+        type: "FeatureCollection",
+        features: coords.length >= 2 ? [{
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: coords },
+          properties: {},
+        }] : [],
+      };
+      const ptData = {
+        type: "FeatureCollection",
+        features: snappedFeatures.map((f, i) => ({
+          type: "Feature",
+          geometry: f.geometry,
+          properties: {
+            seq: i + 1,
+            name: (f.properties && f.properties.name) || "",
+          },
+        })),
+      };
+      if (!map.getSource("scout-path")) {
+        map.addSource("scout-path", { type: "geojson", data: lineData });
+        map.addLayer({
+          id: "scout-path",
+          type: "line",
+          source: "scout-path",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#ff6b00",
+            "line-width": 3,
+            "line-opacity": 0.9,
+          },
+        });
+      } else {
+        map.getSource("scout-path").setData(lineData);
+      }
+      if (!map.getSource("scout-path-pts")) {
+        map.addSource("scout-path-pts", { type: "geojson", data: ptData });
+        map.addLayer({
+          id: "scout-path-pts",
+          type: "circle",
+          source: "scout-path-pts",
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#ff6b00",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 1.5,
+          },
+        });
+        map.addLayer({
+          id: "scout-path-labels",
+          type: "symbol",
+          source: "scout-path-pts",
+          layout: {
+            "text-field": ["to-string", ["get", "seq"]],
+            "text-size": 11,
+            "text-offset": [0, -1.0],
+            "text-anchor": "bottom",
+          },
+          paint: {
+            "text-color": "#1f2937",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5,
+          },
+        });
+      } else {
+        map.getSource("scout-path-pts").setData(ptData);
+      }
+    }
+
+    // For each tree, compute the closest-point distance to the drawn
+    // polyline (in metres) AND the cumulative arc-length parameter where
+    // that closest point lands. Trees within `radius` are kept; sorting
+    // by arc length gives the order the scout encountered them.
+    function snapPathToTrees() {
+      if (rawPath.length < 2) {
+        pathStatus.textContent = "Draw a path first (toggle Pencil mode and drag).";
+        return;
+      }
+      if (!lastFeatures || !lastFeatures.length) {
+        pathStatus.textContent = "Load or preview trees first.";
+        return;
+      }
+      const radius = parseFloat(document.getElementById("snapRadius").value) || 3;
+
+      // Local equirectangular metres frame anchored at the path origin.
+      // Plenty accurate at farm scale (errors << 1 cm over 1 km).
+      const origin = rawPath[0];
+      const M_PER_DEG_LAT = 111320;
+      const cosLat = Math.cos(origin[1] * Math.PI / 180);
+      const M_PER_DEG_LON = M_PER_DEG_LAT * cosLat;
+      const toM = (p) => [(p[0] - origin[0]) * M_PER_DEG_LON, (p[1] - origin[1]) * M_PER_DEG_LAT];
+
+      // Build segments in metres with cumulative arc length.
+      const segs = [];
+      let cum = 0;
+      let prev = toM(rawPath[0]);
+      for (let i = 1; i < rawPath.length; i++) {
+        const cur = toM(rawPath[i]);
+        const dx = cur[0] - prev[0], dy = cur[1] - prev[1];
+        const len = Math.hypot(dx, dy);
+        if (len > 1e-3) {
+          segs.push({ ax: prev[0], ay: prev[1], dx, dy, len, len2: len * len, start: cum });
+          cum += len;
+        }
+        prev = cur;
+      }
+      const totalLen = cum;
+      if (!segs.length) {
+        pathStatus.textContent = "Path is too short.";
+        return;
+      }
+
+      const t0 = performance.now();
+      const r2 = radius * radius;
+      const matches = [];
+      for (const f of lastFeatures) {
+        const pm = toM(f.geometry.coordinates);
+        let bestD2 = Infinity, bestT = 0;
+        for (const seg of segs) {
+          let t = ((pm[0] - seg.ax) * seg.dx + (pm[1] - seg.ay) * seg.dy) / seg.len2;
+          if (t < 0) t = 0; else if (t > 1) t = 1;
+          const cx = seg.ax + t * seg.dx, cy = seg.ay + t * seg.dy;
+          const ddx = pm[0] - cx, ddy = pm[1] - cy;
+          const d2 = ddx * ddx + ddy * ddy;
+          if (d2 < bestD2) {
+            bestD2 = d2;
+            bestT = seg.start + t * seg.len;
+          }
+        }
+        if (bestD2 <= r2) matches.push({ f, t: bestT });
+      }
+      matches.sort((a, b) => a.t - b.t);
+      snappedFeatures = matches.map((m) => m.f);
+      const dt = (performance.now() - t0).toFixed(0);
+      refreshSnappedPath();
+      pathStatus.textContent =
+        `Covered ${snappedFeatures.length}/${lastFeatures.length} trees ` +
+        `along ${totalLen.toFixed(1)} m of path (radius ${radius} m, ${dt} ms).`;
+    }
+    document.getElementById("pathSnap").addEventListener("click", snapPathToTrees);
+
+    // ---- Row direction arrows ------------------------------------------
+    // Parse names matching ROW{r}_T{t}, group by row, compute bearing from
+    // the smallest T to the largest T, and drop a single arrow at the row
+    // start oriented along that bearing. Renders as a symbol layer of "↑"
+    // glyphs rotated to the row's compass bearing.
+    function bearingDeg(a, b) {
+      const lat1 = a[1] * Math.PI / 180;
+      const lat2 = b[1] * Math.PI / 180;
+      const dLon = (b[0] - a[0]) * Math.PI / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) -
+                Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    // One arrow per block. Block prefix = everything before `_ROW{n}_T{n}`,
+    // so "WESABLK9_ROW9_T16" → block "WESABLK9", row 9. Within each block we
+    // pick the centroid of the lowest-numbered row as the tail and the
+    // centroid of the highest as the head.
+    function blockRowCentroids(features) {
+      const re = /^(.+)_ROW(\d+)_T\d+$/i;
+      const blocks = new Map(); // block -> Map<row, {sx, sy, n}>
+      for (const f of features) {
+        const name = f.properties && f.properties.name;
+        const m = name && name.match(re);
+        if (!m) continue;
+        const block = m[1];
+        const r = parseInt(m[2], 10);
+        if (!blocks.has(block)) blocks.set(block, new Map());
+        const rows = blocks.get(block);
+        if (!rows.has(r)) rows.set(r, { sx: 0, sy: 0, n: 0 });
+        const acc = rows.get(r);
+        acc.sx += f.geometry.coordinates[0];
+        acc.sy += f.geometry.coordinates[1];
+        acc.n += 1;
+      }
+      const out = [];
+      for (const [block, rows] of blocks) {
+        const cs = [];
+        for (const [r, acc] of rows) {
+          cs.push({ r, c: [acc.sx / acc.n, acc.sy / acc.n] });
+        }
+        cs.sort((a, b) => a.r - b.r);
+        out.push({ block, centroids: cs });
+      }
+      return out;
+    }
+
+    function buildRowFlowData(features) {
+      const blocks = blockRowCentroids(features);
+      const lineFeats = [];
+      const ptFeats = [];
+      for (const { block, centroids } of blocks) {
+        if (centroids.length < 2) continue;
+        const start = centroids[0];
+        const end = centroids[centroids.length - 1];
+        const bearing = bearingDeg(start.c, end.c);
+        lineFeats.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: [start.c, end.c] },
+          properties: { block },
+        });
+        ptFeats.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: end.c },
+          properties: { bearing, label: `${block} R${end.r}` },
+        });
+        ptFeats.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: start.c },
+          properties: { bearing, label: `${block} R${start.r}`, isStart: true },
+        });
+      }
+      return {
+        line: { type: "FeatureCollection", features: lineFeats },
+        head: { type: "FeatureCollection", features: ptFeats },
+      };
+    }
+
+    function showRowArrows() {
+      if (!lastFeatures || !lastFeatures.length) return;
+      const data = buildRowFlowData(lastFeatures);
+      if (!map.getSource("row-flow-line")) {
+        map.addSource("row-flow-line", { type: "geojson", data: data.line });
+        map.addSource("row-flow-pts", { type: "geojson", data: data.head });
+        map.addLayer({
+          id: "row-flow-line",
+          type: "line",
+          source: "row-flow-line",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": "#1d4ed8",
+            "line-width": 3,
+            "line-opacity": 0.9,
+            "line-dasharray": [2, 1.5],
+          },
+        });
+        // Big arrowhead at the high-row end (filtered isStart != true).
+        map.addLayer({
+          id: "row-flow-head",
+          type: "symbol",
+          source: "row-flow-pts",
+          filter: ["!=", ["get", "isStart"], true],
+          layout: {
+            "text-field": "▲",
+            "text-size": 28,
+            "text-rotate": ["get", "bearing"],
+            "text-rotation-alignment": "map",
+            "text-pitch-alignment": "map",
+            "text-allow-overlap": true,
+            "text-anchor": "center",
+          },
+          paint: {
+            "text-color": "#1d4ed8",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 2,
+          },
+        });
+        // Small labels at both ends.
+        map.addLayer({
+          id: "row-flow-labels",
+          type: "symbol",
+          source: "row-flow-pts",
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 12,
+            "text-offset": [0.9, 0.9],
+            "text-anchor": "top-left",
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": "#1d4ed8",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.5,
+          },
+        });
+      } else {
+        map.getSource("row-flow-line").setData(data.line);
+        map.getSource("row-flow-pts").setData(data.head);
+      }
+    }
+    function hideRowArrows() {
+      for (const id of ["row-flow-labels", "row-flow-head", "row-flow-line"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      for (const id of ["row-flow-pts", "row-flow-line"]) {
+        if (map.getSource(id)) map.removeSource(id);
+      }
+    }
+    document.getElementById("rowArrowsToggle").addEventListener("change", (e) => {
+      if (e.target.checked) showRowArrows();
+      else hideRowArrows();
+    });
+
+    // ---- Block boundaries ----------------------------------------------
+    // Group trees by the prefix of their name (everything before _ROW{n}_T{n}),
+    // compute a convex hull per block in a local metres frame, simplify
+    // near-collinear vertices (Douglas-Peucker style), then offset outward
+    // by `pad` metres so the polygon sits a little outside the outermost trees.
+    function convexHull(points) {
+      const pts = points.map((p) => [p[0], p[1]])
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      if (pts.length < 3) return pts;
+      const cross = (o, a, b) =>
+        (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const lower = [];
+      for (const p of pts) {
+        while (lower.length >= 2 &&
+               cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+        lower.push(p);
+      }
+      const upper = [];
+      for (let i = pts.length - 1; i >= 0; i--) {
+        const p = pts[i];
+        while (upper.length >= 2 &&
+               cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+        upper.push(p);
+      }
+      lower.pop(); upper.pop();
+      return lower.concat(upper); // CCW
+    }
+
+    function ringSignedArea(ring) {
+      let a = 0;
+      for (let i = 0; i < ring.length; i++) {
+        const p1 = ring[i], p2 = ring[(i + 1) % ring.length];
+        a += p1[0] * p2[1] - p2[0] * p1[1];
+      }
+      return a / 2;
+    }
+
+    // Auto-pick a Max-edge cutoff from the median nearest-neighbour distance.
+    // Multiplied generously so well-spaced rows stay connected but the long
+    // chords across an "H" notch get severed.
+    function autoMaxEdge(points) {
+      if (points.length < 4) return Infinity;
+      const sample = Math.min(points.length, 200);
+      const stride = Math.max(1, Math.floor(points.length / sample));
+      const nn = [];
+      for (let i = 0; i < points.length; i += stride) {
+        let best = Infinity;
+        for (let j = 0; j < points.length; j++) {
+          if (j === i) continue;
+          const dx = points[i][0] - points[j][0];
+          const dy = points[i][1] - points[j][1];
+          const d2 = dx * dx + dy * dy;
+          if (d2 < best) best = d2;
+        }
+        nn.push(Math.sqrt(best));
+      }
+      nn.sort((a, b) => a - b);
+      const median = nn[Math.floor(nn.length / 2)];
+      return Math.max(2, median * 3.0);
+    }
+
+    // Concave hull via Delaunay alpha-shape: triangulate, drop triangles
+    // whose longest edge exceeds maxEdge, then trace the boundary of what's
+    // left. Returns the largest CCW ring (or null if nothing valid emerges).
+    function concaveHull(points, maxEdge) {
+      if (typeof Delaunator === "undefined") return null;
+      if (points.length < 3) return null;
+
+      const coords = new Float64Array(points.length * 2);
+      for (let i = 0; i < points.length; i++) {
+        coords[i * 2] = points[i][0];
+        coords[i * 2 + 1] = points[i][1];
+      }
+      let del;
+      try { del = Delaunator.from(points); } catch { return null; }
+      const tris = del.triangles;
+      const halfedges = del.halfedges;
+      const numTri = tris.length / 3;
+      if (!numTri) return null;
+
+      const maxE2 = maxEdge * maxEdge;
+      const valid = new Uint8Array(numTri);
+      for (let t = 0; t < numTri; t++) {
+        const i0 = tris[3 * t], i1 = tris[3 * t + 1], i2 = tris[3 * t + 2];
+        const p0 = points[i0], p1 = points[i1], p2 = points[i2];
+        const e01 = (p0[0] - p1[0]) ** 2 + (p0[1] - p1[1]) ** 2;
+        const e12 = (p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2;
+        const e20 = (p2[0] - p0[0]) ** 2 + (p2[1] - p0[1]) ** 2;
+        const longest2 = Math.max(e01, e12, e20);
+        valid[t] = longest2 <= maxE2 ? 1 : 0;
+      }
+
+      // Boundary half-edges: half-edges of valid triangles whose twin is
+      // missing or attached to an invalid triangle.
+      const adj = new Map(); // from -> array of to
+      for (let h = 0; h < tris.length; h++) {
+        const t = (h / 3) | 0;
+        if (!valid[t]) continue;
+        const opp = halfedges[h];
+        if (opp === -1 || !valid[(opp / 3) | 0]) {
+          // Each triangle's half-edges go (h0→h1), (h1→h2), (h2→h0).
+          const hMod = h % 3;
+          const from = tris[h];
+          const to = tris[h - hMod + ((hMod + 1) % 3)];
+          let arr = adj.get(from);
+          if (!arr) { arr = []; adj.set(from, arr); }
+          arr.push(to);
+        }
+      }
+      if (!adj.size) return null;
+
+      // Stitch boundary edges into closed rings. Each from→to is consumed
+      // as we follow it. Most vertices have one outgoing edge; pinch points
+      // (rare) are handled by just picking the first.
+      const rings = [];
+      while (adj.size) {
+        let startKey = adj.keys().next().value;
+        const ring = [];
+        let cur = startKey;
+        let safety = adj.size + 100;
+        while (safety-- > 0) {
+          const arr = adj.get(cur);
+          if (!arr || !arr.length) break;
+          ring.push(cur);
+          const next = arr.shift();
+          if (!arr.length) adj.delete(cur);
+          if (next === startKey) break;
+          cur = next;
+        }
+        if (ring.length >= 3) rings.push(ring);
+      }
+      if (!rings.length) return null;
+
+      // Pick the largest-area CCW ring as the outer boundary.
+      let bestRing = null, bestArea = 0;
+      for (const r of rings) {
+        const pts = r.map((idx) => points[idx]);
+        const a = ringSignedArea(pts);
+        if (Math.abs(a) > Math.abs(bestArea)) { bestArea = a; bestRing = pts; }
+      }
+      if (!bestRing) return null;
+      if (bestArea < 0) bestRing.reverse(); // ensure CCW
+      return bestRing;
+    }
+
+    function pointSegDist(p, a, b) {
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1e-12) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+      let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+    }
+
+    // Iteratively drop vertices whose perpendicular distance from the line
+    // through their neighbours is below `tol` metres — this absorbs trees
+    // that bulge a hair past the otherwise-straight edge into one segment.
+    function simplifyRing(ring, tol) {
+      let result = ring.slice();
+      let changed = true;
+      while (changed && result.length > 3) {
+        changed = false;
+        const n = result.length;
+        const drop = new Array(n).fill(false);
+        for (let i = 0; i < n; i++) {
+          if (drop[(i - 1 + n) % n]) continue; // don't drop adjacents in same pass
+          const d = pointSegDist(result[i], result[(i - 1 + n) % n], result[(i + 1) % n]);
+          if (d < tol) { drop[i] = true; changed = true; }
+        }
+        if (changed) {
+          const next = result.filter((_, i) => !drop[i]);
+          if (next.length >= 3) result = next; else break;
+        }
+      }
+      return result;
+    }
+
+    function lineIntersect(p1, p2, p3, p4) {
+      const x1 = p1[0], y1 = p1[1], x2 = p2[0], y2 = p2[1];
+      const x3 = p3[0], y3 = p3[1], x4 = p4[0], y4 = p4[1];
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(denom) < 1e-9) return null;
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+    }
+
+    // Outward offset of a CCW ring: shift each edge by `pad` along its outward
+    // normal, then intersect adjacent shifted edges to recover vertices.
+    function offsetRing(ring, pad) {
+      const n = ring.length;
+      const edges = [];
+      for (let i = 0; i < n; i++) {
+        const a = ring[i], b = ring[(i + 1) % n];
+        const dx = b[0] - a[0], dy = b[1] - a[1];
+        const len = Math.hypot(dx, dy);
+        if (len < 1e-9) continue;
+        // CCW ring → outward normal is (dy, -dx)/len.
+        const nx = dy / len, ny = -dx / len;
+        edges.push({ a: [a[0] + nx * pad, a[1] + ny * pad],
+                     b: [b[0] + nx * pad, b[1] + ny * pad] });
+      }
+      const out = [];
+      const m = edges.length;
+      for (let i = 0; i < m; i++) {
+        const e1 = edges[(i - 1 + m) % m];
+        const e2 = edges[i];
+        const p = lineIntersect(e1.a, e1.b, e2.a, e2.b);
+        out.push(p || e2.a);
+      }
+      return out;
+    }
+
+    function blockNameOf(feature) {
+      const name = feature.properties && feature.properties.name;
+      if (!name) return null;
+      const m = name.match(/^(.+?)_ROW\d+_T\d+$/i);
+      return m ? m[1] : null;
+    }
+
+    // Pretty-format a raw block code: split <LETTERS>BLK<NUM> into
+    // "<LETTERS> BLK <NUM>", then append the user-supplied suffix.
+    // Falls back to the raw code if the pattern doesn't match.
+    function prettyBlockName(code, suffix) {
+      const m = String(code).match(/^([A-Za-z]+?)BLK(\d+)([A-Za-z0-9]*)$/);
+      let base = code;
+      if (m) {
+        base = `${m[1].toUpperCase()} BLK ${m[2]}` + (m[3] ? ` ${m[3].toUpperCase()}` : "");
+      }
+      return base + (suffix || "");
+    }
+
+    function computeBlockBoundaries(features, pad, maxEdgeOpt, suffix) {
+      const groups = new Map();
+      for (const f of features) {
+        const block = blockNameOf(f);
+        if (!block) continue;
+        if (!groups.has(block)) groups.set(block, []);
+        groups.get(block).push(f);
+      }
+      const out = [];
+      let usedAuto = false;
+      for (const [block, feats] of groups) {
+        if (feats.length < 3) continue;
+
+        // Local metres frame anchored at the first tree of this block.
+        const origin = feats[0].geometry.coordinates;
+        const M_PER_DEG_LAT = 111320;
+        const cosLat = Math.cos(origin[1] * Math.PI / 180);
+        const M_PER_DEG_LON = M_PER_DEG_LAT * cosLat;
+        const toM = (lng, lat) => [
+          (lng - origin[0]) * M_PER_DEG_LON,
+          (lat - origin[1]) * M_PER_DEG_LAT,
+        ];
+        const toLngLat = (x, y) => [
+          origin[0] + x / M_PER_DEG_LON,
+          origin[1] + y / M_PER_DEG_LAT,
+        ];
+
+        const ptsM = feats.map((f) => toM(f.geometry.coordinates[0], f.geometry.coordinates[1]));
+
+        // Concave hull (alpha shape) is what makes an "H" stay an "H".
+        // Convex hull is the safety net if the alpha shape collapses.
+        const maxE = (maxEdgeOpt && maxEdgeOpt > 0) ? maxEdgeOpt : autoMaxEdge(ptsM);
+        if (!maxEdgeOpt || maxEdgeOpt <= 0) usedAuto = true;
+        let hull = concaveHull(ptsM, maxE);
+        let usedConcave = !!hull;
+        if (!hull || hull.length < 3) {
+          hull = convexHull(ptsM);
+          usedConcave = false;
+        }
+        if (hull.length < 3) continue; // degenerate (collinear / too few)
+
+        // Simplification tolerance scales with pad — a tight border deserves
+        // tighter tolerance, a loose one swallows more wobble.
+        const tol = Math.max(0.3, pad * 0.6);
+        hull = simplifyRing(hull, tol);
+
+        const expanded = pad > 0 ? offsetRing(hull, pad) : hull;
+
+        const ring = expanded.map(([x, y]) => toLngLat(x, y));
+        ring.push(ring[0]); // close
+
+        // Polygon area in metres² via shoelace, on the offset (metres) ring.
+        let area2 = 0;
+        for (let i = 0; i < expanded.length; i++) {
+          const a = expanded[i];
+          const b = expanded[(i + 1) % expanded.length];
+          area2 += a[0] * b[1] - b[0] * a[1];
+        }
+        const area = Math.abs(area2) / 2;
+
+        out.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [ring] },
+          properties: {
+            block: prettyBlockName(block, suffix),
+            block_code: block,
+            tree_count: feats.length,
+            vertex_count: expanded.length,
+            area_m2: Math.round(area),
+            pad_m: pad,
+            max_edge_m: Math.round(maxE * 10) / 10,
+            hull: usedConcave ? "concave" : "convex",
+          },
+        });
+      }
+      return { type: "FeatureCollection", features: out, _autoMaxEdge: usedAuto };
+    }
+
+    let blocksGeoJSON = null;
+    let blocksVisible = false;
+    const blocksStatus = document.getElementById("blocksStatus");
+    const viewBlocksBtn = document.getElementById("viewBlocks");
+
+    function refreshBlocksLayer() {
+      if (!blocksGeoJSON) return;
+      if (!map.getSource("blocks")) {
+        map.addSource("blocks", { type: "geojson", data: blocksGeoJSON });
+        map.addLayer({
+          id: "blocks-fill",
+          type: "fill",
+          source: "blocks",
+          paint: { "fill-color": "#f59e0b", "fill-opacity": 0.18 },
+        });
+        map.addLayer({
+          id: "blocks-outline",
+          type: "line",
+          source: "blocks",
+          paint: { "line-color": "#b45309", "line-width": 2.5 },
+        });
+        map.addLayer({
+          id: "blocks-labels",
+          type: "symbol",
+          source: "blocks",
+          layout: {
+            "text-field": ["get", "block"],
+            "text-size": 14,
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#78350f",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1.8,
+          },
+        });
+      } else {
+        map.getSource("blocks").setData(blocksGeoJSON);
+      }
+    }
+
+    function hideBlocksLayer() {
+      for (const id of ["blocks-labels", "blocks-outline", "blocks-fill"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      if (map.getSource("blocks")) map.removeSource("blocks");
+    }
+
+    document.getElementById("generateBlocks").addEventListener("click", () => {
+      if (!lastFeatures || !lastFeatures.length) {
+        blocksStatus.textContent = "Load or preview trees first.";
+        return;
+      }
+      const pad = parseFloat(document.getElementById("blockPad").value);
+      const padVal = Number.isFinite(pad) ? pad : 2;
+      const me = parseFloat(document.getElementById("blockMaxEdge").value);
+      const meVal = Number.isFinite(me) ? me : 0;
+      const suffix = document.getElementById("blockSuffix").value || "";
+      const t0 = performance.now();
+      blocksGeoJSON = computeBlockBoundaries(lastFeatures, padVal, meVal, suffix);
+      const dt = (performance.now() - t0).toFixed(0);
+      const n = blocksGeoJSON.features.length;
+      if (!n) {
+        blocksStatus.textContent =
+          "No blocks found. Tree names need to match BLOCK_ROW{n}_T{n}.";
+        return;
+      }
+      const totalVerts = blocksGeoJSON.features
+        .reduce((s, f) => s + (f.properties.vertex_count || 0), 0);
+      const concaveCount = blocksGeoJSON.features
+        .filter((f) => f.properties.hull === "concave").length;
+      const meLabel = meVal > 0 ? `${meVal} m` : "auto";
+      blocksStatus.textContent =
+        `${n} block${n === 1 ? "" : "s"} (${concaveCount} concave / ${n - concaveCount} convex) · ` +
+        `${totalVerts} vertices · pad ${padVal} m · max edge ${meLabel} · ${dt} ms.`;
+      if (blocksVisible) refreshBlocksLayer();
+    });
+
+    viewBlocksBtn.addEventListener("click", () => {
+      if (!blocksGeoJSON || !blocksGeoJSON.features.length) {
+        blocksStatus.textContent = "Generate blocks first.";
+        return;
+      }
+      blocksVisible = !blocksVisible;
+      viewBlocksBtn.textContent = blocksVisible ? "Hide" : "View";
+      if (blocksVisible) refreshBlocksLayer(); else hideBlocksLayer();
+    });
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    }
+
+    document.getElementById("exportBlocks").addEventListener("click", () => {
+      if (!blocksGeoJSON || !blocksGeoJSON.features.length) {
+        blocksStatus.textContent = "Generate blocks first.";
+        return;
+      }
+      const blob = new Blob([JSON.stringify(blocksGeoJSON, null, 2)], {
+        type: "application/geo+json",
+      });
+      downloadBlob(blob, "block_boundaries.geojson");
+    });
+
+    // One file per block. Browsers will usually prompt the user to allow
+    // multiple downloads from the site the first time — that's expected.
+    document.getElementById("exportBlocksEach").addEventListener("click", async () => {
+      if (!blocksGeoJSON || !blocksGeoJSON.features.length) {
+        blocksStatus.textContent = "Generate blocks first.";
+        return;
+      }
+      const feats = blocksGeoJSON.features;
+      for (let i = 0; i < feats.length; i++) {
+        const f = feats[i];
+        const fc = { type: "FeatureCollection", features: [f] };
+        const blob = new Blob([JSON.stringify(fc, null, 2)], {
+          type: "application/geo+json",
+        });
+        const safe = String(f.properties.block || `block_${i + 1}`)
+          .replace(/[^A-Za-z0-9_-]/g, "_");
+        downloadBlob(blob, `${safe}.geojson`);
+        // Stagger so the browser doesn't dedupe / cancel concurrent downloads.
+        await new Promise((r) => setTimeout(r, 180));
+      }
+      blocksStatus.textContent =
+        `Exported ${feats.length} file${feats.length === 1 ? "" : "s"}.`;
+    });
+
+    function clearPath() {
+      rawPath = [];
+      snappedFeatures = [];
+      for (const id of ["scout-path-labels", "scout-path-pts", "scout-path", "rough-path"]) {
+        if (map.getLayer(id)) map.removeLayer(id);
+      }
+      for (const id of ["scout-path-pts", "scout-path", "rough-path"]) {
+        if (map.getSource(id)) map.removeSource(id);
+      }
+      pathStatus.textContent = "";
+    }
+    document.getElementById("pathClear").addEventListener("click", clearPath);
+  </script>
+</body>
+</html>

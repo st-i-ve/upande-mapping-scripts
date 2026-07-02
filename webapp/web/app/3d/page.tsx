@@ -1,18 +1,29 @@
 import Link from "next/link";
-import { Box } from "lucide-react";
+import { ArrowLeft, Box } from "lucide-react";
 
-export const metadata = { title: "Upande · 3D (coming soon)" };
+export const metadata = { title: "Upande · 3D view" };
 
-/** Placeholder. The MapLibre + three.js 3D view is ported in milestone M8. */
+/**
+ * M8 — 3D view. Reuses the proven MapLibre + three.js page verbatim as a
+ * static asset (public/legacy-3d.html) inside a full-viewport iframe. The
+ * relative src is base-path-agnostic (works under /next and after cutover).
+ */
 export default function ThreeDPage() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
-      <Box className="text-primary" size={28} />
-      <h1 className="text-base font-semibold text-foreground">3D view</h1>
-      <p className="text-sm">Ported in a later milestone (M8).</p>
-      <Link href="/" className="text-primary hover:underline">
-        ← Back to the mapper
-      </Link>
-    </main>
+    <>
+      <header className="flex items-center gap-3 border-b border-border bg-background/80 px-4 py-2 backdrop-blur">
+        <Link href="/" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+          <ArrowLeft size={14} /> Mapper
+        </Link>
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest text-primary">
+          <Box size={13} /> 3D VIEW
+        </span>
+      </header>
+      <iframe
+        src="legacy-3d.html"
+        title="Upande 3D view"
+        className="w-full flex-1 border-0"
+      />
+    </>
   );
 }
