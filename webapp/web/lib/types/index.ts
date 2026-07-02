@@ -49,3 +49,23 @@ export interface OutputInfo {
   size_bytes: number;
   mtime: string;
 }
+
+/** Response from /api/terrace_sections. */
+export interface TerraceResult {
+  type: "FeatureCollection";
+  metadata: {
+    edge_count: number;
+    chain_edges: number[];
+    tread_edges: number[];
+    section_count: number;
+    block_count: number;
+    grouping: string | null;
+    start_corner: string;
+    block_start_corners: (string | null)[];
+    block_corners: Record<string, unknown>[];
+    first_bed_a: { lat: number; lon: number } | null;
+    first_bed_b: { lat: number; lon: number } | null;
+  };
+  features: GeoFeature[];
+  block_geojson: GeoGeometry[];
+}

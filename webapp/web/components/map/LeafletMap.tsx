@@ -19,6 +19,7 @@ export default function LeafletMap() {
   const refLayerRef = useRef<L.LayerGroup | null>(null);
   const shapeLayerRef = useRef<L.LayerGroup | null>(null);
   const pickCbRef = useRef<((lat: number, lon: number) => void) | null>(null);
+  const edgePickRef = useRef<{ ring: [number, number][]; cb: (idx: number | null) => void } | null>(null);
 
   const [coords, setCoords] = useState("—");
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -32,12 +33,14 @@ export default function LeafletMap() {
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const genResult = useAppStore((s) => s.genResult);
   const treeGrid = useAppStore((s) => s.treeGrid);
+  const terraceResult = useAppStore((s) => s.terraceResult);
   const setHandle = useMapBridge((s) => s.setHandle);
   const setPicking = useMapBridge((s) => s.setPicking);
 
   const workingLayerRef = useRef<L.LayerGroup | null>(null);
   const genLayerRef = useRef<L.LayerGroup | null>(null);
   const treeLayerRef = useRef<L.LayerGroup | null>(null);
+  const terraceLayerRef = useRef<L.LayerGroup | null>(null);
 
   // ---- map bootstrap (once) ----
   useEffect(() => {
@@ -69,6 +72,7 @@ export default function LeafletMap() {
 
     shapeLayerRef.current = L.layerGroup().addTo(map);
     workingLayerRef.current = L.layerGroup().addTo(map);
+    terraceLayerRef.current = L.layerGroup().addTo(map);
     genLayerRef.current = L.layerGroup().addTo(map);
     treeLayerRef.current = L.layerGroup().addTo(map);
     refLayerRef.current = L.layerGroup().addTo(map);
@@ -88,6 +92,24 @@ export default function LeafletMap() {
         setPicking(false);
         L.DomUtil.removeClass(map.getContainer(), "picking");
         cb(e.latlng.lat, e.latlng.lng);
+        return;
+      }
+      const ep = edgePickRef.current;
+      if (ep) {
+        edgePickRef.current = null;
+        setPicking(false);
+        L.DomUtil.removeClass(map.getContainer(), "picking");
+        // Nearest polygon edge in screen space (30px tolerance) — matches vanilla.
+        const click = map.latLngToLayerPoint(e.latlng);
+        let bestI: number | null = null;
+        let bestD = Infinity;
+        for (let i = 0; i < ep.ring.length - 1; i++) {
+          const a = map.latLngToLayerPoint(L.latLng(ep.ring[i][1], ep.ring[i][0]));
+          const b = map.latLngToLayerPoint(L.latLng(ep.ring[i + 1][1], ep.ring[i + 1][0]));
+          const d = L.LineUtil.pointToSegmentDistance(click, a, b);
+          if (d < bestD) { bestD = d; bestI = i; }
+        }
+        ep.cb(bestD < 30 ? bestI : null);
       }
     });
 
@@ -136,6 +158,11 @@ export default function LeafletMap() {
         L.DomUtil.removeClass(map.getContainer(), "picking");
       },
       isPicking: () => pickCbRef.current != null,
+      pickEdge: (ring, cb) => {
+        edgePickRef.current = { ring, cb };
+        setPicking(true);
+        L.DomUtil.addClass(map.getContainer(), "picking");
+      },
       draw: (shape) => {
         map.pm.disableGlobalEditMode();
         map.pm.disableGlobalDragMode();
@@ -232,6 +259,33 @@ export default function LeafletMap() {
       },
     }).addTo(grp);
   }, [genResult]);
+
+  // ---- terrace sections / blocks / cuts ----
+  useEffect(() => {
+    const grp = terraceLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    if (!terraceResult) return;
+    L.geoJSON(terraceResult as never, {
+      style: (feature) => {
+        const kind = (feature?.properties as { kind?: string })?.kind;
+        if (kind === "chain_edge")
+          return { color: "#fbbf24", weight: 4, opacity: 0.9 };
+        if (kind === "cut")
+          return { color: "#38bdf8", weight: 2, dashArray: "5 4" };
+        if (kind === "block")
+          return { color: "#f472b6", weight: 2.5, fillOpacity: 0 };
+        // section
+        return { color: "#a3e635", weight: 1, fillColor: "#a3e635", fillOpacity: 0.12 };
+      },
+      onEachFeature: (feature, layer) => {
+        const p = (feature.properties ?? {}) as { kind?: string; section_id?: string; block_id?: string };
+        const label = p.block_id || p.section_id;
+        if (label && (p.kind === "section" || p.kind === "block"))
+          layer.bindTooltip(label, { permanent: true, direction: "center", className: "ref-tip" });
+      },
+    }).addTo(grp);
+  }, [terraceResult]);
 
   // ---- tree grid points ----
   useEffect(() => {

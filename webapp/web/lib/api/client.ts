@@ -3,7 +3,7 @@
  * the migration. All calls are same-origin: in dev, next.config rewrites
  * `/api/*` to the local uvicorn server; in prod, nginx routes it.
  */
-import type { FeatureCollection, OutputInfo } from "@/lib/types";
+import type { FeatureCollection, OutputInfo, TerraceResult } from "@/lib/types";
 
 export class ApiError extends Error {
   constructor(
@@ -61,7 +61,7 @@ export const api = {
     }),
 
   terraceSections: (params: GenerateParams, signal?: AbortSignal) =>
-    request<FeatureCollection>("/terrace_sections", {
+    request<TerraceResult>("/terrace_sections", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(params),

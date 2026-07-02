@@ -54,6 +54,7 @@ export function GeneratePanel() {
   const genResult = useAppStore((s) => s.genResult);
   const genFilename = useAppStore((s) => s.genFilename);
   const setGenResult = useAppStore((s) => s.setGenResult);
+  const terraceResult = useAppStore((s) => s.terraceResult);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
 
   const [status, setStatus] = useState<Status>("idle");
@@ -74,7 +75,14 @@ export function GeneratePanel() {
     setStatus("busy");
     setMsg("generating…");
     try {
-      const { result, filename } = await api.generate(buildBody(workingPolygon, genParams), controller.signal);
+      const body = buildBody(workingPolygon, genParams);
+      // Terrace mode: use the computed block polygons instead of equal split.
+      const blocks = terraceResult?.block_geojson;
+      if (blocks && blocks.length) {
+        body.custom_blocks = blocks;
+        body.block_start_corners = terraceResult?.metadata.block_start_corners ?? null;
+      }
+      const { result, filename } = await api.generate(body, controller.signal);
       setGenResult(result, filename);
       fitGeometry?.(workingPolygon);
       const s = summarize(result);
@@ -124,6 +132,11 @@ export function GeneratePanel() {
           <Button variant="secondary" size="sm" onClick={() => abortRef.current?.abort()}>Cancel</Button>
         )}
       </div>
+      {hydrated && !!terraceResult?.block_geojson?.length && (
+        <p className="mt-1.5 text-[10px] text-primary/80">
+          Terrace mode: using {terraceResult.block_geojson.length} block(s) from the stepped-edge split.
+        </p>
+      )}
 
       <Separator className="my-3" />
 

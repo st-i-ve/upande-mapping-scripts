@@ -6,6 +6,7 @@ import { ReferencePointsPanel } from "@/components/panels/ReferencePointsPanel";
 import { SavedShapesPanel } from "@/components/panels/SavedShapesPanel";
 import { ShapeBuilderPanel } from "@/components/panels/ShapeBuilderPanel";
 import { ParametersPanel } from "@/components/panels/ParametersPanel";
+import { TerracePanel } from "@/components/panels/TerracePanel";
 import { GeneratePanel } from "@/components/panels/GeneratePanel";
 import { TreeGridPanel } from "@/components/panels/TreeGridPanel";
 import { OutputsPanel } from "@/components/panels/OutputsPanel";
@@ -43,15 +44,19 @@ export function Sidebar() {
         <ParametersPanel />
       </Reveal>
 
-      <Reveal i={4} id="sec-generate">
+      <Reveal i={4} id="sec-terrace">
+        <TerracePanel />
+      </Reveal>
+
+      <Reveal i={5} id="sec-generate">
         <GeneratePanel />
       </Reveal>
 
-      <Reveal i={5} id="sec-grid">
+      <Reveal i={6} id="sec-grid">
         <TreeGridPanel />
       </Reveal>
 
-      <Reveal i={6} id="sec-outputs">
+      <Reveal i={7} id="sec-outputs">
         <OutputsPanel />
       </Reveal>
     </aside>

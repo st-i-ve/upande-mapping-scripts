@@ -11,6 +11,7 @@ import type {
   GeoGeometry,
   RefPoint,
   SavedShape,
+  TerraceResult,
 } from "@/lib/types";
 import type { TreePoint } from "@/lib/geometry/treeGrid";
 
@@ -65,6 +66,15 @@ export interface AppState {
   treeGrid: TreePoint[];
   setTreeGrid: (pts: TreePoint[]) => void;
 
+  // ---- terrace mode ----
+  terraceStartEdge: number | null;
+  terraceGrouping: string;
+  terraceResult: TerraceResult | null;
+  setTerraceStartEdge: (idx: number | null) => void;
+  setTerraceGrouping: (text: string) => void;
+  setTerraceResult: (r: TerraceResult | null) => void;
+  clearTerrace: () => void;
+
   // ---- reference-point actions ----
   addRefPoint: (p: RefPoint) => void;
   removeRefPoint: (name: string) => void;
@@ -108,6 +118,14 @@ export const useAppStore = create<AppState>()(
 
       treeGrid: [],
       setTreeGrid: (treeGrid) => set({ treeGrid }),
+
+      terraceStartEdge: null,
+      terraceGrouping: "",
+      terraceResult: null,
+      setTerraceStartEdge: (terraceStartEdge) => set({ terraceStartEdge }),
+      setTerraceGrouping: (terraceGrouping) => set({ terraceGrouping }),
+      setTerraceResult: (terraceResult) => set({ terraceResult }),
+      clearTerrace: () => set({ terraceStartEdge: null, terraceResult: null }),
 
       addRefPoint: (p) =>
         set((s) => ({
@@ -159,6 +177,7 @@ export const useAppStore = create<AppState>()(
         shapeOpacity: s.shapeOpacity,
         workingPolygon: s.workingPolygon,
         genParams: s.genParams,
+        terraceGrouping: s.terraceGrouping,
       }),
     },
   ),

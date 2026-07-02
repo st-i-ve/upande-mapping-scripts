@@ -16,6 +16,8 @@ export interface MapHandle {
   pickPoint: (cb: (lat: number, lon: number) => void) => void;
   cancelPick: () => void;
   isPicking: () => boolean;
+  /** Arm a one-shot click to pick the nearest edge of `ring` ([lon,lat][]). */
+  pickEdge: (ring: [number, number][], cb: (idx: number | null) => void) => void;
   // ---- shape builder (Geoman) ----
   draw: (shape: "Polygon" | "Rectangle") => void;
   editMode: () => void;
