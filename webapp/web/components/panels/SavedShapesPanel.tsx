@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { booleanOp, OP_LABEL, type BooleanOp } from "@/lib/geometry/booleanOps";
 import type { GeoGeometry } from "@/lib/types";
 
 function extractGeometry(raw: string): GeoGeometry | null {
@@ -81,6 +82,19 @@ export function SavedShapesPanel() {
     setSelected(new Set());
   };
 
+  const applyBoolean = (op: BooleanOp) => {
+    // Preserve list order (matters for subtract = first minus the rest).
+    const geoms = shapes.filter((s) => selected.has(s.name)).map((s) => s.geometry);
+    const result = booleanOp(geoms, op);
+    if (!result) {
+      setErr("Boolean op failed — need 2+ overlapping polygons.");
+      return;
+    }
+    addSavedShape(`${op} result`, result);
+    setSelected(new Set());
+    fitGeometry?.(result);
+  };
+
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Shapes size={12} /> Saved shapes</span>}
@@ -123,6 +137,15 @@ export function SavedShapesPanel() {
               Delete selected{selected.size ? ` (${selected.size})` : ""}
             </Button>
           </div>
+          {selected.size >= 2 && (
+            <div className="mb-1 flex gap-1.5">
+              {(Object.keys(OP_LABEL) as BooleanOp[]).map((op) => (
+                <Button key={op} size="sm" variant="secondary" className="h-7 flex-1 text-[11px]" title={OP_LABEL[op]} onClick={() => applyBoolean(op)}>
+                  {OP_LABEL[op].split(" ")[0]}
+                </Button>
+              ))}
+            </div>
+          )}
           <ul className="mt-1">
             {shapes.map((s) => (
               <ListRow
