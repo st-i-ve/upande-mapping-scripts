@@ -8,6 +8,7 @@ import { ShapeBuilderPanel } from "@/components/panels/ShapeBuilderPanel";
 import { ParametersPanel } from "@/components/panels/ParametersPanel";
 import { GeneratePanel } from "@/components/panels/GeneratePanel";
 import { TreeGridPanel } from "@/components/panels/TreeGridPanel";
+import { OutputsPanel } from "@/components/panels/OutputsPanel";
 
 function Reveal({ i, id, children }: { i: number; id?: string; children: ReactNode }) {
   return (
@@ -48,6 +49,10 @@ export function Sidebar() {
 
       <Reveal i={5} id="sec-grid">
         <TreeGridPanel />
+      </Reveal>
+
+      <Reveal i={6} id="sec-outputs">
+        <OutputsPanel />
       </Reveal>
     </aside>
   );
