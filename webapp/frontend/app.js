@@ -1541,10 +1541,19 @@ async function loadOutputs() {
   ul.innerHTML = "";
   for (const o of data.outputs) {
     const li = document.createElement("li");
+    const head = document.createElement("div");
+    head.className = "out-head";
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "row-check";
+    check.dataset.filename = o.filename;
+    check.addEventListener("change", syncOutputsSelectionUI);
     const a = document.createElement("a");
     a.href = "/api/outputs/" + encodeURIComponent(o.filename);
     a.textContent = o.filename;
     a.download = o.filename;
+    head.appendChild(check);
+    head.appendChild(a);
     const actions = document.createElement("div");
     actions.className = "actions";
     const view = document.createElement("a");
@@ -1567,18 +1576,79 @@ async function loadOutputs() {
     frappeDl.textContent = "frappe.txt";
     frappeDl.download =
       o.filename.replace(/\.geojson$/, "") + ".frappe.txt";
+    const del = document.createElement("a");
+    del.href = "#";
+    del.textContent = "delete";
+    del.title = "Delete this output file from the server";
+    del.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      if (!confirm(`Delete saved output "${o.filename}"?`)) return;
+      await deleteOutputs([o.filename]);
+    });
     actions.appendChild(view);
     actions.appendChild(frappeCopy);
     actions.appendChild(frappeDl);
-    li.appendChild(a);
+    actions.appendChild(del);
+    li.appendChild(head);
     li.appendChild(actions);
     ul.appendChild(li);
   }
+  syncOutputsSelectionUI();
+}
+
+// Delete one or more server-side output files, then refresh the list.
+async function deleteOutputs(filenames) {
+  const failed = [];
+  for (const fn of filenames) {
+    try {
+      const r = await fetch("/api/outputs/" + encodeURIComponent(fn), {
+        method: "DELETE",
+      });
+      if (!r.ok) failed.push(fn);
+    } catch {
+      failed.push(fn);
+    }
+  }
+  if (failed.length) {
+    alert(`Could not delete: ${failed.join(", ")}`);
+  }
+  await loadOutputs();
+}
+
+function outputCheckboxes() {
+  return Array.from(document.querySelectorAll("#outputs .row-check"));
+}
+
+function syncOutputsSelectionUI() {
+  const boxes = outputCheckboxes();
+  const checked = boxes.filter((b) => b.checked);
+  const delBtn = document.getElementById("outputsDeleteSelected");
+  delBtn.disabled = checked.length === 0;
+  delBtn.textContent = checked.length
+    ? `Delete selected (${checked.length})`
+    : "Delete selected";
+  const all = document.getElementById("outputsSelectAll");
+  all.checked = boxes.length > 0 && checked.length === boxes.length;
+  all.indeterminate = checked.length > 0 && checked.length < boxes.length;
 }
 
 document
   .getElementById("refreshOutputs")
   .addEventListener("click", loadOutputs);
+document.getElementById("outputsSelectAll").addEventListener("change", (ev) => {
+  for (const b of outputCheckboxes()) b.checked = ev.target.checked;
+  syncOutputsSelectionUI();
+});
+document
+  .getElementById("outputsDeleteSelected")
+  .addEventListener("click", async () => {
+    const names = outputCheckboxes()
+      .filter((b) => b.checked)
+      .map((b) => b.dataset.filename);
+    if (!names.length) return;
+    if (!confirm(`Delete ${names.length} saved output(s)?`)) return;
+    await deleteOutputs(names);
+  });
 loadOutputs();
 
 // =========================================================================
@@ -2747,7 +2817,13 @@ function renderSavedShapeList() {
   ul.innerHTML = "";
   for (const s of savedShapes) {
     const li = document.createElement("li");
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.className = "row-check";
+    check.dataset.name = s.name;
+    check.addEventListener("change", syncShapeSelectionUI);
     const label = document.createElement("span");
+    label.appendChild(check);
     const swatch = document.createElement("input");
     swatch.type = "color";
     swatch.value = s.color || "#525252";
@@ -2830,6 +2906,24 @@ function renderSavedShapeList() {
     li.appendChild(actions);
     ul.appendChild(li);
   }
+  syncShapeSelectionUI();
+}
+
+function shapeCheckboxes() {
+  return Array.from(document.querySelectorAll("#shapeList .row-check"));
+}
+
+function syncShapeSelectionUI() {
+  const boxes = shapeCheckboxes();
+  const checked = boxes.filter((b) => b.checked);
+  const delBtn = document.getElementById("shapeDeleteSelected");
+  delBtn.disabled = checked.length === 0;
+  delBtn.textContent = checked.length
+    ? `Delete selected (${checked.length})`
+    : "Delete selected";
+  const all = document.getElementById("shapeSelectAll");
+  all.checked = boxes.length > 0 && checked.length === boxes.length;
+  all.indeterminate = checked.length > 0 && checked.length < boxes.length;
 }
 
 function addSavedShape(name, geometry) {
@@ -2939,6 +3033,27 @@ document.getElementById("shapeShowAll").addEventListener("click", () => {
   renderAllSavedShapeOverlays();
   renderSavedShapeList();
 });
+
+document.getElementById("shapeSelectAll").addEventListener("change", (ev) => {
+  for (const b of shapeCheckboxes()) b.checked = ev.target.checked;
+  syncShapeSelectionUI();
+});
+
+document
+  .getElementById("shapeDeleteSelected")
+  .addEventListener("click", () => {
+    const names = new Set(
+      shapeCheckboxes()
+        .filter((b) => b.checked)
+        .map((b) => b.dataset.name),
+    );
+    if (!names.size) return;
+    if (!confirm(`Delete ${names.size} saved shape(s)?`)) return;
+    savedShapes = savedShapes.filter((s) => !names.has(s.name));
+    persistSavedShapes();
+    renderAllSavedShapeOverlays();
+    renderSavedShapeList();
+  });
 
 function savedShapeFeature(s) {
   const props = { name: s.name };

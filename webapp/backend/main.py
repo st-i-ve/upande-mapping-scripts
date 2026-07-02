@@ -152,6 +152,17 @@ def get_output(filename: str):
     return FileResponse(path, media_type="application/geo+json", filename=filename)
 
 
+@app.delete("/api/outputs/{filename}")
+def delete_output(filename: str) -> dict:
+    if "/" in filename or ".." in filename:
+        raise HTTPException(400, "Invalid filename")
+    path = STORAGE / filename
+    if not path.is_file():
+        raise HTTPException(404, "Not found")
+    path.unlink()
+    return {"ok": True, "deleted": filename}
+
+
 _DIGIT_RE = re.compile(r"\d+")
 
 

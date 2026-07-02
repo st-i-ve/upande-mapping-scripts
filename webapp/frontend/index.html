@@ -13,7 +13,10 @@
 <body>
   <header>
     <h1>Upande Bed &amp; Zone Mapper</h1>
-    <span id="status" class="status-idle">ready</span>
+    <div class="header-right">
+      <a id="link3d" href="/3d.html" title="Open the 3D view">3D</a>
+      <span id="status" class="status-idle">ready</span>
+    </div>
   </header>
 
   <main>
@@ -79,6 +82,10 @@
           <button id="shapeHideAll" class="secondary">Hide all</button>
           <button id="shapeShowAll" class="secondary">Show all</button>
           <button id="shapeDownloadAll" class="secondary">Download all</button>
+        </div>
+        <div class="row">
+          <label class="check-all"><input id="shapeSelectAll" type="checkbox" /> Select all</label>
+          <button id="shapeDeleteSelected" class="danger" disabled>Delete selected</button>
         </div>
       </section>
 
@@ -260,7 +267,11 @@
 
       <section>
         <h2>7. Saved outputs</h2>
-        <button id="refreshOutputs" class="secondary">Refresh</button>
+        <div class="row">
+          <button id="refreshOutputs" class="secondary">Refresh</button>
+          <label class="check-all"><input id="outputsSelectAll" type="checkbox" /> Select all</label>
+          <button id="outputsDeleteSelected" class="danger" disabled>Delete selected</button>
+        </div>
         <ul id="outputs" class="outputs"></ul>
       </section>
 
@@ -276,26 +287,26 @@
 
     <aside id="shapeBuilder" class="shape-editor">
       <div class="sb-strip">
-        <button id="seTool-rect" class="sb-btn" type="button" title="Rectangle">⬚</button>
-        <button id="seTool-pencil" class="sb-btn" type="button" title="Pencil — Freehand">✎</button>
-        <button id="seTogglePencilMode" class="sb-btn sb-btn-tiny" type="button" title="Switch pencil mode (Freehand ↔ Vertex)" aria-label="Toggle pencil mode">▾</button>
-        <button id="seTool-move" class="sb-btn" type="button" title="Move">✋</button>
-        <button id="seTool-rotate" class="sb-btn" type="button" title="Rotate">↺</button>
-        <button id="seTool-scale" class="sb-btn" type="button" title="Scale">⤢</button>
-        <button id="seDuplicate" class="sb-btn" type="button" title="Duplicate">⎘</button>
-        <button id="seDelete" class="sb-btn" type="button" title="Delete">🗑</button>
-        <button id="seSnapToggle" class="sb-btn" type="button" title="Snap to nearby edges/vertices (on)" aria-pressed="true">🧲</button>
+        <button id="seTool-rect" class="sb-btn" type="button" title="Rectangle" aria-label="Rectangle"><i data-lucide="square"></i></button>
+        <button id="seTool-pencil" class="sb-btn" type="button" title="Pencil — Freehand" aria-label="Pencil"><i data-lucide="pencil"></i></button>
+        <button id="seTogglePencilMode" class="sb-btn sb-btn-tiny" type="button" title="Switch pencil mode (Freehand ↔ Vertex)" aria-label="Toggle pencil mode"><i data-lucide="chevron-down"></i></button>
+        <button id="seTool-move" class="sb-btn" type="button" title="Move" aria-label="Move"><i data-lucide="hand"></i></button>
+        <button id="seTool-rotate" class="sb-btn" type="button" title="Rotate" aria-label="Rotate"><i data-lucide="rotate-ccw"></i></button>
+        <button id="seTool-scale" class="sb-btn" type="button" title="Scale" aria-label="Scale"><i data-lucide="scaling"></i></button>
+        <button id="seDuplicate" class="sb-btn" type="button" title="Duplicate" aria-label="Duplicate"><i data-lucide="copy"></i></button>
+        <button id="seDelete" class="sb-btn" type="button" title="Delete" aria-label="Delete"><i data-lucide="trash-2"></i></button>
+        <button id="seSnapToggle" class="sb-btn" type="button" title="Snap to nearby edges/vertices (on)" aria-pressed="true" aria-label="Toggle snap"><i data-lucide="magnet"></i></button>
         <div class="sb-divider"></div>
-        <button id="seUnion" class="sb-btn" type="button" disabled title="Merge (union of selected)">∪</button>
-        <button id="seSubtract" class="sb-btn" type="button" disabled title="Subtract (first selected minus the rest)">−</button>
-        <button id="seIntersect" class="sb-btn" type="button" disabled title="Intersect (overlap of selected)">∩</button>
-        <button id="seUndo" class="sb-btn" type="button" disabled title="Undo last boolean">↶</button>
+        <button id="seUnion" class="sb-btn sb-btn-op" type="button" disabled title="Merge (union of selected)" aria-label="Union">∪</button>
+        <button id="seSubtract" class="sb-btn sb-btn-op" type="button" disabled title="Subtract (first selected minus the rest)" aria-label="Subtract">−</button>
+        <button id="seIntersect" class="sb-btn sb-btn-op" type="button" disabled title="Intersect (overlap of selected)" aria-label="Intersect">∩</button>
+        <button id="seUndo" class="sb-btn" type="button" disabled title="Undo last boolean" aria-label="Undo"><i data-lucide="undo-2"></i></button>
         <div class="sb-divider"></div>
-        <button id="seUseAsPolygon" class="sb-btn sb-btn-primary" type="button" disabled title="Use as working polygon (send to bed/zone mapper)">→</button>
-        <button id="seDownload" class="sb-btn" type="button" title="Download GeoJSON">⬇</button>
+        <button id="seUseAsPolygon" class="sb-btn sb-btn-primary" type="button" disabled title="Use as working polygon (send to bed/zone mapper)" aria-label="Use as working polygon"><i data-lucide="arrow-right"></i></button>
+        <button id="seDownload" class="sb-btn" type="button" title="Download GeoJSON" aria-label="Download"><i data-lucide="download"></i></button>
         <div class="sb-divider"></div>
-        <button id="seSave" class="sb-btn" type="button" title="Save shapes to browser storage">💾</button>
-        <button id="seClearAll" class="sb-btn" type="button" title="Clear all shapes">✕</button>
+        <button id="seSave" class="sb-btn" type="button" title="Save shapes to browser storage" aria-label="Save"><i data-lucide="save"></i></button>
+        <button id="seClearAll" class="sb-btn" type="button" title="Clear all shapes" aria-label="Clear all"><i data-lucide="x"></i></button>
       </div>
       <div class="sb-foot">
         <div class="sb-stats" id="shapeEditorStats" title="0 shapes, 0 selected">0/0</div>
@@ -310,8 +321,16 @@
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.16.0/dist/leaflet-geoman.min.js"></script>
   <script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
   <script src="/editor-geom.js"></script>
   <script src="/app.js"></script>
   <script src="/editor.js"></script>
+  <script>
+    // Render all <i data-lucide="…"> placeholders into inline SVGs. The strip
+    // markup is static, so a single pass after load is enough.
+    if (window.lucide && typeof lucide.createIcons === "function") {
+      lucide.createIcons();
+    }
+  </script>
 </body>
 </html>

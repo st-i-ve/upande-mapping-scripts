@@ -26,14 +26,29 @@
   padding: 7px 4px;
   font-size: 16px;
   line-height: 1.1;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   color: var(--text);
   cursor: pointer;
   font-family: inherit;
 }
+
+/* Lucide icons render as inline SVG (stroke: currentColor). Size them to the
+   narrow strip and let button colour states flow through. */
+#shapeBuilder .sb-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+}
+#shapeBuilder .sb-btn.sb-btn-tiny svg { width: 13px; height: 13px; }
+
+/* Boolean set-operators keep their precise math glyphs (no faithful Lucide
+   equivalent) — sized to sit level with the SVG icons. */
+#shapeBuilder .sb-btn-op { font-size: 17px; font-weight: 600; }
 
 #shapeBuilder .sb-btn:hover:not(:disabled) {
   background: var(--bg-subtle);

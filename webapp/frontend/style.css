@@ -1,17 +1,27 @@
 /* Frappe 15-inspired minimalist theme.
-   Neutral grays, 1px borders, flat surfaces, compact 4px radii. */
+   Neutral grays, 1px borders, soft rounded corners, gentle elevation. */
 
 :root {
   --bg: #ffffff;
-  --bg-subtle: #f8f8f8;
-  --border: #ededed;
-  --border-strong: #dcdcdc;
+  --bg-subtle: #f6f7f9;
+  --border: #ececef;
+  --border-strong: #d8d9de;
   --text: #171717;
   --text-muted: #525252;
   --text-faint: #8d8d8d;
   --accent: #2490ef;
   --accent-hover: #1a7bd1;
+  --accent-soft: rgba(36, 144, 239, 0.14);
   --danger: #e24c4b;
+
+  /* Rounded-corner scale — small chips → controls → surfaces. */
+  --radius-sm: 6px;
+  --radius: 9px;
+  --radius-lg: 14px;
+
+  /* Soft elevation. */
+  --shadow-sm: 0 1px 2px rgba(23, 23, 23, 0.05);
+  --shadow: 0 1px 2px rgba(23, 23, 23, 0.04), 0 4px 12px rgba(23, 23, 23, 0.05);
 }
 
 * { box-sizing: border-box; }
@@ -45,6 +55,18 @@ header h1 {
   letter-spacing: -0.01em;
 }
 
+.header-right { display: flex; align-items: center; gap: 14px; }
+#link3d {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 3px 10px;
+}
+#link3d:hover { color: var(--accent-hover); border-color: var(--accent); }
+
 #status { font-size: 12px; font-weight: 500; }
 .status-idle  { color: var(--text-faint); }
 .status-busy  { color: #d97706; }
@@ -57,15 +79,17 @@ main { flex: 1; display: flex; min-height: 0; }
   width: 340px;
   padding: 14px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-subtle);
   border-right: 1px solid var(--border);
 }
 #panel section {
   margin-bottom: 14px;
-  padding: 12px;
+  padding: 14px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 #panel h2 {
   margin: 0 0 8px;
@@ -100,7 +124,7 @@ main { flex: 1; display: flex; min-height: 0; }
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
+  border-radius: var(--radius);
   transition: border-color 0.15s;
 }
 #panel input:focus,
@@ -108,6 +132,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #panel textarea:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 #panel textarea {
@@ -120,7 +145,7 @@ main { flex: 1; display: flex; min-height: 0; }
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
+  border-radius: var(--radius);
   resize: vertical;
 }
 
@@ -133,7 +158,7 @@ label.toggle {
   padding: 6px 8px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
@@ -151,7 +176,7 @@ label.slider {
   padding: 6px 8px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
 }
 label.slider .slider-label {
   display: flex;
@@ -172,8 +197,8 @@ label.slider input[type="range"] {
 .row { display: flex; gap: 6px; margin-top: 6px; }
 
 button {
-  padding: 6px 12px;
-  border-radius: 4px;
+  padding: 7px 12px;
+  border-radius: var(--radius);
   font-size: 12px;
   font-weight: 500;
   font-family: inherit;
@@ -181,9 +206,16 @@ button {
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 button:hover { background: var(--bg-subtle); }
+button:active { box-shadow: none; }
+button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 
 button.primary {
   background: var(--text);
@@ -199,12 +231,27 @@ button.primary:hover {
 button.secondary { background: var(--bg); color: var(--text-muted); }
 button.secondary:hover { background: var(--bg-subtle); color: var(--text); }
 
+button.danger { background: var(--bg); color: #b91c1c; border-color: #f0b4b4; }
+button.danger:hover:not(:disabled) { background: #fef2f2; border-color: #dc2626; color: #991b1b; }
+button.danger:disabled { color: var(--text-faint); border-color: var(--border); cursor: default; }
+
+.check-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.check-all input { margin: 0; }
+.row-check { margin-right: 6px; flex: 0 0 auto; }
+
 .summary {
   margin-top: 10px;
   padding: 8px 10px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius);
   font-size: 12px;
   color: var(--text-muted);
   white-space: pre-wrap;
@@ -235,6 +282,34 @@ button.secondary:hover { background: var(--bg-subtle); color: var(--text); }
 }
 .outputs a:hover { color: var(--accent-hover); text-decoration: underline; }
 
+/* Reference-points (#refList) and saved-shapes (#shapeList) rows.
+   Long names must wrap instead of forcing the sidebar to scroll sideways:
+   the name label is allowed to shrink to zero and break long words, while
+   the action links keep their size and wrap onto their own lines if needed. */
+#refList li,
+#shapeList li {
+  align-items: flex-start;
+  gap: 8px;
+}
+#refList li > span:first-child,
+#shapeList li > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+}
+#refList li > span:last-child,
+#shapeList li > span:last-child {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 8px;
+}
+#refList li strong,
+#shapeList li strong { font-weight: 600; }
+
 /* Section 7 (#outputs) — long filenames must wrap on their own line above the action row. */
 #outputs li {
   flex-direction: column;
@@ -252,13 +327,23 @@ button.secondary:hover { background: var(--bg-subtle); color: var(--text); }
   gap: 10px;
   flex-wrap: wrap;
 }
+#outputs .out-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+#outputs .out-head a {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
 
 .color-swatch {
   width: 16px;
   height: 16px;
   padding: 0;
   border: 1px solid var(--border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: none;
   cursor: pointer;
   vertical-align: middle;
@@ -276,7 +361,7 @@ button.secondary:hover { background: var(--bg-subtle); color: var(--text); }
   color: #1f2937;
   text-decoration: none;
   white-space: nowrap;
-  border-radius: 4px;
+  border-radius: var(--radius);
 }
 .pass-through-control a:hover { background: #f3f4f6; text-decoration: none; }
 .pass-through-control a.active {
@@ -297,7 +382,7 @@ kbd {
   background: var(--bg-subtle);
   border: 1px solid var(--border-strong);
   border-bottom-width: 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
 }
 
@@ -307,7 +392,7 @@ code {
   padding: 1px 5px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
 }
 
@@ -315,7 +400,7 @@ code {
 .leaflet-control-layers,
 .leaflet-bar {
   border: 1px solid var(--border-strong) !important;
-  border-radius: 4px !important;
+  border-radius: var(--radius) !important;
   box-shadow: none !important;
 }
 .leaflet-bar a {
@@ -358,7 +443,7 @@ code {
 .section-label {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid #4338ca;
-  border-radius: 4px;
+  border-radius: var(--radius);
   padding: 1px 6px;
   font-weight: 700;
   font-size: 11px;
@@ -387,7 +472,7 @@ code {
   padding: 8px 10px;
   background: #f5f3ff;
   border: 1px solid #ddd6fe;
-  border-radius: 4px;
+  border-radius: var(--radius);
   font-size: 12px;
   color: #4338ca;
   min-height: 18px;
