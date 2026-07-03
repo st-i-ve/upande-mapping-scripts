@@ -20,7 +20,7 @@ export default function ThreeDPage() {
         </span>
       </header>
       <iframe
-        src="legacy-3d.html"
+        src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/legacy-3d.html`}
         title="Upande 3D view"
         className="w-full flex-1 border-0"
       />

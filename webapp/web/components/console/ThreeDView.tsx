@@ -6,11 +6,8 @@
  * base-path-agnostic (works under /next and after cutover).
  */
 export function ThreeDView() {
+  const src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/legacy-3d.html`;
   return (
-    <iframe
-      src="legacy-3d.html"
-      title="Upande 3D view"
-      className="h-full w-full border-0"
-    />
+    <iframe src={src} title="Upande 3D view" className="h-full w-full border-0" />
   );
 }

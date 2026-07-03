@@ -9,17 +9,20 @@ import { MapCanvas } from "@/components/map/MapCanvas";
 import { ThreeDView } from "./ThreeDView";
 
 /**
- * The whole app shell: a left tool rail, the map/3D canvas in the middle, and
- * the collapsible control sidebar on the right — all wrapped by SidebarProvider
- * so the sidebar frames the entire layout. 2D and 3D are just views that share
- * this chrome and swap the center canvas + the sidebar's toolset.
+ * The whole app shell. The map/3D canvas is "boxed" — a rounded, shadowed
+ * card floating inside a padded frame — with a slim tool rail on the left and
+ * the collapsible control sidebar in the wider right gutter. 2D and 3D are
+ * just views that share this chrome and swap the center canvas + toolset.
  */
 export function AppShell() {
   const view = useAppStore((s) => s.view);
   return (
-    <SidebarProvider className="min-h-0 flex-1">
+    <SidebarProvider
+      className="min-h-0 flex-1 bg-sidebar"
+      style={{ "--sidebar-width": "22rem" } as React.CSSProperties}
+    >
       <LeftRail />
-      <SidebarInset className="min-w-0">
+      <SidebarInset className="m-2 min-w-0 overflow-hidden rounded-xl border border-border shadow-xl">
         <MainTopBar />
         <div className="relative min-h-0 flex-1">
           {view === "2d" ? <MapCanvas /> : <ThreeDView />}

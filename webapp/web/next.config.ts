@@ -13,6 +13,9 @@ const BASE_PATH = process.env.NEXT_BASE_PATH ?? "";
 
 const nextConfig: NextConfig = {
   ...(BASE_PATH ? { basePath: BASE_PATH } : {}),
+  // Exposed to the client so raw <iframe>/<a> can prefix the base path
+  // (Next only auto-prefixes next/link and next/image, not raw elements).
+  env: { NEXT_PUBLIC_BASE_PATH: BASE_PATH },
   async rewrites() {
     if (process.env.NODE_ENV === "production") return [];
     return [{ source: "/api/:path*", destination: `${API_ORIGIN}/api/:path*` }];
