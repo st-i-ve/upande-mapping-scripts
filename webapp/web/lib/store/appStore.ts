@@ -62,6 +62,10 @@ export interface AppState {
   setGenParams: (patch: Partial<GenParams>) => void;
   setGenResult: (result: FeatureCollection | null, filename: string | null) => void;
 
+  // ---- view (2D map / 3D) ----
+  view: "2d" | "3d";
+  setView: (v: "2d" | "3d") => void;
+
   // ---- tree grid ----
   treeGrid: TreePoint[];
   setTreeGrid: (pts: TreePoint[]) => void;
@@ -115,6 +119,9 @@ export const useAppStore = create<AppState>()(
       setWorkingPolygon: (workingPolygon) => set({ workingPolygon }),
       setGenParams: (patch) => set((s) => ({ genParams: { ...s.genParams, ...patch } })),
       setGenResult: (genResult, genFilename) => set({ genResult, genFilename }),
+
+      view: "2d",
+      setView: (view) => set({ view }),
 
       treeGrid: [],
       setTreeGrid: (treeGrid) => set({ treeGrid }),

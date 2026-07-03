@@ -27,15 +27,20 @@ backend is unchanged.
 ## Parity progress (post-M9)
 
 - ✅ **Terrace mode** — pick stepped edge, block grouping (`1-3, 4, 5-7`),
-  preview sections/blocks, feeds `custom_blocks` into Generate. Advanced
-  grouping sugar (per-sub `@corners`, `[Nx longest]`, swap/reverse,
-  click-to-pick block corner) still to follow.
+  preview sections/blocks, feeds `custom_blocks` into Generate.
+- ✅ **Boolean ops** — union / subtract / intersect on 2+ selected saved
+  shapes (Turf), result saved as a new shape.
+- ✅ **Shell restructure** — shadcn `sidebar-08` sidebar on the **right**
+  wrapping the app; Photoshop-style **left tool rail**; **2D/3D unified as
+  views** with a top-of-sidebar view switcher (3D reuses `legacy-3d.html`
+  in the center canvas and enrolls its own toolset).
 
 ## Still deferred to reach full parity (before root cutover)
 
 - Terrace advanced grouping sugar (per-sub corners / sub-splits / swap / pick-corner).
-- Shape-builder boolean ops (union / subtract / intersect) + custom rotate/scale/snap handles.
+- Draw-time boolean ops in the shape builder + custom rotate/scale/snap handles.
 - Tree-grid rotation, interactive pivot, and positive/negative masks.
+- Native 3D tools in the sidebar (terrain exaggeration, sun angle, layer toggles).
 - Basemap API-key panel (Mapbox / MapTiler / Stadia) + reference-point colors.
 - Side-by-side parity QA against the live vanilla app.
 
