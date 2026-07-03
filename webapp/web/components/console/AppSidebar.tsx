@@ -15,8 +15,8 @@ import { ThreeDToolset } from "./ThreeDToolset";
 export function AppSidebar() {
   const view = useAppStore((s) => s.view);
   return (
-    <Sidebar side="right" collapsible="offcanvas" className="group-data-[side=right]:border-l-0">
-      <SidebarHeader className="gap-2 p-3">
+    <Sidebar side="right" collapsible="offcanvas" className="border-l border-border">
+      <SidebarHeader className="gap-2 border-b border-border p-3">
         <div className="flex items-baseline gap-1.5 px-0.5">
           <span className="tabular text-xs font-semibold tracking-[0.14em]">UPANDE</span>
           <span className="tabular text-xs font-medium tracking-[0.14em] text-primary">MAPPER</span>
