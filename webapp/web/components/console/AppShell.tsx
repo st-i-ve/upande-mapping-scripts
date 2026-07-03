@@ -22,7 +22,7 @@ export function AppShell() {
       style={{ "--sidebar-width": "22rem" } as React.CSSProperties}
     >
       <LeftRail />
-      <SidebarInset className="m-2 min-w-0 overflow-hidden rounded-xl border border-border shadow-xl">
+      <SidebarInset className="m-2 min-w-0 overflow-hidden rounded-xl shadow-xl">
         <MainTopBar />
         <div className="relative min-h-0 flex-1">
           {view === "2d" ? <MapCanvas /> : <ThreeDView />}

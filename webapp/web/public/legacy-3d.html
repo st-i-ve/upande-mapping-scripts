@@ -1708,6 +1708,46 @@
       pathStatus.textContent = "";
     }
     document.getElementById("pathClear").addEventListener("click", clearPath);
+
+    // ---- Mapper console bridge -------------------------------------------
+    // When embedded in the Next.js console (inside an iframe), hide the on-canvas
+    // panel and accept control commands from the parent sidebar via postMessage.
+    // Standalone (top-level) use is unchanged — the panel stays visible.
+    (function mapperBridge() {
+      const embedded = window.parent && window.parent !== window;
+      if (embedded) {
+        const p = document.getElementById("panel");
+        if (p) p.style.display = "none";
+        try { window.parent.postMessage({ __mapper3d: "ready" }, "*"); } catch (e) {}
+      }
+      window.addEventListener("message", (ev) => {
+        const m = ev.data;
+        if (!m || m.__mapper !== true) return;
+        try {
+          if (m.kind === "set") {
+            const el = document.getElementById(m.id);
+            if (!el) return;
+            if (el.type === "checkbox") el.checked = !!m.value;
+            else el.value = m.value;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          } else if (m.kind === "click") {
+            document.getElementById(m.id)?.click();
+          } else if (m.kind === "trees") {
+            const feats = [];
+            for (const txt of [].concat(m.text || [])) {
+              const gj = JSON.parse(txt);
+              const fs =
+                gj.type === "FeatureCollection" ? gj.features
+                : gj.type === "Feature" ? [gj]
+                : Array.isArray(gj) ? gj : [];
+              for (const f of fs) feats.push(f);
+            }
+            if (feats.length && typeof buildTrees === "function") buildTrees(feats);
+          }
+        } catch (e) { /* ignore malformed control messages */ }
+      });
+    })();
   </script>
 </body>
 </html>
