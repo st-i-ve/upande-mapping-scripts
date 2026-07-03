@@ -1718,6 +1718,12 @@
       if (embedded) {
         const p = document.getElementById("panel");
         if (p) p.style.display = "none";
+        // The panel was 'left:12px' absolute; with it gone the map fills the
+        // frame. Nudge MapLibre to resize once the embedded container settles
+        // (kills the white gutter from a stale initial size).
+        const nudge = () => { try { map.resize(); } catch (e) {} };
+        [150, 450, 1000].forEach((t) => setTimeout(nudge, t));
+        window.addEventListener("resize", nudge);
         try { window.parent.postMessage({ __mapper3d: "ready" }, "*"); } catch (e) {}
       }
       window.addEventListener("message", (ev) => {
