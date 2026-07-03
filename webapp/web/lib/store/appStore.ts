@@ -97,7 +97,7 @@ export interface AppState {
   setBasemapKeys: (keys: BasemapKeys) => void;
 }
 
-const PALETTE = ["#34d399", "#38bdf8", "#a3e635", "#f472b6", "#fbbf24", "#c084fc"];
+const PALETTE = ["#e5e5e5", "#9aa0a6", "#b8b8b8", "#d4d4d4", "#f5f5f5", "#8a8a8a"];
 
 export const useAppStore = create<AppState>()(
   persist(

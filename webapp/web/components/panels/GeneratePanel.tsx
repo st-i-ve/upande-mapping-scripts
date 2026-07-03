@@ -133,7 +133,7 @@ export function GeneratePanel() {
         )}
       </div>
       {hydrated && !!terraceResult?.block_geojson?.length && (
-        <p className="mt-1.5 text-[10px] text-primary/80">
+        <p className="mt-1.5 text-[8px] text-primary/80">
           Terrace mode: using {terraceResult.block_geojson.length} block(s) from the stepped-edge split.
         </p>
       )}
@@ -150,21 +150,21 @@ export function GeneratePanel() {
             <div className="text-base font-semibold text-primary">
               {v ? <AnimatedNumber value={v as number} pad={pad as number} /> : "—"}
             </div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div>
+            <div className="text-[8px] uppercase tracking-wider text-muted-foreground">{k}</div>
           </div>
         ))}
       </div>
 
       {hydrated && genResult && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
-          <Button variant="secondary" size="sm" className="h-7 flex-1 text-[11px]" onClick={copyFrappe}>Copy Frappe</Button>
+          <Button variant="secondary" size="sm" className="h-7 flex-1 text-[9px]" onClick={copyFrappe}>Copy Frappe</Button>
           {genFilename && (
             <a href={api.frappeUrl(genFilename)} download className="flex-1">
-              <Button variant="secondary" size="sm" className="h-7 w-full text-[11px]">Frappe .txt</Button>
+              <Button variant="secondary" size="sm" className="h-7 w-full text-[9px]">Frappe .txt</Button>
             </a>
           )}
-          <Button variant="secondary" size="sm" className="h-7 flex-1 text-[11px]" onClick={downloadGeoJson}>GeoJSON</Button>
-          <Button variant="secondary" size="sm" className="h-7 text-[11px]" onClick={() => { setGenResult(null, null); setStatus("idle"); setMsg("cleared"); }}>Clear</Button>
+          <Button variant="secondary" size="sm" className="h-7 flex-1 text-[9px]" onClick={downloadGeoJson}>GeoJSON</Button>
+          <Button variant="secondary" size="sm" className="h-7 text-[9px]" onClick={() => { setGenResult(null, null); setStatus("idle"); setMsg("cleared"); }}>Clear</Button>
         </div>
       )}
     </SectionCard>

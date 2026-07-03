@@ -49,26 +49,26 @@ export function TreeGridPanel() {
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Grid3x3 size={12} /> Tree grid</span>}
       index="06"
-      meta={count > 0 ? <span className="tabular text-[11px] text-primary"><AnimatedNumber value={count} /> pts</span> : undefined}
+      meta={count > 0 ? <span className="tabular text-[9px] text-primary"><AnimatedNumber value={count} /> pts</span> : undefined}
     >
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-[11px] text-muted-foreground">
+        <label className="text-[9px] text-muted-foreground">
           Tree spacing (m)
           <Input type="number" step={0.1} min={0.1} value={treeSpacing} onChange={(e) => setTreeSpacing(+e.target.value)} className="mt-1 h-8 tabular" />
         </label>
-        <label className="text-[11px] text-muted-foreground">
+        <label className="text-[9px] text-muted-foreground">
           Row spacing (m)
           <Input type="number" step={0.1} min={0.1} value={rowSpacing} onChange={(e) => setRowSpacing(+e.target.value)} className="mt-1 h-8 tabular" />
         </label>
       </div>
-      <label className="mt-2 block text-[11px] text-muted-foreground">
+      <label className="mt-2 block text-[9px] text-muted-foreground">
         Rows run along
         <select className={selectCls} value={majorEdge} onChange={(e) => setMajorEdge(e.target.value as "EW" | "NS")}>
           <option value="EW">East–West</option>
           <option value="NS">North–South</option>
         </select>
       </label>
-      {err && <p className="mt-1.5 text-[11px] text-destructive">{err}</p>}
+      {err && <p className="mt-1.5 text-[9px] text-destructive">{err}</p>}
       <div className="mt-2 flex gap-1.5">
         <Button size="sm" className="flex-1" onClick={generate}>Generate grid</Button>
         {count > 0 && (
@@ -78,7 +78,7 @@ export function TreeGridPanel() {
           </>
         )}
       </div>
-      <p className="mt-2 text-[10px] text-muted-foreground/60">
+      <p className="mt-2 text-[8px] text-muted-foreground/60">
         Uses the drawn shape (or working polygon) as the boundary. Rotation &amp; masks come next.
       </p>
     </SectionCard>

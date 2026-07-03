@@ -15,11 +15,11 @@ export function SectionCard({ title, index, meta, children }: SectionCardProps) 
     <section className="rounded-lg border border-border bg-card/70 p-3.5 shadow-sm backdrop-blur-[2px]">
       <div className="mb-2.5 flex items-center gap-2">
         {index && (
-          <span className="tabular inline-flex h-4 min-w-5 items-center justify-center rounded border border-border bg-secondary px-1 text-[10px] leading-none text-primary/90">
+          <span className="tabular inline-flex h-4 min-w-5 items-center justify-center rounded border border-border bg-secondary px-1 text-[8px] leading-none text-primary/90">
             {index}
           </span>
         )}
-        <h2 className="flex-1 text-[11px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
+        <h2 className="flex-1 text-[9px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
           {title}
         </h2>
         {meta}

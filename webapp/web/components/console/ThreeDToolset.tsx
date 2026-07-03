@@ -39,7 +39,7 @@ export function ThreeDToolset() {
   return (
     <div className={`space-y-3 ${dim}`}>
       {!ready && (
-        <p className="text-[11px] text-muted-foreground/70">Loading 3D view…</p>
+        <p className="text-[9px] text-muted-foreground/70">Loading 3D view…</p>
       )}
 
       <SectionCard title={<span className="inline-flex items-center gap-1.5"><Box size={12} /> View</span>} index="3D">
@@ -67,9 +67,9 @@ export function ThreeDToolset() {
       </SectionCard>
 
       <SectionCard title={<span className="inline-flex items-center gap-1.5"><Trees size={12} /> Trees</span>} index="3T">
-        <label className="block text-[11px] text-muted-foreground">
+        <label className="block text-[9px] text-muted-foreground">
           Load tree GeoJSON
-          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-8 text-[11px]" onChange={(e) => onFiles(e.target.files)} />
+          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-8 text-[9px]" onChange={(e) => onFiles(e.target.files)} />
         </label>
         <div className="mt-2 grid grid-cols-3 gap-2">
           <NumField label="Trunk (m)" id="trunkH" def={1.5} set={set} />
@@ -89,7 +89,7 @@ export function ThreeDToolset() {
           <NumField label="Pad (m)" id="blockPad" def={2} set={set} />
           <NumField label="Max edge (m)" id="blockMaxEdge" def={8} set={set} />
         </div>
-        <label className="mt-2 block text-[11px] text-muted-foreground">
+        <label className="mt-2 block text-[9px] text-muted-foreground">
           Name suffix
           <Input defaultValue=" - KL" className="mt-1 h-8 tabular" onChange={(e) => set("blockSuffix", e.target.value)} />
         </label>
@@ -107,7 +107,7 @@ export function ThreeDToolset() {
 function Labeled({ label, value, children }: { label: string; value: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="mb-1 flex justify-between text-[8px] uppercase tracking-wider text-muted-foreground">
         <span>{label}</span>
         <span className="tabular text-primary">{value}</span>
       </div>
@@ -118,7 +118,7 @@ function Labeled({ label, value, children }: { label: string; value: string; chi
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (c: boolean) => void }) {
   return (
-    <label className="flex items-center justify-between text-[11px] text-muted-foreground">
+    <label className="flex items-center justify-between text-[9px] text-muted-foreground">
       {label}
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
@@ -127,7 +127,7 @@ function ToggleRow({ label, checked, onChange }: { label: string; checked: boole
 
 function NumField({ label, id, def, set }: { label: string; id: string; def: number; set: (id: string, v: number) => void }) {
   return (
-    <label className="block text-[11px] text-muted-foreground">
+    <label className="block text-[9px] text-muted-foreground">
       {label}
       <Input type="number" step={0.1} defaultValue={def} className="mt-1 h-8 tabular" onChange={(e) => set(id, +e.target.value)} />
     </label>

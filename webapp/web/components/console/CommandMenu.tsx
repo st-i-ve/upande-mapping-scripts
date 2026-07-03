@@ -54,12 +54,12 @@ export function CommandMenu({ hideTrigger = false }: { hideTrigger?: boolean }) 
       {!hideTrigger && (
       <button
         onClick={() => setOpen(true)}
-        className="tabular inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+        className="tabular inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-2 py-1 text-[9px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         aria-label="Open command menu"
       >
         <Search size={12} />
         <span className="hidden sm:inline">Search</span>
-        <kbd className="rounded bg-background/60 px-1 text-[10px]">⌘K</kbd>
+        <kbd className="rounded bg-background/60 px-1 text-[8px]">⌘K</kbd>
       </button>
       )}
 

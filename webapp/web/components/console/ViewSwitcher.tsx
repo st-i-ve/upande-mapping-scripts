@@ -9,7 +9,7 @@ export function ViewSwitcher() {
   const setView = useAppStore((s) => s.setView);
 
   return (
-    <div className="flex rounded-md border border-border bg-secondary/40 p-0.5 text-[11px] font-medium">
+    <div className="flex rounded-md border border-border bg-secondary/40 p-0.5 text-[9px] font-medium">
       {([["2d", "2D", MapIcon], ["3d", "3D", Box]] as const).map(([v, label, Icon]) => (
         <button
           key={v}

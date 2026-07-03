@@ -16,7 +16,7 @@ export function ListRow({ children, actions }: ListRowProps) {
         {children}
       </span>
       {actions && (
-        <span className="flex shrink-0 flex-wrap justify-end gap-x-2.5 gap-y-0.5 text-[11px]">
+        <span className="flex shrink-0 flex-wrap justify-end gap-x-2.5 gap-y-0.5 text-[9px]">
           {actions}
         </span>
       )}

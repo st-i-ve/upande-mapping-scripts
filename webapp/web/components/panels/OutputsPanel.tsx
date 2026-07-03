@@ -78,7 +78,7 @@ export function OutputsPanel() {
     >
       {items.length > 0 && (
         <div className="mb-1 flex items-center justify-between">
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <label className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
             <input
               type="checkbox"
               className="accent-primary"
@@ -87,7 +87,7 @@ export function OutputsPanel() {
             />
             Select all
           </label>
-          <Button variant="destructive" size="sm" className="h-7 text-[11px]" disabled={!selected.size} onClick={delSelected}>
+          <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selected.size} onClick={delSelected}>
             Delete selected{selected.size ? ` (${selected.size})` : ""}
           </Button>
         </div>
@@ -108,14 +108,14 @@ export function OutputsPanel() {
             <label className="flex items-start gap-1.5">
               <input type="checkbox" className="mt-0.5 accent-primary" checked={selected.has(o.filename)} onChange={() => toggle(o.filename)} />
               <span>
-                <span className="tabular break-all text-[11px]">{o.filename}</span>
-                <span className="tabular ml-1 text-[10px] text-muted-foreground">{kb(o.size_bytes)}</span>
+                <span className="tabular break-all text-[9px]">{o.filename}</span>
+                <span className="tabular ml-1 text-[8px] text-muted-foreground">{kb(o.size_bytes)}</span>
               </span>
             </label>
           </ListRow>
         ))}
       </ul>
-      {!items.length && <p className="text-[11px] text-muted-foreground/70">No saved outputs yet — Generate creates them.</p>}
+      {!items.length && <p className="text-[9px] text-muted-foreground/70">No saved outputs yet — Generate creates them.</p>}
     </SectionCard>
   );
 }

@@ -4,7 +4,7 @@ export type Status = "idle" | "busy" | "ok" | "error";
 
 const DOT: Record<Status, string> = {
   idle: "text-muted-foreground",
-  busy: "text-amber-400 animate-pulse",
+  busy: "text-neutral-300 animate-pulse",
   ok: "text-primary",
   error: "text-destructive",
 };
@@ -19,7 +19,7 @@ export function StatusBadge({ status, children }: StatusBadgeProps) {
   return (
     <span
       role="status"
-      className="tabular inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
+      className="tabular inline-flex items-center gap-1.5 text-[9px] text-muted-foreground"
     >
       <span className={DOT[status]} aria-hidden>
         ◍

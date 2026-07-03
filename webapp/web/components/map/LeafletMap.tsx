@@ -11,7 +11,7 @@ import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
 const DEFAULT_ZOOM = 16;
-const ACCENT = "#34d399";
+const ACCENT = "#e5e5e5";
 
 export default function LeafletMap() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -248,9 +248,9 @@ export default function LeafletMap() {
     L.geoJSON(genResult as never, {
       style: (feature) => {
         const kind = (feature?.properties as { kind?: string })?.kind;
-        if (kind === "zone") return { color: "#34d399", weight: 1.5, opacity: 0.95 };
-        if (kind === "bed") return { color: "#38bdf8", weight: 1, fillColor: "#38bdf8", fillOpacity: 0.12 };
-        return { color: "#fbbf24", weight: 1.2, fillOpacity: 0.05 };
+        if (kind === "zone") return { color: "#e5e5e5", weight: 1.5, opacity: 0.95 };
+        if (kind === "bed") return { color: "#9aa0a6", weight: 1, fillColor: "#9aa0a6", fillOpacity: 0.12 };
+        return { color: "#f5f5f5", weight: 1.2, fillOpacity: 0.05 };
       },
       onEachFeature: (feature, layer) => {
         const p = (feature.properties ?? {}) as { bed_id?: string; block_id?: string; kind?: string };
@@ -270,13 +270,13 @@ export default function LeafletMap() {
       style: (feature) => {
         const kind = (feature?.properties as { kind?: string })?.kind;
         if (kind === "chain_edge")
-          return { color: "#fbbf24", weight: 4, opacity: 0.9 };
+          return { color: "#f5f5f5", weight: 4, opacity: 0.9 };
         if (kind === "cut")
-          return { color: "#38bdf8", weight: 2, dashArray: "5 4" };
+          return { color: "#9aa0a6", weight: 2, dashArray: "5 4" };
         if (kind === "block")
-          return { color: "#f472b6", weight: 2.5, fillOpacity: 0 };
+          return { color: "#d4d4d4", weight: 2.5, fillOpacity: 0 };
         // section
-        return { color: "#a3e635", weight: 1, fillColor: "#a3e635", fillOpacity: 0.12 };
+        return { color: "#b8b8b8", weight: 1, fillColor: "#b8b8b8", fillOpacity: 0.12 };
       },
       onEachFeature: (feature, layer) => {
         const p = (feature.properties ?? {}) as { kind?: string; section_id?: string; block_id?: string };
@@ -295,9 +295,9 @@ export default function LeafletMap() {
     for (const p of treeGrid) {
       L.circleMarker([p.lat, p.lon], {
         radius: 2.5,
-        color: "#a3e635",
+        color: "#b8b8b8",
         weight: 1,
-        fillColor: "#a3e635",
+        fillColor: "#b8b8b8",
         fillOpacity: 0.9,
       }).addTo(grp);
     }
@@ -306,7 +306,7 @@ export default function LeafletMap() {
   return (
     <div className="relative h-full w-full">
       <div ref={hostRef} className="h-full w-full" />
-      <div className="pointer-events-none absolute bottom-3 right-3 z-[500] rounded-md border border-border/60 bg-popover/85 px-2.5 py-1 text-[11px] text-muted-foreground shadow-lg backdrop-blur tabular">
+      <div className="pointer-events-none absolute bottom-3 right-3 z-[500] rounded-md border border-border/60 bg-popover/85 px-2.5 py-1 text-[9px] text-muted-foreground shadow-lg backdrop-blur tabular">
         <span className="text-primary">◍</span> {coords}
         <span className="mx-1.5 opacity-40">·</span>z{zoom}
       </div>

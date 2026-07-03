@@ -31,7 +31,7 @@ function parsePolygon(raw: string): GeoGeometry | null {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block text-[11px] text-muted-foreground">
+    <label className="block text-[9px] text-muted-foreground">
       {label}
       {children}
     </label>
@@ -66,7 +66,7 @@ export function ParametersPanel() {
     >
       {/* Working polygon source */}
       <div className="mb-3 rounded-md border border-border bg-secondary/30 p-2">
-        <div className="flex items-center justify-between text-[11px]">
+        <div className="flex items-center justify-between text-[9px]">
           <span className="text-muted-foreground">Working polygon</span>
           {hasPoly ? (
             <span className="inline-flex items-center gap-1 text-primary"><Check size={12} /> set</span>
@@ -78,9 +78,9 @@ export function ParametersPanel() {
           placeholder='Paste a Polygon, or click "use" on a saved shape'
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
-          className="mt-1.5 h-14 font-mono text-[11px]"
+          className="mt-1.5 h-14 font-mono text-[9px]"
         />
-        {err && <p className="mt-1 text-[11px] text-destructive">{err}</p>}
+        {err && <p className="mt-1 text-[9px] text-destructive">{err}</p>}
         <div className="mt-1.5 flex gap-1.5">
           <Button size="sm" variant="secondary" className="flex-1" onClick={usePasted}>Use pasted</Button>
           {hasPoly && (

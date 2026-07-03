@@ -104,9 +104,9 @@ export function SavedShapesPanel() {
       }
     >
       <div className="mt-1 flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Opacity</span>
+        <span className="text-[8px] uppercase tracking-wider text-muted-foreground">Opacity</span>
         <Slider value={[Math.round(shapeOpacity * 100)]} max={100} step={1} onValueChange={(v) => setShapeOpacity((Array.isArray(v) ? v[0] : v) / 100)} className="flex-1" />
-        <span className="tabular w-8 text-right text-[10px] text-muted-foreground">{Math.round(shapeOpacity * 100)}%</span>
+        <span className="tabular w-8 text-right text-[8px] text-muted-foreground">{Math.round(shapeOpacity * 100)}%</span>
       </div>
 
       <Input placeholder="Name (e.g. Block A outline)" value={name} onChange={(e) => setName(e.target.value)} className="mt-2 h-8" />
@@ -114,9 +114,9 @@ export function SavedShapesPanel() {
         placeholder='Paste a Polygon / Feature / FeatureCollection'
         value={text}
         onChange={(e) => setText(e.target.value)}
-        className="mt-1.5 h-16 font-mono text-[11px]"
+        className="mt-1.5 h-16 font-mono text-[9px]"
       />
-      {err && <p className="mt-1 text-[11px] text-destructive">{err}</p>}
+      {err && <p className="mt-1 text-[9px] text-destructive">{err}</p>}
       <Button variant="secondary" size="sm" className="mt-1.5 w-full" onClick={addFromGeoJson}>
         Add from GeoJSON
       </Button>
@@ -124,7 +124,7 @@ export function SavedShapesPanel() {
       {shapes.length > 0 && (
         <>
           <div className="mt-3 flex items-center justify-between">
-            <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <label className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
               <input
                 type="checkbox"
                 className="accent-primary"
@@ -133,14 +133,14 @@ export function SavedShapesPanel() {
               />
               Select all
             </label>
-            <Button variant="destructive" size="sm" className="h-7 text-[11px]" disabled={!selected.size} onClick={deleteSelected}>
+            <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selected.size} onClick={deleteSelected}>
               Delete selected{selected.size ? ` (${selected.size})` : ""}
             </Button>
           </div>
           {selected.size >= 2 && (
             <div className="mb-1 flex gap-1.5">
               {(Object.keys(OP_LABEL) as BooleanOp[]).map((op) => (
-                <Button key={op} size="sm" variant="secondary" className="h-7 flex-1 text-[11px]" title={OP_LABEL[op]} onClick={() => applyBoolean(op)}>
+                <Button key={op} size="sm" variant="secondary" className="h-7 flex-1 text-[9px]" title={OP_LABEL[op]} onClick={() => applyBoolean(op)}>
                   {OP_LABEL[op].split(" ")[0]}
                 </Button>
               ))}
@@ -170,7 +170,7 @@ export function SavedShapesPanel() {
         </>
       )}
       {hydrated && shapes.length === 0 && (
-        <p className="mt-2 text-[11px] text-muted-foreground/70">No shapes yet — paste GeoJSON above to add an overlay.</p>
+        <p className="mt-2 text-[9px] text-muted-foreground/70">No shapes yet — paste GeoJSON above to add an overlay.</p>
       )}
     </SectionCard>
   );

@@ -76,7 +76,7 @@ export function ShapeBuilderPanel() {
           Use as polygon
         </Button>
       </div>
-      <p className="mt-2 text-[10px] text-muted-foreground/60">
+      <p className="mt-2 text-[8px] text-muted-foreground/60">
         Draw, then save it or send it straight to Generate. Boolean ops (∪ − ∩) land in a later pass.
       </p>
     </SectionCard>

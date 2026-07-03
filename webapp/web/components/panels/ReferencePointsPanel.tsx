@@ -84,7 +84,7 @@ export function ReferencePointsPanel() {
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Opacity</span>
+        <span className="text-[8px] uppercase tracking-wider text-muted-foreground">Opacity</span>
         <Slider
           value={[Math.round(refOpacity * 100)]}
           max={100}
@@ -92,7 +92,7 @@ export function ReferencePointsPanel() {
           onValueChange={(v) => setRefOpacity((Array.isArray(v) ? v[0] : v) / 100)}
           className="flex-1"
         />
-        <span className="tabular w-8 text-right text-[10px] text-muted-foreground">
+        <span className="tabular w-8 text-right text-[8px] text-muted-foreground">
           {Math.round(refOpacity * 100)}%
         </span>
       </div>
@@ -116,7 +116,7 @@ export function ReferencePointsPanel() {
         </ul>
       )}
       {hydrated && points.length === 0 && (
-        <p className="mt-2 text-[11px] text-muted-foreground/70">No points yet — add one or pick on the map.</p>
+        <p className="mt-2 text-[9px] text-muted-foreground/70">No points yet — add one or pick on the map.</p>
       )}
     </SectionCard>
   );
