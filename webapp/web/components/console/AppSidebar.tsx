@@ -8,6 +8,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { ViewSwitcher } from "./ViewSwitcher";
+import { ThemeToggle } from "./ThemeToggle";
 import { Panels2D } from "./Panels2D";
 import { ThreeDToolset } from "./ThreeDToolset";
 
@@ -16,10 +17,13 @@ export function AppSidebar() {
   const view = useAppStore((s) => s.view);
   return (
     <Sidebar side="right" collapsible="offcanvas" className="group-data-[side=right]:border-l-0">
-      <SidebarHeader className="gap-2 border-b border-border p-3">
-        <div className="flex items-baseline gap-1.5 px-0.5">
-          <span className="tabular text-xs font-semibold tracking-[0.14em]">UPANDE</span>
-          <span className="tabular text-xs font-medium tracking-[0.14em] text-primary">MAPPER</span>
+      <SidebarHeader className="gap-2.5 border-b border-border p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-1.5 px-0.5">
+            <span className="tabular text-lg font-semibold tracking-[0.14em]">UPANDE</span>
+            <span className="tabular text-lg font-medium tracking-[0.14em] text-muted-foreground">MAPPER</span>
+          </div>
+          <ThemeToggle />
         </div>
         <ViewSwitcher />
       </SidebarHeader>
