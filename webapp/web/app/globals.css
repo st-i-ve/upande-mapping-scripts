@@ -195,3 +195,23 @@
 .leaflet-container.picking {
   cursor: crosshair;
 }
+
+/* ---- Slender, theme-colored scrollbars ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.55 0.05 160 / 0.4) transparent;
+}
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: oklch(0.55 0.05 160 / 0.38);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}

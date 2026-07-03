@@ -26,7 +26,7 @@ import {
  * ⌘K command palette — jump between tools/sections. Wired to navigation now;
  * section-scroll and tool activation hook into the store in later milestones.
  */
-export function CommandMenu() {
+export function CommandMenu({ hideTrigger = false }: { hideTrigger?: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -51,6 +51,7 @@ export function CommandMenu() {
 
   return (
     <>
+      {!hideTrigger && (
       <button
         onClick={() => setOpen(true)}
         className="tabular inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
@@ -60,6 +61,7 @@ export function CommandMenu() {
         <span className="hidden sm:inline">Search</span>
         <kbd className="rounded bg-background/60 px-1 text-[10px]">⌘K</kbd>
       </button>
+      )}
 
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder="Jump to a tool or section…" />
