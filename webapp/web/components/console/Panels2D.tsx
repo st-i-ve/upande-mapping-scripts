@@ -10,6 +10,7 @@ import { TerracePanel } from "@/components/panels/TerracePanel";
 import { GeneratePanel } from "@/components/panels/GeneratePanel";
 import { TreeGridPanel } from "@/components/panels/TreeGridPanel";
 import { TriadPanel } from "@/components/panels/TriadPanel";
+import { KnifePanel } from "@/components/panels/KnifePanel";
 import { OutputsPanel } from "@/components/panels/OutputsPanel";
 import { BasemapKeysPanel } from "@/components/panels/BasemapKeysPanel";
 
@@ -37,6 +38,7 @@ export function Panels2D() {
     ["sec-generate", <GeneratePanel key="gen" />],
     ["sec-grid", <TreeGridPanel key="grid" />],
     ["sec-triad", <TriadPanel key="triad" />],
+    ["sec-knife", <KnifePanel key="knife" />],
     ["sec-outputs", <OutputsPanel key="out" />],
     ["sec-keys", <BasemapKeysPanel key="keys" />],
   ] as const;

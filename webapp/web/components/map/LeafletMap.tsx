@@ -179,6 +179,7 @@ export default function LeafletMap() {
       if (fhTemp) { map.removeLayer(fhTemp); fhTemp = null; }
     };
     const enableFreehand = () => {
+      knStop();
       fhActive = true;
       map.pm.disableDraw();
       map.pm.disableGlobalEditMode();
@@ -187,6 +188,52 @@ export default function LeafletMap() {
       map.dragging.disable();
       L.DomUtil.addClass(map.getContainer(), "picking");
       map.on("mousedown", fhDown);
+    };
+
+    // ---- knife: capture a cut line (freehand drag OR clicked points) ----
+    let knPts: L.LatLng[] = [];
+    let knTemp: L.Polyline | null = null;
+    let knOnChange: ((line: [number, number][]) => void) | null = null;
+    const knCoords = (): [number, number][] => knPts.map((p) => [p.lng, p.lat]);
+    const knRedraw = () => {
+      if (knTemp) knTemp.setLatLngs(knPts);
+      else knTemp = L.polyline(knPts, { color: "#ffffff", weight: 2, dashArray: "6 4" }).addTo(map);
+    };
+    function knStop() {
+      knOnChange = null;
+      knPts = [];
+      map.off("mousedown", knDown);
+      map.off("mousemove", knMove);
+      map.off("mouseup", knUp);
+      map.off("click", knClick);
+      map.dragging.enable();
+      L.DomUtil.removeClass(map.getContainer(), "picking");
+      if (knTemp) { map.removeLayer(knTemp); knTemp = null; }
+    }
+    const knMove = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); };
+    const knUp = () => {
+      map.off("mousemove", knMove);
+      map.off("mouseup", knUp);
+      const line = knCoords();
+      const cb = knOnChange;
+      knStop();
+      cb?.(line);
+    };
+    const knDown = (e: L.LeafletMouseEvent) => {
+      knPts = [e.latlng];
+      knRedraw();
+      map.on("mousemove", knMove);
+      map.on("mouseup", knUp);
+    };
+    const knClick = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); knOnChange?.(knCoords()); };
+    const knifeStartCommon = () => {
+      disableFreehand();
+      map.pm.disableDraw();
+      map.pm.disableGlobalEditMode();
+      map.pm.disableGlobalDragMode();
+      map.pm.disableGlobalRemovalMode();
+      knStop();
+      L.DomUtil.addClass(map.getContainer(), "picking");
     };
 
     // Register the imperative command handle for panels.
@@ -227,8 +274,21 @@ export default function LeafletMap() {
       dragMode: () => { disableFreehand(); map.pm.toggleGlobalDragMode(); },
       eraseMode: () => { disableFreehand(); map.pm.toggleGlobalRemovalMode(); },
       freehand: () => { if (fhActive) disableFreehand(); else enableFreehand(); },
+      knifeFreehand: (onLine) => {
+        knifeStartCommon();
+        knOnChange = onLine;
+        map.dragging.disable();
+        map.on("mousedown", knDown);
+      },
+      knifePointMode: (onChange) => {
+        knifeStartCommon();
+        knOnChange = onChange;
+        map.on("click", knClick);
+      },
+      knifeStop: () => knStop(),
       stopModes: () => {
         disableFreehand();
+        knStop();
         map.pm.disableDraw();
         map.pm.disableGlobalEditMode();
         map.pm.disableGlobalDragMode();

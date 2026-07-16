@@ -25,6 +25,12 @@ export interface MapHandle {
   eraseMode: () => void;
   /** Toggle freehand pencil drawing (drag to sketch a polygon). */
   freehand: () => void;
+  /** Knife: freehand-drag a cut line; `onLine` fires once on release. */
+  knifeFreehand: (onLine: (line: [number, number][]) => void) => void;
+  /** Knife: click to add cut-line points; `onChange` fires per click. */
+  knifePointMode: (onChange: (line: [number, number][]) => void) => void;
+  /** Exit any knife mode and clear the temp cut line. */
+  knifeStop: () => void;
   stopModes: () => void;
   clearDrawn: () => void;
 }
