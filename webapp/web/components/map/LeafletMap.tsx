@@ -35,6 +35,7 @@ export default function LeafletMap() {
   const genResult = useAppStore((s) => s.genResult);
   const treeGrid = useAppStore((s) => s.treeGrid);
   const triad = useAppStore((s) => s.triad);
+  const triadHexes = useAppStore((s) => s.triadHexes);
   const terraceResult = useAppStore((s) => s.terraceResult);
   const terraceCorners = useAppStore((s) => s.terraceCorners);
   const setHandle = useMapBridge((s) => s.setHandle);
@@ -139,6 +140,55 @@ export default function LeafletMap() {
       useAppStore.getState().setDrawnGeometry(null);
     });
 
+    // ---- freehand pencil: drag to sketch a polygon → becomes the drawn shape ----
+    let fhActive = false;
+    let fhPts: L.LatLng[] = [];
+    let fhTemp: L.Polyline | null = null;
+    const fhMove = (e: L.LeafletMouseEvent) => {
+      fhPts.push(e.latlng);
+      fhTemp?.setLatLngs(fhPts);
+    };
+    const fhUp = () => {
+      map.off("mousemove", fhMove);
+      map.off("mouseup", fhUp);
+      if (fhTemp) { map.removeLayer(fhTemp); fhTemp = null; }
+      if (fhPts.length >= 3) {
+        if (drawnRef.layer) drawnGroup.removeLayer(drawnRef.layer);
+        const poly = L.polygon(fhPts, { color: ACCENT, weight: 2, fillOpacity: 0.1 });
+        drawnGroup.addLayer(poly);
+        drawnRef.layer = poly;
+        poly.on("pm:edit pm:dragend", syncDrawn);
+        syncDrawn();
+      }
+      fhPts = [];
+    };
+    const fhDown = (e: L.LeafletMouseEvent) => {
+      fhPts = [e.latlng];
+      fhTemp = L.polyline(fhPts, { color: ACCENT, weight: 2, dashArray: "4 3" }).addTo(map);
+      map.on("mousemove", fhMove);
+      map.on("mouseup", fhUp);
+    };
+    const disableFreehand = () => {
+      if (!fhActive) return;
+      fhActive = false;
+      map.dragging.enable();
+      L.DomUtil.removeClass(map.getContainer(), "picking");
+      map.off("mousedown", fhDown);
+      map.off("mousemove", fhMove);
+      map.off("mouseup", fhUp);
+      if (fhTemp) { map.removeLayer(fhTemp); fhTemp = null; }
+    };
+    const enableFreehand = () => {
+      fhActive = true;
+      map.pm.disableDraw();
+      map.pm.disableGlobalEditMode();
+      map.pm.disableGlobalDragMode();
+      map.pm.disableGlobalRemovalMode();
+      map.dragging.disable();
+      L.DomUtil.addClass(map.getContainer(), "picking");
+      map.on("mousedown", fhDown);
+    };
+
     // Register the imperative command handle for panels.
     setHandle({
       flyTo: (lat, lon, z) => map.flyTo([lat, lon], z ?? Math.max(map.getZoom(), 18)),
@@ -167,15 +217,18 @@ export default function LeafletMap() {
         L.DomUtil.addClass(map.getContainer(), "picking");
       },
       draw: (shape) => {
+        disableFreehand();
         map.pm.disableGlobalEditMode();
         map.pm.disableGlobalDragMode();
         map.pm.disableGlobalRemovalMode();
         map.pm.enableDraw(shape, { pathOptions: { color: ACCENT, weight: 2, fillOpacity: 0.1 } });
       },
-      editMode: () => map.pm.toggleGlobalEditMode(),
-      dragMode: () => map.pm.toggleGlobalDragMode(),
-      eraseMode: () => map.pm.toggleGlobalRemovalMode(),
+      editMode: () => { disableFreehand(); map.pm.toggleGlobalEditMode(); },
+      dragMode: () => { disableFreehand(); map.pm.toggleGlobalDragMode(); },
+      eraseMode: () => { disableFreehand(); map.pm.toggleGlobalRemovalMode(); },
+      freehand: () => { if (fhActive) disableFreehand(); else enableFreehand(); },
       stopModes: () => {
+        disableFreehand();
         map.pm.disableDraw();
         map.pm.disableGlobalEditMode();
         map.pm.disableGlobalDragMode();
@@ -357,7 +410,14 @@ export default function LeafletMap() {
         if (id) layer.bindTooltip(id, { permanent: false, direction: "center", className: "ref-tip" });
       },
     }).addTo(grp);
-  }, [triad]);
+    // Hexagon outlines on top — bold stroke so the hex pattern reads.
+    if (triadHexes) {
+      L.geoJSON(triadHexes as never, {
+        style: { color: "#ffffff", weight: 1.6, opacity: 0.9, fill: false },
+        interactive: false,
+      }).addTo(grp);
+    }
+  }, [triad, triadHexes]);
 
   // ---- tree grid points ----
   useEffect(() => {

@@ -17,6 +17,7 @@ export function TriadPanel() {
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const triad = useAppStore((s) => s.triad);
   const setTriad = useAppStore((s) => s.setTriad);
+  const setTriadHexes = useAppStore((s) => s.setTriadHexes);
 
   const [sideLength, setSideLength] = useState(5);
   const [rotationDeg, setRotationDeg] = useState(0);
@@ -27,10 +28,11 @@ export function TriadPanel() {
 
   const generate = () => {
     if (!source) return setErr("Draw a shape or set a working polygon first.");
-    const fc = generateTriads(source, { sideLength, rotationDeg });
-    if (!fc.features.length) return setErr("No triangles fit — check side length / polygon.");
+    const { triads, hexagons } = generateTriads(source, { sideLength, rotationDeg });
+    if (!triads.features.length) return setErr("No triangles fit — check side length / polygon.");
     setErr("");
-    setTriad(fc);
+    setTriad(triads);
+    setTriadHexes(hexagons);
   };
 
   const download = () => {
@@ -66,7 +68,7 @@ export function TriadPanel() {
         {count > 0 && (
           <>
             <Button size="sm" variant="secondary" onClick={download}>GeoJSON</Button>
-            <Button size="sm" variant="secondary" onClick={() => setTriad(null)}>Clear</Button>
+            <Button size="sm" variant="secondary" onClick={() => { setTriad(null); setTriadHexes(null); }}>Clear</Button>
           </>
         )}
       </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  MousePointer2, Hexagon, Square, Spline, Move, Eraser, Trash2,
+  MousePointer2, Hexagon, Square, Spline, Move, Eraser, Trash2, PencilLine,
   Mountain, Sun, Layers, Ruler, Compass, type LucideIcon,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
@@ -19,6 +19,7 @@ interface Tool {
 
 const TOOLS_2D: Tool[] = [
   { id: "select", label: "Select / pan", icon: MousePointer2, run: (h) => h.stopModes() },
+  { id: "pencil", label: "Freehand pencil", icon: PencilLine, run: (h) => h.freehand() },
   { id: "polygon", label: "Draw polygon", icon: Hexagon, run: (h) => h.draw("Polygon") },
   { id: "rect", label: "Draw rectangle", icon: Square, run: (h) => h.draw("Rectangle") },
   { id: "edit", label: "Edit vertices", icon: Spline, run: (h) => h.editMode() },

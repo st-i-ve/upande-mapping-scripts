@@ -23,6 +23,8 @@ export interface MapHandle {
   editMode: () => void;
   dragMode: () => void;
   eraseMode: () => void;
+  /** Toggle freehand pencil drawing (drag to sketch a polygon). */
+  freehand: () => void;
   stopModes: () => void;
   clearDrawn: () => void;
 }

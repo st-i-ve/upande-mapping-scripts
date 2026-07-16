@@ -30,6 +30,19 @@ export interface TriadProps {
   [k: string]: unknown;
 }
 
+export interface HexProps {
+  id: string; // "H{hex}"
+  hex: number;
+  [k: string]: unknown;
+}
+
+export interface TriadResult {
+  /** The individual triangle units. */
+  triads: FeatureCollection<TriadProps>;
+  /** The hexagon outlines (each = 6 triads), clipped to the polygon. */
+  hexagons: FeatureCollection<HexProps>;
+}
+
 function outerRing(geom: GeoGeometry): [number, number][] | null {
   const c = geom.coordinates as unknown;
   if (geom.type === "Polygon") return (c as [number, number][][])[0] ?? null;
@@ -40,8 +53,11 @@ function outerRing(geom: GeoGeometry): [number, number][] | null {
 export function generateTriads(
   poly: GeoGeometry,
   { sideLength: s, rotationDeg = 0 }: TriadOptions,
-): FeatureCollection<TriadProps> {
-  const empty: FeatureCollection<TriadProps> = { type: "FeatureCollection", features: [] };
+): TriadResult {
+  const empty: TriadResult = {
+    triads: { type: "FeatureCollection", features: [] },
+    hexagons: { type: "FeatureCollection", features: [] },
+  };
   const ring = outerRing(poly);
   if (!ring || ring.length < 4 || s <= 0) return empty;
 
@@ -88,36 +104,38 @@ export function generateTriads(
   const angles = [0, 1, 2, 3, 4, 5].map((k) => ((30 + 60 * k) * Math.PI) / 180);
 
   const features: GeoFeature<TriadProps>[] = [];
+  const hexFeatures: GeoFeature<HexProps>[] = [];
   let hexNum = 0;
   let rowNum = 0;
 
+  const clipToPoly = (ringLonLat: [number, number][]) => {
+    const f = turfPolygon([[...ringLonLat, ringLonLat[0]]]);
+    try {
+      const c = intersect(featureCollection([f, polyFeat])) as Feature<Polygon | MultiPolygon> | null;
+      return c && area(c) > 1e-6 ? { geom: c.geometry as unknown as GeoGeometry, full: area(c) >= area(f) * 0.999 } : null;
+    } catch {
+      return null;
+    }
+  };
+
   // Iterate top→bottom (rotated-y high→low), left→right.
   for (let y = maxY + rowStep; y >= minY - rowStep; y -= rowStep) {
+    if (features.length >= MAX_TRIANGLES) break;
     rowNum++;
     const xOff = rowNum % 2 === 0 ? colStep / 2 : 0; // offset alternate rows
     for (let x = minX - colStep + xOff; x <= maxX + colStep; x += colStep) {
       const verts = angles.map(
         (a): [number, number] => [x + R * Math.cos(a), y + R * Math.sin(a)],
       );
+      const toWgs = ([lx, ly]: [number, number]): [number, number] => {
+        const [rx, ry] = rot(lx, ly);
+        return toLonLat(rx, ry);
+      };
       const kept: { geom: GeoGeometry; full: boolean; tri: number }[] = [];
       for (let k = 0; k < 6; k++) {
         const triLocal: [number, number][] = [[x, y], verts[k], verts[(k + 1) % 6]];
-        const lonlat = triLocal.map(([lx, ly]) => {
-          const [rx, ry] = rot(lx, ly);
-          return toLonLat(rx, ry);
-        });
-        const triFeat = turfPolygon([[...lonlat, lonlat[0]]]);
-        let clipped: Feature<Polygon | MultiPolygon> | null = null;
-        try {
-          clipped = intersect(featureCollection([triFeat, polyFeat])) as Feature<Polygon | MultiPolygon> | null;
-        } catch {
-          clipped = null;
-        }
-        if (!clipped) continue;
-        const clipArea = area(clipped);
-        if (clipArea < 1e-6) continue;
-        const full = clipArea >= area(triFeat) * 0.999;
-        kept.push({ geom: clipped.geometry as unknown as GeoGeometry, full, tri: k + 1 });
+        const clip = clipToPoly(triLocal.map(toWgs));
+        if (clip) kept.push({ geom: clip.geom, full: clip.full, tri: k + 1 });
       }
       if (!kept.length) continue;
       hexNum++;
@@ -125,18 +143,23 @@ export function generateTriads(
         features.push({
           type: "Feature",
           geometry: t.geom,
-          properties: {
-            id: `H${hexNum}-${t.tri}`,
-            hex: hexNum,
-            tri: t.tri,
-            row: rowNum,
-            kind: t.full ? "full" : "edge",
-          },
+          properties: { id: `H${hexNum}-${t.tri}`, hex: hexNum, tri: t.tri, row: rowNum, kind: t.full ? "full" : "edge" },
         });
       }
-      if (features.length >= MAX_TRIANGLES) return { type: "FeatureCollection", features };
+      const hexClip = clipToPoly(verts.map(toWgs));
+      if (hexClip) {
+        hexFeatures.push({
+          type: "Feature",
+          geometry: hexClip.geom,
+          properties: { id: `H${hexNum}`, hex: hexNum },
+        });
+      }
+      if (features.length >= MAX_TRIANGLES) break;
     }
   }
 
-  return { type: "FeatureCollection", features };
+  return {
+    triads: { type: "FeatureCollection", features },
+    hexagons: { type: "FeatureCollection", features: hexFeatures },
+  };
 }
