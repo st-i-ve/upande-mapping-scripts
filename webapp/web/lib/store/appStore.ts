@@ -70,6 +70,10 @@ export interface AppState {
   treeGrid: TreePoint[];
   setTreeGrid: (pts: TreePoint[]) => void;
 
+  // ---- triad (equilateral triangle tessellation) ----
+  triad: FeatureCollection | null;
+  setTriad: (fc: FeatureCollection | null) => void;
+
   // ---- terrace mode ----
   terraceStartEdge: number | null;
   terraceGrouping: string;
@@ -127,6 +131,9 @@ export const useAppStore = create<AppState>()(
 
       treeGrid: [],
       setTreeGrid: (treeGrid) => set({ treeGrid }),
+
+      triad: null,
+      setTriad: (triad) => set({ triad }),
 
       terraceStartEdge: null,
       terraceGrouping: "",

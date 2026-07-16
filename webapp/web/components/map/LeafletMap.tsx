@@ -34,6 +34,7 @@ export default function LeafletMap() {
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const genResult = useAppStore((s) => s.genResult);
   const treeGrid = useAppStore((s) => s.treeGrid);
+  const triad = useAppStore((s) => s.triad);
   const terraceResult = useAppStore((s) => s.terraceResult);
   const terraceCorners = useAppStore((s) => s.terraceCorners);
   const setHandle = useMapBridge((s) => s.setHandle);
@@ -44,6 +45,7 @@ export default function LeafletMap() {
   const workingLayerRef = useRef<L.LayerGroup | null>(null);
   const genLayerRef = useRef<L.LayerGroup | null>(null);
   const treeLayerRef = useRef<L.LayerGroup | null>(null);
+  const triadLayerRef = useRef<L.LayerGroup | null>(null);
   const terraceLayerRef = useRef<L.LayerGroup | null>(null);
   const cornerLayerRef = useRef<L.LayerGroup | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
@@ -74,6 +76,7 @@ export default function LeafletMap() {
     terraceLayerRef.current = L.layerGroup().addTo(map);
     cornerLayerRef.current = L.layerGroup().addTo(map);
     genLayerRef.current = L.layerGroup().addTo(map);
+    triadLayerRef.current = L.layerGroup().addTo(map);
     treeLayerRef.current = L.layerGroup().addTo(map);
     refLayerRef.current = L.layerGroup().addTo(map);
 
@@ -330,6 +333,29 @@ export default function LeafletMap() {
       }
     }
   }, [terraceResult, terraceCorners]);
+
+  // ---- triad tessellation ----
+  useEffect(() => {
+    const grp = triadLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    if (!triad) return;
+    L.geoJSON(triad as never, {
+      style: (feature) => {
+        const edge = (feature?.properties as { kind?: string })?.kind === "edge";
+        return {
+          color: "#e5e5e5",
+          weight: 1,
+          fillColor: edge ? "#8a8a8a" : "#c4c4c4",
+          fillOpacity: edge ? 0.18 : 0.28,
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        const id = (feature.properties as { id?: string })?.id;
+        if (id) layer.bindTooltip(id, { permanent: false, direction: "center", className: "ref-tip" });
+      },
+    }).addTo(grp);
+  }, [triad]);
 
   // ---- tree grid points ----
   useEffect(() => {
