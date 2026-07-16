@@ -12,7 +12,7 @@ export interface SectionCardProps {
 /** A Field-Console panel section: bordered card, mono index chip, uppercase label. */
 export function SectionCard({ title, index, meta, children }: SectionCardProps) {
   return (
-    <section className="rounded-lg border border-border bg-card/70 p-3.5 shadow-sm backdrop-blur-[2px]">
+    <section className="rounded-[18px] border border-border bg-card p-4 shadow-[var(--shadow-card)] transition-shadow duration-200 hover:shadow-[var(--shadow-hover)]">
       <div className="mb-2.5 flex items-center gap-2">
         {index && (
           <span className="tabular inline-flex h-4 min-w-5 items-center justify-center rounded border border-border bg-secondary px-1 text-[8px] leading-none text-primary/90">
