@@ -48,12 +48,16 @@ Minor niceties still open (non-blocking): draw-time boolean ops in the shape
 builder, custom rotate/scale/snap handles, native 3D DOM removal (currently a
 hidden control host).
 
-## Root cutover — READY
+## Root cutover — DONE ✅ (2026-07-16)
 
-The Next app matches the vanilla app. To flip production root, follow the
-"Cutover" steps below (rebuild without `NEXT_BASE_PATH`, swap nginx). Rollback
-is a one-line nginx revert (`/` → `127.0.0.1:8765`), since FastAPI + the vanilla
-frontend keep running on 8765.
+The Next app is now live at **`https://mapping.132.145.21.55.nip.io/`**. nginx:
+`/` → Next (:3100), `/api` + `/tiles` → FastAPI (:8765). Built at root (no
+`NEXT_BASE_PATH`); `mapping-next.service` updated accordingly. The vanilla
+frontend + FastAPI keep running on 8765.
+
+**Rollback:** point the nginx `/` block's `proxy_pass` back at
+`127.0.0.1:8765` and `nginx -s reload`. (nginx pre-cutover config backed up at
+`/etc/nginx/sites-available/mapping.bak.precutover`.)
 
 ## Cutover (when parity is confirmed)
 

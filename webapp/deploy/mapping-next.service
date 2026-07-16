@@ -1,9 +1,7 @@
-# Upande Mapper — Next.js frontend service.
+# Upande Mapper — Next.js frontend service (PRODUCTION, root cutover done).
 #
-# PREVIEW MODE (current): served under nginx /next via NEXT_BASE_PATH=/next,
-# so the live vanilla app stays at "/". For the ROOT cutover, remove the
-# NEXT_BASE_PATH line and rebuild (`npm run build` without it), then point
-# nginx "/" at this service (see deploy/nginx.mapping.conf).
+# Serves the Next app at "/" (no base path). nginx routes "/" here and
+# "/api" + "/tiles" to FastAPI (see deploy/nginx.mapping.conf).
 #
 # Install:
 #   sudo cp deploy/mapping-next.service /etc/systemd/system/
@@ -17,7 +15,6 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/stive/code/mapping-script/upande-mapping-scripts/webapp/web
 Environment=NODE_ENV=production
-Environment=NEXT_BASE_PATH=/next
 Environment=PORT=3100
 # Node path is machine-specific (here: nvm). Adjust to `which node` on the host.
 ExecStart=/home/ubuntu/.nvm/versions/node/v24.14.1/bin/node node_modules/next/dist/bin/next start -p 3100 -H 127.0.0.1
