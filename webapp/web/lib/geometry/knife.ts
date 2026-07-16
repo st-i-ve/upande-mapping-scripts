@@ -36,3 +36,15 @@ export function cutPolygon(
     return null;
   }
 }
+
+/** Split a Polygon/MultiPolygon into separate Polygon geometries (one per part). */
+export function explodePolygons(geom: GeoGeometry): GeoGeometry[] {
+  if (geom.type === "Polygon") return [geom];
+  if (geom.type === "MultiPolygon") {
+    return (geom.coordinates as unknown as number[][][][]).map((coords) => ({
+      type: "Polygon",
+      coordinates: coords,
+    }));
+  }
+  return [];
+}

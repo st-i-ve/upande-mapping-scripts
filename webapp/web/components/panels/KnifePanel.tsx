@@ -8,12 +8,14 @@ import { useHydrated } from "@/lib/hooks/useHydrated";
 import { SectionCard } from "@/components/console/SectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cutPolygon } from "@/lib/geometry/knife";
+import { cutPolygon, explodePolygons } from "@/lib/geometry/knife";
 
 export function KnifePanel() {
   const hydrated = useHydrated();
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const setWorkingPolygon = useAppStore((s) => s.setWorkingPolygon);
+  const savedShapes = useAppStore((s) => s.savedShapes);
+  const addSavedShape = useAppStore((s) => s.addSavedShape);
   const handle = useMapBridge((s) => s.handle);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
 
@@ -21,6 +23,7 @@ export function KnifePanel() {
   const [pts, setPts] = useState<[number, number][]>([]);
   const [picking, setPicking] = useState(false);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
 
   const hasPoly = hydrated && !!workingPolygon;
 
@@ -29,12 +32,17 @@ export function KnifePanel() {
     if (line.length < 2) return setErr("Draw or pick at least 2 points for the cut.");
     const res = cutPolygon(workingPolygon, line, width);
     if (!res) return setErr("Cut failed — check the line crosses the polygon.");
-    setWorkingPolygon(res);
+    // Divide into separate polygons — each cut piece becomes its own shape.
+    const pieces = explodePolygons(res);
+    const base = savedShapes.length;
+    pieces.forEach((g, i) => addSavedShape(`Cut ${base + i + 1}`, g));
+    setWorkingPolygon(pieces[0] ?? res); // working polygon = first piece (a single polygon)
     fitGeometry?.(res);
     handle?.knifeStop();
     setPts([]);
     setPicking(false);
     setErr("");
+    setNote(`Divided into ${pieces.length} shape(s) → Saved shapes.`);
   };
 
   const drawCut = () => {
@@ -81,6 +89,7 @@ export function KnifePanel() {
       )}
 
       {err && <p className="mt-1.5 text-[9px] text-destructive">{err}</p>}
+      {note && !err && <p className="mt-1.5 text-[9px] text-primary/80">{note}</p>}
       {!hasPoly && <p className="mt-1.5 text-[9px] text-muted-foreground/60">Set a working polygon first (Parameters or a saved shape).</p>}
     </SectionCard>
   );
