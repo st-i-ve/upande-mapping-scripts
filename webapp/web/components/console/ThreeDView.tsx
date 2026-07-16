@@ -14,10 +14,13 @@ export function ThreeDView() {
   const ref = useRef<HTMLIFrameElement>(null);
   const setWin = useThreeD((s) => s.setWin);
   const setReady = useThreeD((s) => s.setReady);
+  const setStatus = useThreeD((s) => s.setStatus);
 
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
-      if (e.data?.__mapper3d === "ready") setReady(true);
+      const d = e.data;
+      if (d?.__mapper3d === "ready") setReady(true);
+      else if (d?.__mapper3d === "status") setStatus(d.id, d.text);
     };
     window.addEventListener("message", onMsg);
     return () => {
@@ -25,7 +28,7 @@ export function ThreeDView() {
       setWin(null);
       setReady(false);
     };
-  }, [setWin, setReady]);
+  }, [setWin, setReady, setStatus]);
 
   return (
     <iframe

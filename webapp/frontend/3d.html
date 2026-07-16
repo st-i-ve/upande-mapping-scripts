@@ -33,7 +33,16 @@
     #panel button:hover { background: #f3f4f6; }
     #status { margin-top: 6px; color: #6b7280; font-size: 11px; }
     .hint { color: #6b7280; font-size: 11px; }
+    /* When embedded in the mapper console, the on-canvas panel is hidden
+       (controls live in the React sidebar). Applied before first paint. */
+    .embedded #panel { display: none !important; }
   </style>
+  <script>
+    // Runs before <body> paints — no flicker of the panel on load.
+    if (window.parent && window.parent !== window) {
+      document.documentElement.classList.add("embedded");
+    }
+  </script>
 </head>
 <body>
   <div id="panel">
@@ -1724,6 +1733,17 @@
         const nudge = () => { try { map.resize(); } catch (e) {} };
         [150, 450, 1000].forEach((t) => setTimeout(nudge, t));
         window.addEventListener("resize", nudge);
+        // Relay status/feedback readouts to the parent sidebar.
+        const relay = (id) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const send = () => {
+            try { window.parent.postMessage({ __mapper3d: "status", id, text: el.textContent || "" }, "*"); } catch (e) {}
+          };
+          new MutationObserver(send).observe(el, { childList: true, characterData: true, subtree: true });
+          send();
+        };
+        ["treesStatus", "blocksStatus", "valvesStatus", "pathStatus", "status", "fps"].forEach(relay);
         try { window.parent.postMessage({ __mapper3d: "ready" }, "*"); } catch (e) {}
       }
       window.addEventListener("message", (ev) => {
@@ -1750,6 +1770,17 @@
               for (const f of fs) feats.push(f);
             }
             if (feats.length && typeof buildTrees === "function") buildTrees(feats);
+          } else if (m.kind === "valves") {
+            const feats = [];
+            for (const txt of [].concat(m.text || [])) {
+              const gj = JSON.parse(txt);
+              for (const p of extractPointFeatures(gj)) feats.push(p);
+            }
+            if (feats.length && typeof buildValves === "function") {
+              lastValveFeatures = feats;
+              buildValves(feats);
+              flyToValves();
+            }
           }
         } catch (e) { /* ignore malformed control messages */ }
       });

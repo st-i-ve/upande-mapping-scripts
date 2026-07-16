@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Box, Trees, Grid2x2, Plane } from "lucide-react";
+import { Box, Trees, Grid2x2, Plane, PencilLine, Droplets } from "lucide-react";
 import { useThreeD } from "@/lib/map/threeDBridge";
 import { SectionCard } from "./SectionCard";
 import { Button } from "@/components/ui/button";
@@ -14,12 +14,14 @@ function num(v: number | readonly number[]) {
 }
 
 /** Sidebar toolset for the 3D view — drives the (hidden) legacy-3d.html
- *  controls over the postMessage bridge. */
+ *  controls over the postMessage bridge. 1:1 with the on-canvas panel. */
 export function ThreeDToolset() {
   const ready = useThreeD((s) => s.ready);
   const set = useThreeD((s) => s.set);
   const click = useThreeD((s) => s.click);
   const loadTrees = useThreeD((s) => s.loadTrees);
+  const loadValves = useThreeD((s) => s.loadValves);
+  const status = useThreeD((s) => s.status);
 
   const [pitch, setPitch] = useState(60);
   const [opacity, setOpacity] = useState(100);
@@ -27,26 +29,21 @@ export function ThreeDToolset() {
   const [terrain, setTerrain] = useState(false);
   const [topDown, setTopDown] = useState(false);
   const [rowArrows, setRowArrows] = useState(false);
+  const [pencil, setPencil] = useState(false);
 
-  const onFiles = async (files: FileList | null) => {
-    if (!files?.length) return;
-    const texts = await Promise.all(Array.from(files).map((f) => f.text()));
-    loadTrees(texts);
-  };
+  const readFiles = (files: FileList | null, sink: (t: string[]) => void) =>
+    files?.length && Promise.all(Array.from(files).map((f) => f.text())).then(sink);
 
   const dim = ready ? "" : "pointer-events-none opacity-50";
 
   return (
     <div className={`space-y-3 ${dim}`}>
-      {!ready && (
-        <p className="text-[9px] text-muted-foreground/70">Loading 3D view…</p>
-      )}
+      {!ready && <p className="text-[9px] text-muted-foreground/70">Loading 3D view…</p>}
 
       <SectionCard title={<span className="inline-flex items-center gap-1.5"><Box size={12} /> View</span>} index="3D">
         <Button size="sm" variant="secondary" className="w-full" onClick={() => click("flyToLokitela")}>
           <Plane size={13} /> Fly to Lokitela
         </Button>
-
         <div className="mt-3 space-y-2.5">
           <Labeled label="Camera pitch" value={`${pitch}°`}>
             <Slider value={[pitch]} min={0} max={85} step={1} onValueChange={(v) => { setPitch(num(v)); set("pitch", num(v)); }} />
@@ -58,18 +55,18 @@ export function ThreeDToolset() {
             <Slider value={[exag]} min={1} max={5} step={0.1} onValueChange={(v) => { setExag(num(v)); set("exag", num(v)); }} />
           </Labeled>
         </div>
-
         <div className="mt-3 space-y-1.5">
           <ToggleRow label="Terrain (AWS)" checked={terrain} onChange={(c) => { setTerrain(c); set("terrainToggle", c); }} />
           <ToggleRow label="Top-down view" checked={topDown} onChange={(c) => { setTopDown(c); set("topDownToggle", c); }} />
           <ToggleRow label="Row arrows" checked={rowArrows} onChange={(c) => { setRowArrows(c); set("rowArrowsToggle", c); }} />
         </div>
+        <StatusLine text={status.fps || status.status} />
       </SectionCard>
 
       <SectionCard title={<span className="inline-flex items-center gap-1.5"><Trees size={12} /> Trees</span>} index="3T">
         <label className="block text-[9px] text-muted-foreground">
           Load tree GeoJSON
-          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-8 text-[9px]" onChange={(e) => onFiles(e.target.files)} />
+          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-8 text-[9px]" onChange={(e) => readFiles(e.target.files, loadTrees)} />
         </label>
         <div className="mt-2 grid grid-cols-3 gap-2">
           <NumField label="Trunk (m)" id="trunkH" def={1.5} set={set} />
@@ -82,6 +79,32 @@ export function ThreeDToolset() {
           <Button size="sm" variant="secondary" onClick={() => click("flyToTrees")}>Fly to</Button>
           <Button size="sm" variant="secondary" onClick={() => click("clearTrees")}>Clear</Button>
         </div>
+        <StatusLine text={status.treesStatus} />
+      </SectionCard>
+
+      <SectionCard title={<span className="inline-flex items-center gap-1.5"><PencilLine size={12} /> Scouting path</span>} index="3P">
+        <div className="grid grid-cols-3 gap-1.5">
+          <Button size="sm" variant={pencil ? "default" : "secondary"} onClick={() => { setPencil((p) => !p); click("pencilToggle"); }}>Pencil</Button>
+          <Button size="sm" variant="secondary" onClick={() => click("pathSnap")}>Snap</Button>
+          <Button size="sm" variant="secondary" onClick={() => click("pathClear")}>Clear</Button>
+        </div>
+        <div className="mt-2">
+          <NumField label="Snap radius (m)" id="snapRadius" def={3} step={0.5} set={set} />
+        </div>
+        <StatusLine text={status.pathStatus} />
+      </SectionCard>
+
+      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Droplets size={12} /> Valves</span>} index="3V">
+        <label className="block text-[9px] text-muted-foreground">
+          Load valve GeoJSON (points)
+          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-8 text-[9px]" onChange={(e) => readFiles(e.target.files, loadValves)} />
+        </label>
+        <div className="mt-2 grid grid-cols-3 gap-1.5">
+          <Button size="sm" variant="secondary" onClick={() => click("previewValves")}>Preview</Button>
+          <Button size="sm" variant="secondary" onClick={() => click("flyToValves")}>Fly to</Button>
+          <Button size="sm" variant="secondary" onClick={() => click("clearValves")}>Clear</Button>
+        </div>
+        <StatusLine text={status.valvesStatus} />
       </SectionCard>
 
       <SectionCard title={<span className="inline-flex items-center gap-1.5"><Grid2x2 size={12} /> Blocks</span>} index="3B">
@@ -99,9 +122,15 @@ export function ThreeDToolset() {
           <Button size="sm" variant="secondary" onClick={() => click("exportBlocks")}>Export all</Button>
           <Button size="sm" variant="secondary" onClick={() => click("exportBlocksEach")}>Export each</Button>
         </div>
+        <StatusLine text={status.blocksStatus} />
       </SectionCard>
     </div>
   );
+}
+
+function StatusLine({ text }: { text?: string }) {
+  if (!text) return null;
+  return <p className="tabular mt-2 text-[9px] text-primary/80">{text}</p>;
 }
 
 function Labeled({ label, value, children }: { label: string; value: string; children: React.ReactNode }) {
@@ -125,11 +154,11 @@ function ToggleRow({ label, checked, onChange }: { label: string; checked: boole
   );
 }
 
-function NumField({ label, id, def, set }: { label: string; id: string; def: number; set: (id: string, v: number) => void }) {
+function NumField({ label, id, def, step = 0.1, set }: { label: string; id: string; def: number; step?: number; set: (id: string, v: number) => void }) {
   return (
     <label className="block text-[9px] text-muted-foreground">
       {label}
-      <Input type="number" step={0.1} defaultValue={def} className="mt-1 h-8 tabular" onChange={(e) => set(id, +e.target.value)} />
+      <Input type="number" step={step} defaultValue={def} className="mt-1 h-8 tabular" onChange={(e) => set(id, +e.target.value)} />
     </label>
   );
 }
