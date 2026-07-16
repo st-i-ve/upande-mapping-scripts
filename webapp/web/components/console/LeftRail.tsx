@@ -49,7 +49,7 @@ export function LeftRail() {
           <span
             key={t.id}
             title={`${t.label} (in 3D canvas)`}
-            className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground/50"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground/50"
           >
             <t.icon size={17} />
           </span>
@@ -72,7 +72,7 @@ export function LeftRail() {
           title={t.label}
           aria-pressed={active === t.id}
           disabled={!handle}
-          className={`flex h-9 w-9 items-center justify-center rounded-md transition-colors disabled:opacity-40 ${
+          className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${
             active === t.id && !t.momentary
               ? "bg-primary/15 text-primary ring-1 ring-primary/40"
               : "text-muted-foreground hover:bg-primary/10 hover:text-primary"

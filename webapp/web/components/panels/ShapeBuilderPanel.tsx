@@ -16,7 +16,7 @@ function Tool({ label, onClick, disabled, children }: { label: string; onClick?:
       aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className="flex h-9 items-center justify-center rounded-md border border-border bg-secondary/40 text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10 disabled:opacity-40"
+      className="flex h-9 items-center justify-center rounded-full border border-border bg-secondary/40 text-foreground transition-colors hover:border-primary/50 hover:bg-primary/10 disabled:opacity-40"
     >
       {children}
     </button>
