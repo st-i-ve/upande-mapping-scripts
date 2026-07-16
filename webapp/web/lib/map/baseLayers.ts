@@ -5,10 +5,48 @@
  * (nginx routes /tiles → uvicorn), so they stay absolute — not base-path'd.
  */
 import L from "leaflet";
+import type { BasemapKeys } from "@/lib/types";
 
 export interface BaseLayerSet {
   baseLayers: Record<string, L.Layer>;
   defaultLayer: L.Layer;
+}
+
+/** Key-gated provider layers (Mapbox / MapTiler / Stadia). Built from the
+ *  in-app keys so they can be (re)added to the layer control reactively. */
+export function buildKeyedLayers(keys: BasemapKeys): Record<string, L.Layer> {
+  const keyed: Record<string, L.Layer> = {};
+  if (keys.mapbox) {
+    keyed["Mapbox Satellite"] = L.tileLayer(
+      `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${keys.mapbox}`,
+      { maxZoom: 22, tileSize: 512, zoomOffset: -1, attribution: "&copy; Mapbox" },
+    );
+    keyed["Mapbox Satellite Streets"] = L.tileLayer(
+      `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${keys.mapbox}`,
+      { maxZoom: 22, tileSize: 512, zoomOffset: -1, attribution: "&copy; Mapbox" },
+    );
+  }
+  if (keys.maptiler) {
+    keyed["MapTiler Satellite"] = L.tileLayer(
+      `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${keys.maptiler}`,
+      { maxZoom: 22, attribution: "&copy; MapTiler" },
+    );
+    keyed["MapTiler Hybrid"] = L.tileLayer(
+      `https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=${keys.maptiler}`,
+      { maxZoom: 22, attribution: "&copy; MapTiler" },
+    );
+  }
+  if (keys.stadia) {
+    keyed["Stadia Alidade Satellite"] = L.tileLayer(
+      `https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=${keys.stadia}`,
+      { maxZoom: 20, attribution: "&copy; Stadia Maps" },
+    );
+    keyed["Stadia Outdoors"] = L.tileLayer(
+      `https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=${keys.stadia}`,
+      { maxZoom: 20, attribution: "&copy; Stadia Maps" },
+    );
+  }
+  return keyed;
 }
 
 export function buildBaseLayers(): BaseLayerSet {
@@ -105,43 +143,6 @@ export function buildBaseLayers(): BaseLayerSet {
     { maxZoom: 9, attribution: `NASA GIBS VIIRS ${gibsDate}` },
   );
 
-  // Optional key-gated layers (localStorage, same keys as the vanilla app).
-  const keyed: Record<string, L.Layer> = {};
-  const ls = (k: string) => (typeof localStorage !== "undefined" ? localStorage.getItem(k) || "" : "");
-  const mapboxKey = ls("mapboxKey");
-  const maptilerKey = ls("maptilerKey");
-  const stadiaKey = ls("stadiaKey");
-  if (mapboxKey) {
-    keyed["Mapbox Satellite"] = L.tileLayer(
-      `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${mapboxKey}`,
-      { maxZoom: 22, tileSize: 512, zoomOffset: -1, attribution: "&copy; Mapbox" },
-    );
-    keyed["Mapbox Satellite Streets"] = L.tileLayer(
-      `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${mapboxKey}`,
-      { maxZoom: 22, tileSize: 512, zoomOffset: -1, attribution: "&copy; Mapbox" },
-    );
-  }
-  if (maptilerKey) {
-    keyed["MapTiler Satellite"] = L.tileLayer(
-      `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${maptilerKey}`,
-      { maxZoom: 22, attribution: "&copy; MapTiler" },
-    );
-    keyed["MapTiler Hybrid"] = L.tileLayer(
-      `https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=${maptilerKey}`,
-      { maxZoom: 22, attribution: "&copy; MapTiler" },
-    );
-  }
-  if (stadiaKey) {
-    keyed["Stadia Alidade Satellite"] = L.tileLayer(
-      `https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=${stadiaKey}`,
-      { maxZoom: 20, attribution: "&copy; Stadia Maps" },
-    );
-    keyed["Stadia Outdoors"] = L.tileLayer(
-      `https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=${stadiaKey}`,
-      { maxZoom: 20, attribution: "&copy; Stadia Maps" },
-    );
-  }
-
   const baseLayers: Record<string, L.Layer> = {
     "Google Satellite (latest)": googleSat,
     "Google Hybrid": googleHybrid,
@@ -161,7 +162,6 @@ export function buildBaseLayers(): BaseLayerSet {
     "Carto Dark": cartoDark,
     [`NASA VIIRS (${gibsDate})`]: nasaViirs,
     OSM: osm,
-    ...keyed,
   };
 
   return { baseLayers, defaultLayer: googleSat };

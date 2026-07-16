@@ -7,7 +7,7 @@ import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
-import { buildBaseLayers, addWayback } from "@/lib/map/baseLayers";
+import { buildBaseLayers, buildKeyedLayers, addWayback } from "@/lib/map/baseLayers";
 import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
@@ -38,10 +38,14 @@ export default function LeafletMap() {
   const setHandle = useMapBridge((s) => s.setHandle);
   const setPicking = useMapBridge((s) => s.setPicking);
 
+  const basemapKeys = useAppStore((s) => s.basemapKeys);
+
   const workingLayerRef = useRef<L.LayerGroup | null>(null);
   const genLayerRef = useRef<L.LayerGroup | null>(null);
   const treeLayerRef = useRef<L.LayerGroup | null>(null);
   const terraceLayerRef = useRef<L.LayerGroup | null>(null);
+  const layerControlRef = useRef<L.Control.Layers | null>(null);
+  const keyedRef = useRef<Record<string, L.Layer>>({});
 
   // ---- map bootstrap (once) ----
   useEffect(() => {
@@ -59,6 +63,7 @@ export default function LeafletMap() {
     const layerControl = L.control
       .layers(baseLayers, {}, { position: "topright", collapsed: true })
       .addTo(map);
+    layerControlRef.current = layerControl;
     addWayback(layerControl);
     L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
 
@@ -278,6 +283,20 @@ export default function LeafletMap() {
       },
     }).addTo(grp);
   }, [terraceResult]);
+
+  // ---- key-gated provider layers (Mapbox / MapTiler / Stadia) ----
+  useEffect(() => {
+    const map = mapRef.current;
+    const control = layerControlRef.current;
+    if (!map || !control) return;
+    for (const lyr of Object.values(keyedRef.current)) {
+      control.removeLayer(lyr);
+      if (map.hasLayer(lyr)) map.removeLayer(lyr);
+    }
+    const keyed = buildKeyedLayers(basemapKeys);
+    for (const [name, lyr] of Object.entries(keyed)) control.addBaseLayer(lyr, name);
+    keyedRef.current = keyed;
+  }, [basemapKeys]);
 
   // ---- tree grid points ----
   useEffect(() => {

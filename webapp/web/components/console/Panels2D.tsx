@@ -10,6 +10,7 @@ import { TerracePanel } from "@/components/panels/TerracePanel";
 import { GeneratePanel } from "@/components/panels/GeneratePanel";
 import { TreeGridPanel } from "@/components/panels/TreeGridPanel";
 import { OutputsPanel } from "@/components/panels/OutputsPanel";
+import { BasemapKeysPanel } from "@/components/panels/BasemapKeysPanel";
 
 function Reveal({ i, id, children }: { i: number; id?: string; children: ReactNode }) {
   return (
@@ -35,6 +36,7 @@ export function Panels2D() {
     ["sec-generate", <GeneratePanel key="gen" />],
     ["sec-grid", <TreeGridPanel key="grid" />],
     ["sec-outputs", <OutputsPanel key="out" />],
+    ["sec-keys", <BasemapKeysPanel key="keys" />],
   ] as const;
 
   return (
