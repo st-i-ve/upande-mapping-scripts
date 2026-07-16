@@ -21,6 +21,10 @@ export interface TreeGridOptions {
   majorEdge: "EW" | "NS";
   /** Rotate the grid lattice by this many degrees (around the AOI centre). */
   rotationDeg?: number;
+  /** Keep only points inside at least one of these polygons (if any). */
+  includes?: GeoGeometry[];
+  /** Drop points inside any of these polygons. */
+  excludes?: GeoGeometry[];
 }
 
 const M_PER_DEG_LAT = 111320;
@@ -54,11 +58,17 @@ function inRing(lon: number, lat: number, ring: [number, number][]): boolean {
  */
 export function generateTreeGrid(
   polygon: GeoGeometry,
-  { treeSpacing, rowSpacing, majorEdge, rotationDeg = 0 }: TreeGridOptions,
+  { treeSpacing, rowSpacing, majorEdge, rotationDeg = 0, includes = [], excludes = [] }: TreeGridOptions,
 ): { points: TreePoint[]; rows: number; cols: number } {
   const ring = outerRing(polygon);
   if (!ring || ring.length < 4 || treeSpacing <= 0 || rowSpacing <= 0)
     return { points: [], rows: 0, cols: 0 };
+
+  const excRings = excludes.map(outerRing).filter((r): r is [number, number][] => !!r);
+  const incRings = includes.map(outerRing).filter((r): r is [number, number][] => !!r);
+  const keep = (lon: number, lat: number) =>
+    !excRings.some((rg) => inRing(lon, lat, rg)) &&
+    (incRings.length === 0 || incRings.some((rg) => inRing(lon, lat, rg)));
 
   const lons = ring.map((p) => p[0]);
   const lats = ring.map((p) => p[1]);
@@ -110,7 +120,7 @@ export function generateTreeGrid(
     for (let rx = minX; rx <= maxX + 1e-6; rx += stepX, t++) {
       const [lx, ly] = rot(rx, ry, theta); // rotate back by +theta
       const [lon, lat] = toLonLat(lx, ly);
-      if (inRing(lon, lat, ring)) {
+      if (inRing(lon, lat, ring) && keep(lon, lat)) {
         points.push({ lat, lon, row: r + 1, tree: t + 1 });
         rowHad = true;
         cols = Math.max(cols, t + 1);

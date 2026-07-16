@@ -114,11 +114,18 @@ export function TerracePanel() {
 
       {err && <p className="mt-1.5 text-[9px] text-destructive">{err}</p>}
       {meta && (
-        <div className="tabular mt-2 rounded-md border border-border bg-secondary/40 px-2 py-1.5 text-[9px] text-muted-foreground">
-          edge <span className="text-primary">{startEdge}</span> · {meta.section_count} sections ·{" "}
-          <span className="text-primary">{meta.block_count}</span> blocks
-          {meta.block_count > 0 && <span className="ml-1 text-primary/80">→ feeds Generate</span>}
-        </div>
+        <>
+          <div className="tabular mt-2 rounded-md border border-border bg-secondary/40 px-2 py-1.5 text-[9px] text-muted-foreground">
+            edge <span className="text-primary">{startEdge}</span> · {meta.section_count} sections ·{" "}
+            <span className="text-primary">{meta.block_count}</span> blocks
+            {meta.block_count > 0 && <span className="ml-1 text-primary/80">→ feeds Generate</span>}
+          </div>
+          {meta.block_count > 0 && (
+            <p className="mt-1.5 text-[9px] text-muted-foreground/70">
+              Tip: click a block corner (◍) on the map to set that block&apos;s start corner.
+            </p>
+          )}
+        </>
       )}
     </SectionCard>
   );

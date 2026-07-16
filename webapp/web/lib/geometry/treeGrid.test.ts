@@ -35,6 +35,22 @@ describe("generateTreeGrid", () => {
     expect(b.points).not.toEqual(a.points); // rotated grid differs from axis-aligned
   });
 
+  it("drops points inside an exclude mask", () => {
+    const base = generateTreeGrid(square, { treeSpacing: 4, rowSpacing: 4, majorEdge: "EW" });
+    const excl: GeoGeometry = {
+      type: "Polygon",
+      coordinates: [[
+        [35.748, 0.0686],
+        [35.7481, 0.0686],
+        [35.7481, 0.0688],
+        [35.748, 0.0688],
+        [35.748, 0.0686],
+      ]],
+    };
+    const masked = generateTreeGrid(square, { treeSpacing: 4, rowSpacing: 4, majorEdge: "EW", excludes: [excl] });
+    expect(masked.points.length).toBeLessThan(base.points.length);
+  });
+
   it("returns nothing for invalid spacing", () => {
     expect(generateTreeGrid(square, { treeSpacing: 0, rowSpacing: 5, majorEdge: "EW" }).points).toHaveLength(0);
   });

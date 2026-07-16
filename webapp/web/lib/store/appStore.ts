@@ -74,9 +74,11 @@ export interface AppState {
   terraceStartEdge: number | null;
   terraceGrouping: string;
   terraceResult: TerraceResult | null;
+  terraceCorners: Record<string, "NW" | "NE" | "SW" | "SE">;
   setTerraceStartEdge: (idx: number | null) => void;
   setTerraceGrouping: (text: string) => void;
   setTerraceResult: (r: TerraceResult | null) => void;
+  setTerraceCorner: (blockId: string, corner: "NW" | "NE" | "SW" | "SE") => void;
   clearTerrace: () => void;
 
   // ---- reference-point actions ----
@@ -129,10 +131,13 @@ export const useAppStore = create<AppState>()(
       terraceStartEdge: null,
       terraceGrouping: "",
       terraceResult: null,
+      terraceCorners: {},
       setTerraceStartEdge: (terraceStartEdge) => set({ terraceStartEdge }),
       setTerraceGrouping: (terraceGrouping) => set({ terraceGrouping }),
-      setTerraceResult: (terraceResult) => set({ terraceResult }),
-      clearTerrace: () => set({ terraceStartEdge: null, terraceResult: null }),
+      setTerraceResult: (terraceResult) => set({ terraceResult, terraceCorners: {} }),
+      setTerraceCorner: (blockId, corner) =>
+        set((s) => ({ terraceCorners: { ...s.terraceCorners, [blockId]: corner } })),
+      clearTerrace: () => set({ terraceStartEdge: null, terraceResult: null, terraceCorners: {} }),
 
       addRefPoint: (p) =>
         set((s) => ({

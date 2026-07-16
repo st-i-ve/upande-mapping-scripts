@@ -55,6 +55,7 @@ export function GeneratePanel() {
   const genFilename = useAppStore((s) => s.genFilename);
   const setGenResult = useAppStore((s) => s.setGenResult);
   const terraceResult = useAppStore((s) => s.terraceResult);
+  const terraceCorners = useAppStore((s) => s.terraceCorners);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
 
   const [status, setStatus] = useState<Status>("idle");
@@ -80,7 +81,11 @@ export function GeneratePanel() {
       const blocks = terraceResult?.block_geojson;
       if (blocks && blocks.length) {
         body.custom_blocks = blocks;
-        body.block_start_corners = terraceResult?.metadata.block_start_corners ?? null;
+        const cornersMeta = (terraceResult?.metadata.block_corners ?? []) as Array<{ block_id: string }>;
+        const defaults = terraceResult?.metadata.block_start_corners ?? [];
+        body.block_start_corners = cornersMeta.length
+          ? cornersMeta.map((c, i) => terraceCorners[c.block_id] ?? defaults[i] ?? null)
+          : defaults;
       }
       const { result, filename } = await api.generate(body, controller.signal);
       setGenResult(result, filename);

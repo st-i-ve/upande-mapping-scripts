@@ -35,6 +35,7 @@ export default function LeafletMap() {
   const genResult = useAppStore((s) => s.genResult);
   const treeGrid = useAppStore((s) => s.treeGrid);
   const terraceResult = useAppStore((s) => s.terraceResult);
+  const terraceCorners = useAppStore((s) => s.terraceCorners);
   const setHandle = useMapBridge((s) => s.setHandle);
   const setPicking = useMapBridge((s) => s.setPicking);
 
@@ -44,6 +45,7 @@ export default function LeafletMap() {
   const genLayerRef = useRef<L.LayerGroup | null>(null);
   const treeLayerRef = useRef<L.LayerGroup | null>(null);
   const terraceLayerRef = useRef<L.LayerGroup | null>(null);
+  const cornerLayerRef = useRef<L.LayerGroup | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
   const keyedRef = useRef<Record<string, L.Layer>>({});
 
@@ -70,6 +72,7 @@ export default function LeafletMap() {
     shapeLayerRef.current = L.layerGroup().addTo(map);
     workingLayerRef.current = L.layerGroup().addTo(map);
     terraceLayerRef.current = L.layerGroup().addTo(map);
+    cornerLayerRef.current = L.layerGroup().addTo(map);
     genLayerRef.current = L.layerGroup().addTo(map);
     treeLayerRef.current = L.layerGroup().addTo(map);
     refLayerRef.current = L.layerGroup().addTo(map);
@@ -297,6 +300,36 @@ export default function LeafletMap() {
     for (const [name, lyr] of Object.entries(keyed)) control.addBaseLayer(lyr, name);
     keyedRef.current = keyed;
   }, [basemapKeys]);
+
+  // ---- terrace block corner pickers (click to set a block's start corner) ----
+  useEffect(() => {
+    const grp = cornerLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    const blocks = terraceResult?.metadata.block_corners as
+      | Array<Record<string, { lat: number; lon: number } | string>>
+      | undefined;
+    if (!blocks) return;
+    const setCorner = useAppStore.getState().setTerraceCorner;
+    for (const b of blocks) {
+      const blockId = b.block_id as string;
+      for (const label of ["NW", "NE", "SW", "SE"] as const) {
+        const c = b[label] as { lat: number; lon: number } | undefined;
+        if (!c) continue;
+        const chosen = terraceCorners[blockId] === label;
+        L.circleMarker([c.lat, c.lon], {
+          radius: chosen ? 7 : 4,
+          color: chosen ? "#ffffff" : "#9aa0a6",
+          weight: chosen ? 2 : 1,
+          fillColor: chosen ? "#ffffff" : "#1a1a1a",
+          fillOpacity: chosen ? 1 : 0.7,
+        })
+          .bindTooltip(`${blockId} · ${label}`, { direction: "top", className: "ref-tip" })
+          .on("click", () => setCorner(blockId, label))
+          .addTo(grp);
+      }
+    }
+  }, [terraceResult, terraceCorners]);
 
   // ---- tree grid points ----
   useEffect(() => {

@@ -18,6 +18,7 @@ export function TreeGridPanel() {
   const hydrated = useHydrated();
   const drawnGeometry = useAppStore((s) => s.drawnGeometry);
   const workingPolygon = useAppStore((s) => s.workingPolygon);
+  const savedShapes = useAppStore((s) => s.savedShapes);
   const treeGrid = useAppStore((s) => s.treeGrid);
   const setTreeGrid = useAppStore((s) => s.setTreeGrid);
 
@@ -25,6 +26,7 @@ export function TreeGridPanel() {
   const [rowSpacing, setRowSpacing] = useState(4);
   const [majorEdge, setMajorEdge] = useState<"EW" | "NS">("EW");
   const [rotationDeg, setRotationDeg] = useState(0);
+  const [masks, setMasks] = useState<Record<string, "inc" | "exc">>({});
   const [err, setErr] = useState("");
 
   const source = drawnGeometry ?? workingPolygon;
@@ -32,11 +34,23 @@ export function TreeGridPanel() {
 
   const generate = () => {
     if (!source) return setErr("Draw a rectangle or set a working polygon first.");
-    const { points } = generateTreeGrid(source, { treeSpacing, rowSpacing, majorEdge, rotationDeg });
-    if (!points.length) return setErr("No points fit — check spacing / polygon.");
+    const includes = savedShapes.filter((s) => masks[s.name] === "inc").map((s) => s.geometry);
+    const excludes = savedShapes.filter((s) => masks[s.name] === "exc").map((s) => s.geometry);
+    const { points } = generateTreeGrid(source, { treeSpacing, rowSpacing, majorEdge, rotationDeg, includes, excludes });
+    if (!points.length) return setErr("No points fit — check spacing / masks / polygon.");
     setErr("");
     setTreeGrid(points);
   };
+
+  const cycleMask = (name: string) =>
+    setMasks((m) => {
+      const cur = m[name];
+      const next = { ...m };
+      if (!cur) next[name] = "inc";
+      else if (cur === "inc") next[name] = "exc";
+      else delete next[name];
+      return next;
+    });
 
   const download = () => {
     const blob = new Blob([JSON.stringify(treeGridToGeoJSON(treeGrid))], { type: "application/geo+json" });
@@ -83,6 +97,31 @@ export function TreeGridPanel() {
           onValueChange={(v) => setRotationDeg(Array.isArray(v) ? v[0] : v)}
         />
       </div>
+      {hydrated && savedShapes.length > 0 && (
+        <div className="mt-2">
+          <div className="mb-1 text-[8px] uppercase tracking-wider text-muted-foreground">Masks (saved shapes)</div>
+          <ul className="space-y-1">
+            {savedShapes.map((s) => (
+              <li key={s.name} className="flex items-center justify-between gap-2 text-[9px]">
+                <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                <button
+                  onClick={() => cycleMask(s.name)}
+                  className={`rounded-full px-2 py-0.5 text-[8px] font-medium transition-colors ${
+                    masks[s.name] === "inc"
+                      ? "bg-primary text-primary-foreground"
+                      : masks[s.name] === "exc"
+                        ? "bg-destructive text-white"
+                        : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {masks[s.name] === "inc" ? "include" : masks[s.name] === "exc" ? "exclude" : "off"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {err && <p className="mt-1.5 text-[9px] text-destructive">{err}</p>}
       <div className="mt-2 flex gap-1.5">
         <Button size="sm" className="flex-1" onClick={generate}>Generate grid</Button>
