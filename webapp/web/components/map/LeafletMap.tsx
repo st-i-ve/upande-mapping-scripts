@@ -7,6 +7,7 @@ import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
+import { buildBaseLayers, addWayback } from "@/lib/map/baseLayers";
 import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
@@ -52,22 +53,13 @@ export default function LeafletMap() {
     });
     mapRef.current = map;
 
-    const dark = L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-      { maxZoom: 22, attribution: "&copy; OSM &copy; CARTO" },
-    );
-    const satellite = L.tileLayer(
-      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      { maxZoom: 22, attribution: "Tiles &copy; Esri" },
-    );
-    const streets = L.tileLayer(
-      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      { maxZoom: 19, attribution: "&copy; OpenStreetMap" },
-    );
-    dark.addTo(map);
-    L.control
-      .layers({ "Dark (CARTO)": dark, Satellite: satellite, Streets: streets }, {}, { position: "topright" })
+    // Full base-layer set (ported from the vanilla app), default Google Satellite.
+    const { baseLayers, defaultLayer } = buildBaseLayers();
+    defaultLayer.addTo(map);
+    const layerControl = L.control
+      .layers(baseLayers, {}, { position: "topright", collapsed: true })
       .addTo(map);
+    addWayback(layerControl);
     L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
 
     shapeLayerRef.current = L.layerGroup().addTo(map);
