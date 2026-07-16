@@ -36,18 +36,23 @@ export function ReferencePointsPanel() {
   const [name, setName] = useState("");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
+  const [color, setColor] = useState("#e5e5e5");
 
   const points = hydrated ? refPoints : [];
 
   const add = (la: number, lo: number) => {
     if (!Number.isFinite(la) || !Number.isFinite(lo)) return;
     const nm = name.trim() || nextName(refPoints.map((p) => p.name));
-    addRefPoint({ name: nm, lat: la, lon: lo });
+    addRefPoint({ name: nm, lat: la, lon: lo, color });
     setName("");
     setLat("");
     setLon("");
     handle?.flyTo(la, lo);
   };
+
+  // Recolor an existing point (addRefPoint replaces by name).
+  const recolor = (p: { name: string; lat: number; lon: number }, c: string) =>
+    addRefPoint({ ...p, color: c });
 
   return (
     <SectionCard
@@ -61,7 +66,14 @@ export function ReferencePointsPanel() {
         />
       }
     >
-      <div className="grid grid-cols-[1fr_1.3fr_1.3fr] gap-1.5">
+      <div className="grid grid-cols-[auto_1fr_1.3fr_1.3fr] gap-1.5">
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => setColor(e.target.value)}
+          aria-label="Point color"
+          className="h-8 w-8 cursor-pointer rounded-full border border-border bg-transparent p-0.5"
+        />
         <Input placeholder="A" value={name} onChange={(e) => setName(e.target.value)} className="h-8 tabular" />
         <Input placeholder="lat" value={lat} onChange={(e) => setLat(e.target.value)} className="h-8 tabular" inputMode="decimal" />
         <Input placeholder="lon" value={lon} onChange={(e) => setLon(e.target.value)} className="h-8 tabular" inputMode="decimal" />
@@ -109,8 +121,17 @@ export function ReferencePointsPanel() {
                 </>
               }
             >
-              <span className="text-primary">{p.name}</span>{" "}
-              <span className="tabular text-muted-foreground">{p.lat.toFixed(6)}, {p.lon.toFixed(6)}</span>
+              <span className="inline-flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={p.color ?? "#e5e5e5"}
+                  onChange={(e) => recolor(p, e.target.value)}
+                  aria-label={`Color for ${p.name}`}
+                  className="h-3.5 w-3.5 shrink-0 cursor-pointer rounded-full border-0 bg-transparent p-0"
+                />
+                <span className="text-primary">{p.name}</span>{" "}
+                <span className="tabular text-muted-foreground">{p.lat.toFixed(6)}, {p.lon.toFixed(6)}</span>
+              </span>
             </ListRow>
           ))}
         </ul>

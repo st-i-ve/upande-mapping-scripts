@@ -19,6 +19,8 @@ export interface TreeGridOptions {
   rowSpacing: number;
   /** Which axis the rows run parallel to. */
   majorEdge: "EW" | "NS";
+  /** Rotate the grid lattice by this many degrees (around the AOI centre). */
+  rotationDeg?: number;
 }
 
 const M_PER_DEG_LAT = 111320;
@@ -52,7 +54,7 @@ function inRing(lon: number, lat: number, ring: [number, number][]): boolean {
  */
 export function generateTreeGrid(
   polygon: GeoGeometry,
-  { treeSpacing, rowSpacing, majorEdge }: TreeGridOptions,
+  { treeSpacing, rowSpacing, majorEdge, rotationDeg = 0 }: TreeGridOptions,
 ): { points: TreePoint[]; rows: number; cols: number } {
   const ring = outerRing(polygon);
   if (!ring || ring.length < 4 || treeSpacing <= 0 || rowSpacing <= 0)
@@ -60,28 +62,54 @@ export function generateTreeGrid(
 
   const lons = ring.map((p) => p[0]);
   const lats = ring.map((p) => p[1]);
-  const minLon = Math.min(...lons);
-  const maxLon = Math.max(...lons);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const lat0 = (minLat + maxLat) / 2;
+  const lon0 = (Math.min(...lons) + Math.max(...lons)) / 2;
+  const lat0 = (Math.min(...lats) + Math.max(...lats)) / 2;
 
   const mPerDegLon = M_PER_DEG_LAT * Math.cos((lat0 * Math.PI) / 180);
-  // Along-row step is the tree spacing; between-row step is the row spacing.
-  // EW: rows run east-west → step lon by tree, lat by row. NS: swap.
-  const lonStepM = majorEdge === "EW" ? treeSpacing : rowSpacing;
-  const latStepM = majorEdge === "EW" ? rowSpacing : treeSpacing;
-  const dLon = lonStepM / mPerDegLon;
-  const dLat = latStepM / M_PER_DEG_LAT;
+  const theta = (rotationDeg * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+
+  // Local metric frame centred on the AOI, and helpers to rotate in/out of it.
+  const toLocal = (lon: number, lat: number): [number, number] => [
+    (lon - lon0) * mPerDegLon,
+    (lat - lat0) * M_PER_DEG_LAT,
+  ];
+  const toLonLat = (x: number, y: number): [number, number] => [
+    lon0 + x / mPerDegLon,
+    lat0 + y / M_PER_DEG_LAT,
+  ];
+  const rot = (x: number, y: number, a: number): [number, number] => [
+    x * Math.cos(a) - y * Math.sin(a),
+    x * Math.sin(a) + y * Math.cos(a),
+  ];
+
+  // Ring in the rotated frame (rotate by -theta) → axis-aligned bbox there.
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [lon, lat] of ring) {
+    const [lx, ly] = toLocal(lon, lat);
+    const rx = lx * cos + ly * sin; // rotate by -theta
+    const ry = -lx * sin + ly * cos;
+    if (rx < minX) minX = rx;
+    if (rx > maxX) maxX = rx;
+    if (ry < minY) minY = ry;
+    if (ry > maxY) maxY = ry;
+  }
+
+  // Along-row step = tree spacing; between-row = row spacing (EW default; NS swaps).
+  const stepX = majorEdge === "EW" ? treeSpacing : rowSpacing;
+  const stepY = majorEdge === "EW" ? rowSpacing : treeSpacing;
 
   const points: TreePoint[] = [];
   let rows = 0;
   let cols = 0;
   let r = 0;
-  for (let lat = minLat; lat <= maxLat + 1e-12; lat += dLat, r++) {
+  for (let ry = minY; ry <= maxY + 1e-6; ry += stepY, r++) {
     let t = 0;
     let rowHad = false;
-    for (let lon = minLon; lon <= maxLon + 1e-12; lon += dLon, t++) {
+    for (let rx = minX; rx <= maxX + 1e-6; rx += stepX, t++) {
+      const [lx, ly] = rot(rx, ry, theta); // rotate back by +theta
+      const [lon, lat] = toLonLat(lx, ly);
       if (inRing(lon, lat, ring)) {
         points.push({ lat, lon, row: r + 1, tree: t + 1 });
         rowHad = true;

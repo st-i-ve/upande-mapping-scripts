@@ -8,6 +8,7 @@ import { SectionCard } from "@/components/console/SectionCard";
 import { AnimatedNumber } from "@/components/console/AnimatedNumber";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { generateTreeGrid, treeGridToGeoJSON } from "@/lib/geometry/treeGrid";
 
 const selectCls =
@@ -23,6 +24,7 @@ export function TreeGridPanel() {
   const [treeSpacing, setTreeSpacing] = useState(2);
   const [rowSpacing, setRowSpacing] = useState(4);
   const [majorEdge, setMajorEdge] = useState<"EW" | "NS">("EW");
+  const [rotationDeg, setRotationDeg] = useState(0);
   const [err, setErr] = useState("");
 
   const source = drawnGeometry ?? workingPolygon;
@@ -30,7 +32,7 @@ export function TreeGridPanel() {
 
   const generate = () => {
     if (!source) return setErr("Draw a rectangle or set a working polygon first.");
-    const { points } = generateTreeGrid(source, { treeSpacing, rowSpacing, majorEdge });
+    const { points } = generateTreeGrid(source, { treeSpacing, rowSpacing, majorEdge, rotationDeg });
     if (!points.length) return setErr("No points fit — check spacing / polygon.");
     setErr("");
     setTreeGrid(points);
@@ -68,6 +70,19 @@ export function TreeGridPanel() {
           <option value="NS">North–South</option>
         </select>
       </label>
+      <div className="mt-2">
+        <div className="mb-1 flex justify-between text-[8px] uppercase tracking-wider text-muted-foreground">
+          <span>Rotation</span>
+          <span className="tabular text-primary">{rotationDeg}°</span>
+        </div>
+        <Slider
+          value={[rotationDeg]}
+          min={-90}
+          max={90}
+          step={1}
+          onValueChange={(v) => setRotationDeg(Array.isArray(v) ? v[0] : v)}
+        />
+      </div>
       {err && <p className="mt-1.5 text-[9px] text-destructive">{err}</p>}
       <div className="mt-2 flex gap-1.5">
         <Button size="sm" className="flex-1" onClick={generate}>Generate grid</Button>
@@ -79,7 +94,7 @@ export function TreeGridPanel() {
         )}
       </div>
       <p className="mt-2 text-[8px] text-muted-foreground/60">
-        Uses the drawn shape (or working polygon) as the boundary. Rotation &amp; masks come next.
+        Uses the drawn shape (or working polygon) as the boundary. Include/exclude masks come next.
       </p>
     </SectionCard>
   );

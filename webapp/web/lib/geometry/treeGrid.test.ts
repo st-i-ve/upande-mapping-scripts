@@ -28,6 +28,13 @@ describe("generateTreeGrid", () => {
     expect(points[0]).toMatchObject({ row: 1, tree: 1 });
   });
 
+  it("rotates the lattice around the AOI centre", () => {
+    const a = generateTreeGrid(square, { treeSpacing: 5, rowSpacing: 5, majorEdge: "EW" });
+    const b = generateTreeGrid(square, { treeSpacing: 5, rowSpacing: 5, majorEdge: "EW", rotationDeg: 30 });
+    expect(b.points.length).toBeGreaterThan(0);
+    expect(b.points).not.toEqual(a.points); // rotated grid differs from axis-aligned
+  });
+
   it("returns nothing for invalid spacing", () => {
     expect(generateTreeGrid(square, { treeSpacing: 0, rowSpacing: 5, majorEdge: "EW" }).points).toHaveLength(0);
   });
