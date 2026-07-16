@@ -342,12 +342,14 @@ export default function LeafletMap() {
     if (!triad) return;
     L.geoJSON(triad as never, {
       style: (feature) => {
-        const edge = (feature?.properties as { kind?: string })?.kind === "edge";
+        const p = (feature?.properties ?? {}) as { kind?: string; hex?: number };
+        const edge = p.kind === "edge";
+        const altHex = (p.hex ?? 0) % 2 === 0; // alternate hexes so the pattern reads
         return {
           color: "#e5e5e5",
           weight: 1,
-          fillColor: edge ? "#8a8a8a" : "#c4c4c4",
-          fillOpacity: edge ? 0.18 : 0.28,
+          fillColor: edge ? "#8a8a8a" : altHex ? "#cfcfcf" : "#a6a6a6",
+          fillOpacity: edge ? 0.18 : 0.3,
         };
       },
       onEachFeature: (feature, layer) => {

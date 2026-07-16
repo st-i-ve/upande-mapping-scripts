@@ -15,15 +15,26 @@ const square: GeoGeometry = {
 };
 
 describe("generateTriads", () => {
-  it("tessellates a square into many triangles with full + edge kinds", () => {
-    const fc = generateTriads(square, { sideLength: 5 });
+  it("tessellates a square into triangles with full + edge kinds", () => {
+    const fc = generateTriads(square, { sideLength: 4 });
     expect(fc.type).toBe("FeatureCollection");
     expect(fc.features.length).toBeGreaterThan(20);
     const kinds = new Set(fc.features.map((f) => f.properties.kind));
     expect(kinds.has("full")).toBe(true);
     expect(kinds.has("edge")).toBe(true);
-    // ids are sequential row-major
-    expect(fc.features[0].properties.id).toBe("T1");
+    expect(fc.features[0].properties.id).toMatch(/^H1-[1-6]$/);
+  });
+
+  it("groups 6 triads into a hexagon", () => {
+    const fc = generateTriads(square, { sideLength: 3 });
+    const byHex = new Map<number, number>();
+    for (const f of fc.features) {
+      const h = f.properties.hex as number;
+      byHex.set(h, (byHex.get(h) ?? 0) + 1);
+    }
+    // At least one fully-interior hexagon has all 6 triads; none exceed 6.
+    const sizes = [...byHex.values()];
+    expect(Math.max(...sizes)).toBe(6);
   });
 
   it("changes output when rotated", () => {

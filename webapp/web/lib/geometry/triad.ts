@@ -1,9 +1,11 @@
 /**
- * Triad tessellation — divide a polygon into equilateral triangles ("triads").
- * Lays an equilateral triangular tiling over the AOI (rows of alternating
- * up/down triangles), rotates it by `rotationDeg`, and clips each triangle to
- * the polygon (full coverage). Interior triangles stay equilateral (kind
- * "full"); boundary units are clipped offcuts (kind "edge"). Pure + testable.
+ * Triad tessellation — divide a polygon into equilateral triangles ("triads")
+ * arranged as HEXAGONS: a pointy-top hexagonal grid tiles the AOI, and each
+ * hexagon is split into its 6 equilateral triangles (centre → each edge). So
+ * every 6 triads form one hexagon — a finer version of hex-grid tools. The
+ * grid is rotated by `rotationDeg` and clipped to the polygon (full coverage):
+ * interior triangles stay equilateral (kind "full"); boundary units are
+ * clipped offcuts (kind "edge"). Pure + testable.
  */
 import { polygon as turfPolygon, intersect, area, featureCollection, feature } from "@turf/turf";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
@@ -13,14 +15,16 @@ const M_PER_DEG_LAT = 111320;
 const MAX_TRIANGLES = 40000; // guard against tiny side lengths freezing the UI
 
 export interface TriadOptions {
-  /** Equilateral side length in metres. */
+  /** Hexagon size = equilateral triangle side length, in metres. */
   sideLength: number;
   /** Rotate the tiling by this many degrees around the AOI centre. */
   rotationDeg?: number;
 }
 
 export interface TriadProps {
-  id: string;
+  id: string; // "H{hex}-{tri}"
+  hex: number; // hexagon number (row-major)
+  tri: number; // 1..6 within the hexagon
   row: number;
   kind: "full" | "edge";
   [k: string]: unknown;
@@ -75,19 +79,30 @@ export function generateTriads(
     if (ry > maxY) maxY = ry;
   }
 
-  const h = (s * Math.sqrt(3)) / 2;
   const polyFeat = feature(poly as unknown as Polygon | MultiPolygon);
 
-  type Cand = { geom: GeoGeometry; full: boolean; j: number; sortX: number };
-  const cands: Cand[] = [];
+  // Pointy-top hexagon lattice. Circumradius R = triangle side = sideLength.
+  const R = s;
+  const colStep = Math.sqrt(3) * R; // centre spacing within a row
+  const rowStep = 1.5 * R; // centre spacing between rows
+  const angles = [0, 1, 2, 3, 4, 5].map((k) => ((30 + 60 * k) * Math.PI) / 180);
 
-  outer: for (let j = 0, y0 = minY; y0 < maxY + 1e-9; y0 += h, j++) {
-    const y1 = y0 + h;
-    for (let x = minX - s; x < maxX + s; x += s) {
-      const up: [number, number][] = [[x, y0], [x + s, y0], [x + s / 2, y1]];
-      const down: [number, number][] = [[x + s / 2, y1], [x + (3 * s) / 2, y1], [x + s, y0]];
-      for (const [tri, sortX] of [[up, x], [down, x + s / 2]] as const) {
-        const lonlat = tri.map(([lx, ly]) => {
+  const features: GeoFeature<TriadProps>[] = [];
+  let hexNum = 0;
+  let rowNum = 0;
+
+  // Iterate top→bottom (rotated-y high→low), left→right.
+  for (let y = maxY + rowStep; y >= minY - rowStep; y -= rowStep) {
+    rowNum++;
+    const xOff = rowNum % 2 === 0 ? colStep / 2 : 0; // offset alternate rows
+    for (let x = minX - colStep + xOff; x <= maxX + colStep; x += colStep) {
+      const verts = angles.map(
+        (a): [number, number] => [x + R * Math.cos(a), y + R * Math.sin(a)],
+      );
+      const kept: { geom: GeoGeometry; full: boolean; tri: number }[] = [];
+      for (let k = 0; k < 6; k++) {
+        const triLocal: [number, number][] = [[x, y], verts[k], verts[(k + 1) % 6]];
+        const lonlat = triLocal.map(([lx, ly]) => {
           const [rx, ry] = rot(lx, ly);
           return toLonLat(rx, ry);
         });
@@ -102,21 +117,26 @@ export function generateTriads(
         const clipArea = area(clipped);
         if (clipArea < 1e-6) continue;
         const full = clipArea >= area(triFeat) * 0.999;
-        cands.push({ geom: clipped.geometry as unknown as GeoGeometry, full, j, sortX });
-        if (cands.length >= MAX_TRIANGLES) break outer;
+        kept.push({ geom: clipped.geometry as unknown as GeoGeometry, full, tri: k + 1 });
       }
+      if (!kept.length) continue;
+      hexNum++;
+      for (const t of kept) {
+        features.push({
+          type: "Feature",
+          geometry: t.geom,
+          properties: {
+            id: `H${hexNum}-${t.tri}`,
+            hex: hexNum,
+            tri: t.tri,
+            row: rowNum,
+            kind: t.full ? "full" : "edge",
+          },
+        });
+      }
+      if (features.length >= MAX_TRIANGLES) return { type: "FeatureCollection", features };
     }
   }
-
-  const maxJ = cands.reduce((m, c) => Math.max(m, c.j), 0);
-  // Order top→bottom (higher rotated-y first), then left→right.
-  cands.sort((a, b) => (b.j - a.j) || (a.sortX - b.sortX));
-
-  const features: GeoFeature<TriadProps>[] = cands.map((c, i) => ({
-    type: "Feature",
-    geometry: c.geom,
-    properties: { id: `T${i + 1}`, row: maxJ - c.j + 1, kind: c.full ? "full" : "edge" },
-  }));
 
   return { type: "FeatureCollection", features };
 }

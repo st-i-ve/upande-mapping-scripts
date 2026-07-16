@@ -50,7 +50,7 @@ export function TriadPanel() {
       meta={count > 0 ? <span className="tabular text-[9px] text-primary"><AnimatedNumber value={count} /> triads</span> : undefined}
     >
       <label className="block text-[9px] text-muted-foreground">
-        Triangle side (m)
+        Hexagon size (triangle side, m)
         <Input type="number" step={0.5} min={0.5} value={sideLength} onChange={(e) => setSideLength(+e.target.value)} className="mt-1 h-8 tabular" />
       </label>
       <div className="mt-2">
@@ -71,7 +71,8 @@ export function TriadPanel() {
         )}
       </div>
       <p className="mt-2 text-[8px] text-muted-foreground/60">
-        Equilateral triangles clipped to the boundary (edge units are partial). Uses the drawn shape or working polygon.
+        Hexagonal grid — 6 equilateral triads per hexagon, clipped to the boundary
+        (edge units are partial). Uses the drawn shape or working polygon.
       </p>
     </SectionCard>
   );
