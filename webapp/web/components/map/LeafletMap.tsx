@@ -8,6 +8,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { buildBaseLayers, buildKeyedLayers, addWayback } from "@/lib/map/baseLayers";
+import { cutPolygon, explodePolygons } from "@/lib/geometry/knife";
 import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
@@ -31,6 +32,7 @@ export default function LeafletMap() {
   const savedShapes = useAppStore((s) => s.savedShapes);
   const shapesVisible = useAppStore((s) => s.shapesVisible);
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
+  const selectedShapes = useAppStore((s) => s.selectedShapes);
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const genResult = useAppStore((s) => s.genResult);
   const treeGrid = useAppStore((s) => s.treeGrid);
@@ -190,23 +192,41 @@ export default function LeafletMap() {
       map.on("mousedown", fhDown);
     };
 
-    // ---- knife: capture a cut line (freehand drag OR clicked points) ----
+    // ---- knife: cut the working polygon along a line (freehand OR straight path) ----
     let knPts: L.LatLng[] = [];
     let knTemp: L.Polyline | null = null;
-    let knOnChange: ((line: [number, number][]) => void) | null = null;
     const knCoords = (): [number, number][] => knPts.map((p) => [p.lng, p.lat]);
     const knRedraw = () => {
       if (knTemp) knTemp.setLatLngs(knPts);
       else knTemp = L.polyline(knPts, { color: "#ffffff", weight: 2, dashArray: "6 4" }).addTo(map);
     };
+    // Cut the working polygon and add each resulting piece as its own saved shape.
+    const applyKnifeCut = (line: [number, number][]) => {
+      const st = useAppStore.getState();
+      const poly = st.workingPolygon;
+      if (!poly || line.length < 2) return;
+      const res = cutPolygon(poly, line, st.knifeWidth || 1);
+      if (!res) return;
+      const pieces = explodePolygons(res);
+      const base = st.savedShapes.length;
+      pieces.forEach((g, i) => st.addSavedShape(`Cut ${base + i + 1}`, g));
+      st.setWorkingPolygon(pieces[0] ?? res);
+      try {
+        const b = L.geoJSON(res as never).getBounds();
+        if (b.isValid()) map.fitBounds(b, { padding: [28, 28] });
+      } catch {
+        /* ignore */
+      }
+    };
     function knStop() {
-      knOnChange = null;
       knPts = [];
       map.off("mousedown", knDown);
       map.off("mousemove", knMove);
       map.off("mouseup", knUp);
       map.off("click", knClick);
+      map.off("dblclick", knDbl);
       map.dragging.enable();
+      map.doubleClickZoom.enable();
       L.DomUtil.removeClass(map.getContainer(), "picking");
       if (knTemp) { map.removeLayer(knTemp); knTemp = null; }
     }
@@ -215,9 +235,8 @@ export default function LeafletMap() {
       map.off("mousemove", knMove);
       map.off("mouseup", knUp);
       const line = knCoords();
-      const cb = knOnChange;
       knStop();
-      cb?.(line);
+      applyKnifeCut(line);
     };
     const knDown = (e: L.LeafletMouseEvent) => {
       knPts = [e.latlng];
@@ -225,7 +244,12 @@ export default function LeafletMap() {
       map.on("mousemove", knMove);
       map.on("mouseup", knUp);
     };
-    const knClick = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); knOnChange?.(knCoords()); };
+    const knClick = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); };
+    const knDbl = () => {
+      const line = knCoords();
+      knStop();
+      applyKnifeCut(line);
+    };
     const knifeStartCommon = () => {
       disableFreehand();
       map.pm.disableDraw();
@@ -274,16 +298,16 @@ export default function LeafletMap() {
       dragMode: () => { disableFreehand(); map.pm.toggleGlobalDragMode(); },
       eraseMode: () => { disableFreehand(); map.pm.toggleGlobalRemovalMode(); },
       freehand: () => { if (fhActive) disableFreehand(); else enableFreehand(); },
-      knifeFreehand: (onLine) => {
+      knifeFreehand: () => {
         knifeStartCommon();
-        knOnChange = onLine;
         map.dragging.disable();
         map.on("mousedown", knDown);
       },
-      knifePointMode: (onChange) => {
+      knifeStraight: () => {
         knifeStartCommon();
-        knOnChange = onChange;
+        map.doubleClickZoom.disable();
         map.on("click", knClick);
+        map.on("dblclick", knDbl);
       },
       knifeStop: () => knStop(),
       stopModes: () => {
@@ -329,7 +353,7 @@ export default function LeafletMap() {
     }
   }, [refPoints, refVisible, refOpacity]);
 
-  // ---- saved-shape overlays ----
+  // ---- saved-shape overlays (click to select; shift-click to multi-select) ----
   useEffect(() => {
     const grp = shapeLayerRef.current;
     if (!grp) return;
@@ -338,11 +362,22 @@ export default function LeafletMap() {
     for (const s of savedShapes) {
       if (!s.visible) continue;
       const color = s.color || ACCENT;
+      const selected = selectedShapes.includes(s.name);
       L.geoJSON(s.geometry as never, {
-        style: { color, weight: 2, fillColor: color, fillOpacity: shapeOpacity },
-      }).addTo(grp);
+        style: {
+          color: selected ? "#ffffff" : color,
+          weight: selected ? 3 : 2,
+          fillColor: color,
+          fillOpacity: selected ? Math.min(0.55, shapeOpacity + 0.25) : shapeOpacity,
+        },
+      })
+        .on("click", (e: L.LeafletMouseEvent) => {
+          L.DomEvent.stop(e);
+          useAppStore.getState().toggleSelectedShape(s.name, e.originalEvent.shiftKey);
+        })
+        .addTo(grp);
     }
-  }, [savedShapes, shapesVisible, shapeOpacity]);
+  }, [savedShapes, shapesVisible, shapeOpacity, selectedShapes]);
 
   // ---- working polygon (dashed outline of what will be generated) ----
   useEffect(() => {

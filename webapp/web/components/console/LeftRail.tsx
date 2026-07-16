@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   MousePointer2, Hexagon, Square, Spline, Move, Eraser, Trash2, PencilLine,
-  Mountain, Sun, Layers, Ruler, Compass, type LucideIcon,
+  Slice, Waypoints, Mountain, Sun, Layers, Ruler, Compass, type LucideIcon,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge, type MapHandle } from "@/lib/map/mapBridge";
@@ -25,6 +25,8 @@ const TOOLS_2D: Tool[] = [
   { id: "edit", label: "Edit vertices", icon: Spline, run: (h) => h.editMode() },
   { id: "move", label: "Move", icon: Move, run: (h) => h.dragMode() },
   { id: "erase", label: "Erase", icon: Eraser, run: (h) => h.eraseMode() },
+  { id: "knife-straight", label: "Knife — straight path (click, dbl-click to finish)", icon: Waypoints, run: (h) => h.knifeStraight() },
+  { id: "knife-draw", label: "Knife — draw path (drag)", icon: Slice, run: (h) => h.knifeFreehand() },
   { id: "clear", label: "Clear drawing", icon: Trash2, run: (h) => h.clearDrawn(), momentary: true },
 ];
 

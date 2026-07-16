@@ -70,6 +70,16 @@ export interface AppState {
   treeGrid: TreePoint[];
   setTreeGrid: (pts: TreePoint[]) => void;
 
+  // ---- knife ----
+  knifeWidth: number; // blade width / gap in metres
+  setKnifeWidth: (w: number) => void;
+
+  // ---- shape selection (shift-click multi-select) ----
+  selectedShapes: string[];
+  toggleSelectedShape: (name: string, additive: boolean) => void;
+  setSelectedShapes: (names: string[]) => void;
+  clearSelectedShapes: () => void;
+
   // ---- triad (hexagonal triangle tessellation) ----
   triad: FeatureCollection | null;
   triadHexes: FeatureCollection | null;
@@ -133,6 +143,20 @@ export const useAppStore = create<AppState>()(
 
       treeGrid: [],
       setTreeGrid: (treeGrid) => set({ treeGrid }),
+
+      knifeWidth: 1,
+      setKnifeWidth: (knifeWidth) => set({ knifeWidth }),
+
+      selectedShapes: [],
+      toggleSelectedShape: (name, additive) =>
+        set((s) => {
+          if (!additive) return { selectedShapes: [name] };
+          return s.selectedShapes.includes(name)
+            ? { selectedShapes: s.selectedShapes.filter((n) => n !== name) }
+            : { selectedShapes: [...s.selectedShapes, name] };
+        }),
+      setSelectedShapes: (selectedShapes) => set({ selectedShapes }),
+      clearSelectedShapes: () => set({ selectedShapes: [] }),
 
       triad: null,
       triadHexes: null,

@@ -45,14 +45,18 @@ export function SavedShapesPanel() {
   const setShapesVisible = useAppStore((s) => s.setShapesVisible);
   const setShapeOpacity = useAppStore((s) => s.setShapeOpacity);
   const setWorkingPolygon = useAppStore((s) => s.setWorkingPolygon);
+  const selectedShapes = useAppStore((s) => s.selectedShapes);
+  const setSelectedShapes = useAppStore((s) => s.setSelectedShapes);
+  const clearSelectedShapes = useAppStore((s) => s.clearSelectedShapes);
+  const toggleSelectedShape = useAppStore((s) => s.toggleSelectedShape);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
 
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const shapes = hydrated ? savedShapes : [];
+  const selectedSet = new Set(selectedShapes);
 
   const addFromGeoJson = () => {
     const geom = extractGeometry(text);
@@ -68,30 +72,23 @@ export function SavedShapesPanel() {
     fitGeometry?.(geom);
   };
 
-  const toggleSel = (nm: string) =>
-    setSelected((s) => {
-      const n = new Set(s);
-      if (n.has(nm)) n.delete(nm);
-      else n.add(nm);
-      return n;
-    });
-  const allChecked = shapes.length > 0 && selected.size === shapes.length;
+  const allChecked = shapes.length > 0 && selectedShapes.length === shapes.length;
   const deleteSelected = () => {
-    if (!selected.size) return;
-    removeSavedShapes([...selected]);
-    setSelected(new Set());
+    if (!selectedShapes.length) return;
+    removeSavedShapes(selectedShapes);
+    clearSelectedShapes();
   };
 
   const applyBoolean = (op: BooleanOp) => {
     // Preserve list order (matters for subtract = first minus the rest).
-    const geoms = shapes.filter((s) => selected.has(s.name)).map((s) => s.geometry);
+    const geoms = shapes.filter((s) => selectedSet.has(s.name)).map((s) => s.geometry);
     const result = booleanOp(geoms, op);
     if (!result) {
       setErr("Boolean op failed — need 2+ overlapping polygons.");
       return;
     }
     addSavedShape(`${op} result`, result);
-    setSelected(new Set());
+    clearSelectedShapes();
     fitGeometry?.(result);
   };
 
@@ -129,15 +126,15 @@ export function SavedShapesPanel() {
                 type="checkbox"
                 className="accent-primary"
                 checked={allChecked}
-                onChange={(e) => setSelected(e.target.checked ? new Set(shapes.map((s) => s.name)) : new Set())}
+                onChange={(e) => (e.target.checked ? setSelectedShapes(shapes.map((s) => s.name)) : clearSelectedShapes())}
               />
               Select all
             </label>
-            <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selected.size} onClick={deleteSelected}>
-              Delete selected{selected.size ? ` (${selected.size})` : ""}
+            <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selectedShapes.length} onClick={deleteSelected}>
+              Delete selected{selectedShapes.length ? ` (${selectedShapes.length})` : ""}
             </Button>
           </div>
-          {selected.size >= 2 && (
+          {selectedShapes.length >= 2 && (
             <div className="mb-1 flex gap-1.5">
               {(Object.keys(OP_LABEL) as BooleanOp[]).map((op) => (
                 <Button key={op} size="sm" variant="secondary" className="h-7 flex-1 text-[9px]" title={OP_LABEL[op]} onClick={() => applyBoolean(op)}>
@@ -160,7 +157,7 @@ export function SavedShapesPanel() {
                 }
               >
                 <label className="flex items-center gap-1.5">
-                  <input type="checkbox" className="accent-primary" checked={selected.has(s.name)} onChange={() => toggleSel(s.name)} />
+                  <input type="checkbox" className="accent-primary" checked={selectedSet.has(s.name)} onChange={() => toggleSelectedShape(s.name, true)} />
                   <span style={{ color: s.color }}>{s.visible ? "●" : "○"}</span>
                   <strong>{s.name}</strong>
                 </label>
