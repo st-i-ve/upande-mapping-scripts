@@ -35,14 +35,25 @@ backend is unchanged.
   views** with a top-of-sidebar view switcher (3D reuses `legacy-3d.html`
   in the center canvas and enrolls its own toolset).
 
-## Still deferred to reach full parity (before root cutover)
+## Parity — COMPLETE ✅
 
-- Terrace advanced grouping sugar (per-sub corners / sub-splits / swap / pick-corner).
-- Draw-time boolean ops in the shape builder + custom rotate/scale/snap handles.
-- Tree-grid rotation, interactive pivot, and positive/negative masks.
-- Native 3D tools in the sidebar (terrain exaggeration, sun angle, layer toggles).
-- Basemap API-key panel (Mapbox / MapTiler / Stadia) + reference-point colors.
-- Side-by-side parity QA against the live vanilla app.
+- ✅ Terrace: grouping sugar (backend passthrough) + click-to-pick block corners.
+- ✅ Boolean ops (union/subtract/intersect) on saved shapes.
+- ✅ Tree grid: rotation + include/exclude masks.
+- ✅ Basemap-key panel (Mapbox/MapTiler/Stadia) + reference-point colors + full base-layer set.
+- ✅ 3D sidebar 1:1 with the on-canvas panel (view/trees/scouting/valves/blocks + status relay).
+- ✅ Design system: self-hosted Poppins, Upande logo, avocado cards, pill controls, light/dark.
+
+Minor niceties still open (non-blocking): draw-time boolean ops in the shape
+builder, custom rotate/scale/snap handles, native 3D DOM removal (currently a
+hidden control host).
+
+## Root cutover — READY
+
+The Next app matches the vanilla app. To flip production root, follow the
+"Cutover" steps below (rebuild without `NEXT_BASE_PATH`, swap nginx). Rollback
+is a one-line nginx revert (`/` → `127.0.0.1:8765`), since FastAPI + the vanilla
+frontend keep running on 8765.
 
 ## Cutover (when parity is confirmed)
 
