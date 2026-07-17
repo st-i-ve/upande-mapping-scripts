@@ -40,6 +40,25 @@ describe("generateTriads", () => {
     expect(Math.max(...byHex.values())).toBe(6);
   });
 
+  it("tags every triad and hexagon with a band + label (the row-equivalent unit)", () => {
+    const { triads, hexagons } = generateTriads(square, { sideLength: 4 });
+    // Every triad has a positive integer band and a "Band N · Triad ..." label.
+    for (const f of triads.features) {
+      expect(f.properties.band).toBeGreaterThanOrEqual(1);
+      expect(Number.isInteger(f.properties.band)).toBe(true);
+      expect(f.properties.label).toMatch(/^Band \d+ · Triad H\d+-[1-6]$/);
+    }
+    // Hexagons carry the band too, and all 6 triads of a hexagon share its band.
+    const bandByHex = new Map<number, number>();
+    for (const f of triads.features) bandByHex.set(f.properties.hex, f.properties.band);
+    for (const h of hexagons.features) {
+      expect(h.properties.band).toBe(bandByHex.get(h.properties.hex));
+      expect(h.properties.label).toMatch(/^Band \d+ · Hex H\d+$/);
+    }
+    // More than one band tessellates the square.
+    expect(new Set(triads.features.map((f) => f.properties.band)).size).toBeGreaterThan(1);
+  });
+
   it("changes output when rotated", () => {
     const a = generateTriads(square, { sideLength: 5 });
     const b = generateTriads(square, { sideLength: 5, rotationDeg: 25 });

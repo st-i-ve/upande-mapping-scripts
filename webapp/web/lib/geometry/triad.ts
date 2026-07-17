@@ -6,6 +6,11 @@
  * grid is rotated by `rotationDeg` and clipped to the polygon (full coverage):
  * interior triangles stay equilateral (kind "full"); boundary units are
  * clipped offcuts (kind "edge"). Pure + testable.
+ *
+ * Each hexagon (and its 6 triads) is tagged with a `band` — a horizontal line
+ * of hexes. The band is the triad tessellation's row-equivalent unit (the shape
+ * within the AOI is named "<shape> · Band N"), analogous to a row of orchard
+ * trees: a band's members are colinear and reconstructable from its endpoints.
  */
 import { polygon as turfPolygon, intersect, area, featureCollection, feature } from "@turf/turf";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
@@ -25,7 +30,8 @@ export interface TriadProps {
   id: string; // "H{hex}-{tri}"
   hex: number; // hexagon number (row-major)
   tri: number; // 1..6 within the hexagon
-  row: number;
+  band: number; // the "band" — a horizontal line of hexes (the row-equivalent unit)
+  label: string; // "Band {band} · Triad H{hex}-{tri}"
   kind: "full" | "edge";
   [k: string]: unknown;
 }
@@ -33,6 +39,8 @@ export interface TriadProps {
 export interface HexProps {
   id: string; // "H{hex}"
   hex: number;
+  band: number; // the band this hexagon belongs to
+  label: string; // "Band {band} · Hex H{hex}"
   [k: string]: unknown;
 }
 
@@ -106,7 +114,7 @@ export function generateTriads(
   const features: GeoFeature<TriadProps>[] = [];
   const hexFeatures: GeoFeature<HexProps>[] = [];
   let hexNum = 0;
-  let rowNum = 0;
+  let bandNum = 0; // the band index — a horizontal line of hexes (row-equivalent)
 
   const clipToPoly = (ringLonLat: [number, number][]) => {
     const f = turfPolygon([[...ringLonLat, ringLonLat[0]]]);
@@ -121,8 +129,8 @@ export function generateTriads(
   // Iterate top→bottom (rotated-y high→low), left→right.
   for (let y = maxY + rowStep; y >= minY - rowStep; y -= rowStep) {
     if (features.length >= MAX_TRIANGLES) break;
-    rowNum++;
-    const xOff = rowNum % 2 === 0 ? colStep / 2 : 0; // offset alternate rows
+    bandNum++;
+    const xOff = bandNum % 2 === 0 ? colStep / 2 : 0; // offset alternate bands
     for (let x = minX - colStep + xOff; x <= maxX + colStep; x += colStep) {
       const verts = angles.map(
         (a): [number, number] => [x + R * Math.cos(a), y + R * Math.sin(a)],
@@ -143,7 +151,14 @@ export function generateTriads(
         features.push({
           type: "Feature",
           geometry: t.geom,
-          properties: { id: `H${hexNum}-${t.tri}`, hex: hexNum, tri: t.tri, row: rowNum, kind: t.full ? "full" : "edge" },
+          properties: {
+            id: `H${hexNum}-${t.tri}`,
+            hex: hexNum,
+            tri: t.tri,
+            band: bandNum,
+            label: `Band ${bandNum} · Triad H${hexNum}-${t.tri}`,
+            kind: t.full ? "full" : "edge",
+          },
         });
       }
       const hexClip = clipToPoly(verts.map(toWgs));
@@ -151,7 +166,7 @@ export function generateTriads(
         hexFeatures.push({
           type: "Feature",
           geometry: hexClip.geom,
-          properties: { id: `H${hexNum}`, hex: hexNum },
+          properties: { id: `H${hexNum}`, hex: hexNum, band: bandNum, label: `Band ${bandNum} · Hex H${hexNum}` },
         });
       }
       if (features.length >= MAX_TRIANGLES) break;

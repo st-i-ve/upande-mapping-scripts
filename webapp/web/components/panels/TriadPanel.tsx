@@ -25,6 +25,9 @@ export function TriadPanel() {
 
   const source = drawnGeometry ?? workingPolygon;
   const count = hydrated ? (triad?.features.length ?? 0) : 0;
+  const bandCount = hydrated
+    ? new Set((triad?.features ?? []).map((f) => (f.properties as { band?: number }).band)).size
+    : 0;
 
   const generate = () => {
     if (!source) return setErr("Draw a shape or set a working polygon first.");
@@ -49,7 +52,7 @@ export function TriadPanel() {
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Triangle size={12} /> Triad</span>}
       index="09"
-      meta={count > 0 ? <span className="tabular text-[9px] text-primary"><AnimatedNumber value={count} /> triads</span> : undefined}
+      meta={count > 0 ? <span className="tabular text-[9px] text-primary"><AnimatedNumber value={count} /> triads · {bandCount} bands</span> : undefined}
     >
       <label className="block text-[9px] text-muted-foreground">
         Hexagon size (triangle side, m)
@@ -73,8 +76,9 @@ export function TriadPanel() {
         )}
       </div>
       <p className="mt-2 text-[8px] text-muted-foreground/60">
-        Hexagonal grid — 6 equilateral triads per hexagon, clipped to the boundary
-        (edge units are partial). Uses the drawn shape or working polygon.
+        Hexagonal grid — 6 equilateral triads per hexagon, grouped into horizontal
+        bands (the row-equivalent unit: each shape is “… · Band N”), clipped to the
+        boundary (edge units are partial). Uses the drawn shape or working polygon.
       </p>
     </SectionCard>
   );
