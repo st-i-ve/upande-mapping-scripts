@@ -75,8 +75,7 @@ export function SavedShapesPanel() {
   const allChecked = shapes.length > 0 && selectedShapes.length === shapes.length;
   const deleteSelected = () => {
     if (!selectedShapes.length) return;
-    removeSavedShapes(selectedShapes);
-    clearSelectedShapes();
+    removeSavedShapes(selectedShapes); // prunes the selection itself
   };
 
   const applyBoolean = (op: BooleanOp) => {
@@ -130,7 +129,7 @@ export function SavedShapesPanel() {
               />
               Select all
             </label>
-            <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selectedShapes.length} onClick={deleteSelected}>
+            <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selectedShapes.length} title="Or press Delete" onClick={deleteSelected}>
               Delete selected{selectedShapes.length ? ` (${selectedShapes.length})` : ""}
             </Button>
           </div>

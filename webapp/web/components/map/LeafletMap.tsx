@@ -9,6 +9,7 @@ import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { buildBaseLayers, buildKeyedLayers, addWayback } from "@/lib/map/baseLayers";
 import { cutPolygon, explodePolygons } from "@/lib/geometry/knife";
+import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
@@ -25,6 +26,8 @@ export default function LeafletMap() {
 
   const [coords, setCoords] = useState("—");
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
+
+  useShapeKeyboard(); // Delete / Backspace clears the selected shapes
 
   const refPoints = useAppStore((s) => s.refPoints);
   const refVisible = useAppStore((s) => s.refVisible);
@@ -200,7 +203,10 @@ export default function LeafletMap() {
       if (knTemp) knTemp.setLatLngs(knPts);
       else knTemp = L.polyline(knPts, { color: "#ffffff", weight: 2, dashArray: "6 4" }).addTo(map);
     };
-    // Cut the working polygon and add each resulting piece as its own saved shape.
+    // Cut the working polygon and add each resulting piece as its own saved shape,
+    // then clear the working polygon — keeping it would leave a dashed twin of one
+    // piece on the map that no shape control can delete. Cut a piece further with
+    // "use" on its row in Saved shapes.
     const applyKnifeCut = (line: [number, number][]) => {
       const st = useAppStore.getState();
       const poly = st.workingPolygon;
@@ -210,7 +216,7 @@ export default function LeafletMap() {
       const pieces = explodePolygons(res);
       const base = st.savedShapes.length;
       pieces.forEach((g, i) => st.addSavedShape(`Cut ${base + i + 1}`, g));
-      st.setWorkingPolygon(pieces[0] ?? res);
+      st.setWorkingPolygon(null);
       try {
         const b = L.geoJSON(res as never).getBounds();
         if (b.isValid()) map.fitBounds(b, { padding: [28, 28] });

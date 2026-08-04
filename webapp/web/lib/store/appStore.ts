@@ -194,12 +194,19 @@ export const useAppStore = create<AppState>()(
           else next.push(entry);
           return { savedShapes: next };
         }),
+      // Removal also prunes the selection — a deleted name must not linger there.
       removeSavedShape: (name) =>
-        set((s) => ({ savedShapes: s.savedShapes.filter((x) => x.name !== name) })),
+        set((s) => ({
+          savedShapes: s.savedShapes.filter((x) => x.name !== name),
+          selectedShapes: s.selectedShapes.filter((n) => n !== name),
+        })),
       removeSavedShapes: (names) =>
         set((s) => {
           const drop = new Set(names);
-          return { savedShapes: s.savedShapes.filter((x) => !drop.has(x.name)) };
+          return {
+            savedShapes: s.savedShapes.filter((x) => !drop.has(x.name)),
+            selectedShapes: s.selectedShapes.filter((n) => !drop.has(n)),
+          };
         }),
       toggleShapeVisible: (name) =>
         set((s) => ({

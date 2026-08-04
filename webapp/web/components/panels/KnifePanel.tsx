@@ -25,7 +25,8 @@ export function KnifePanel() {
     >
       <p className="mb-2 text-[9px] text-muted-foreground/70">
         Cut the working polygon along a line, leaving a gap the width of the blade.
-        Each piece becomes its own shape. Also on the left tool rail.
+        Each piece becomes its own saved shape and the working outline clears.
+        Also on the left tool rail.
       </p>
       <label className="block text-[9px] text-muted-foreground">
         Blade width / gap (m)
@@ -38,7 +39,11 @@ export function KnifePanel() {
       <p className="mt-2 text-[8px] text-muted-foreground/60">
         Straight: click points on the map, double-click to finish. Freehand: drag across the polygon.
       </p>
-      {!hasPoly && <p className="mt-1.5 text-[9px] text-muted-foreground/60">Set a working polygon first (Parameters or a saved shape).</p>}
+      {!hasPoly && (
+        <p className="mt-1.5 text-[9px] text-muted-foreground/60">
+          Set a working polygon first — Parameters, or <strong>use</strong> on a saved shape to cut a piece again.
+        </p>
+      )}
     </SectionCard>
   );
 }

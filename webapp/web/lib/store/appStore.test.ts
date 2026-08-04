@@ -5,7 +5,7 @@ import type { GeoGeometry } from "@/lib/types";
 const geom: GeoGeometry = { type: "Point", coordinates: [35.748, 0.0686] };
 
 function reset() {
-  useAppStore.setState({ refPoints: [], savedShapes: [] });
+  useAppStore.setState({ refPoints: [], savedShapes: [], selectedShapes: [] });
 }
 
 describe("appStore", () => {
@@ -31,6 +31,24 @@ describe("appStore", () => {
     removeSavedShapes(["one", "three"]);
     const names = useAppStore.getState().savedShapes.map((s) => s.name);
     expect(names).toEqual(["two"]);
+  });
+
+  it("drops deleted shapes from the selection", () => {
+    const { addSavedShape, toggleSelectedShape, removeSavedShape, removeSavedShapes } = useAppStore.getState();
+    addSavedShape("Cut 1", geom);
+    addSavedShape("Cut 2", geom);
+    addSavedShape("Cut 3", geom);
+    toggleSelectedShape("Cut 1", true);
+    toggleSelectedShape("Cut 2", true);
+    toggleSelectedShape("Cut 3", true);
+    expect(useAppStore.getState().selectedShapes).toEqual(["Cut 1", "Cut 2", "Cut 3"]);
+
+    removeSavedShape("Cut 2");
+    expect(useAppStore.getState().selectedShapes).toEqual(["Cut 1", "Cut 3"]);
+
+    removeSavedShapes(["Cut 1", "Cut 3"]);
+    expect(useAppStore.getState().selectedShapes).toEqual([]);
+    expect(useAppStore.getState().savedShapes).toEqual([]);
   });
 
   it("toggles shape visibility", () => {
