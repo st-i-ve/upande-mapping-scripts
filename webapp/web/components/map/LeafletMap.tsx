@@ -8,7 +8,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { buildBaseLayers, buildKeyedLayers, addWayback } from "@/lib/map/baseLayers";
-import { cutPolygon, explodePolygons } from "@/lib/geometry/knife";
+import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import type { GeoGeometry } from "@/lib/types";
 
@@ -36,6 +36,7 @@ export default function LeafletMap() {
   const shapesVisible = useAppStore((s) => s.shapesVisible);
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
   const selectedShapes = useAppStore((s) => s.selectedShapes);
+  const slice = useAppStore((s) => s.slice);
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const genResult = useAppStore((s) => s.genResult);
   const treeGrid = useAppStore((s) => s.treeGrid);
@@ -48,6 +49,7 @@ export default function LeafletMap() {
 
   const basemapKeys = useAppStore((s) => s.basemapKeys);
 
+  const sliceLayerRef = useRef<L.LayerGroup | null>(null);
   const workingLayerRef = useRef<L.LayerGroup | null>(null);
   const genLayerRef = useRef<L.LayerGroup | null>(null);
   const treeLayerRef = useRef<L.LayerGroup | null>(null);
@@ -78,6 +80,7 @@ export default function LeafletMap() {
     L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
 
     shapeLayerRef.current = L.layerGroup().addTo(map);
+    sliceLayerRef.current = L.layerGroup().addTo(map);
     workingLayerRef.current = L.layerGroup().addTo(map);
     terraceLayerRef.current = L.layerGroup().addTo(map);
     cornerLayerRef.current = L.layerGroup().addTo(map);
@@ -196,13 +199,30 @@ export default function LeafletMap() {
     };
 
     // ---- knife: cut the working polygon along a line (freehand OR straight path) ----
+    type KnifeMode = "draw" | "straight";
     let knPts: L.LatLng[] = [];
     let knTemp: L.Polyline | null = null;
+    let knMode: KnifeMode | null = null;
     const knCoords = (): [number, number][] => knPts.map((p) => [p.lng, p.lat]);
     const knRedraw = () => {
       if (knTemp) knTemp.setLatLngs(knPts);
       else knTemp = L.polyline(knPts, { color: "#ffffff", weight: 2, dashArray: "6 4" }).addTo(map);
     };
+    // A stroke during a slicing session cuts the session's slice set — the source
+    // shape and the working polygon are both left alone. Returns true so the
+    // caller keeps the knife armed for the next slice.
+    const applySliceCut = (line: [number, number][]) => {
+      const st = useAppStore.getState();
+      if (!st.slice) return false;
+      if (line.length >= 2) {
+        const width = st.knifeWidth || 1;
+        const next = sliceAll(st.slice.slices, line, width);
+        if (next) st.applySlice(next, width); // null = the stroke changed nothing
+      }
+      // Claim the stroke either way — a stray click must not drop the session.
+      return true;
+    };
+
     // Cut the working polygon and add each resulting piece as its own saved shape,
     // then clear the working polygon — keeping it would leave a dashed twin of one
     // piece on the map that no shape control can delete. Cut a piece further with
@@ -226,6 +246,7 @@ export default function LeafletMap() {
     };
     function knStop() {
       knPts = [];
+      knMode = null;
       map.off("mousedown", knDown);
       map.off("mousemove", knMove);
       map.off("mouseup", knUp);
@@ -237,12 +258,22 @@ export default function LeafletMap() {
       if (knTemp) { map.removeLayer(knTemp); knTemp = null; }
     }
     const knMove = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); };
+    // End of a stroke: apply it, then re-arm the same knife mode if we're slicing,
+    // so cut after cut needs no trip back to the tool rail.
+    const knFinish = () => {
+      const mode = knMode;
+      const line = knCoords();
+      knStop();
+      if (applySliceCut(line)) {
+        if (mode) knArm(mode);
+        return;
+      }
+      applyKnifeCut(line);
+    };
     const knUp = () => {
       map.off("mousemove", knMove);
       map.off("mouseup", knUp);
-      const line = knCoords();
-      knStop();
-      applyKnifeCut(line);
+      knFinish();
     };
     const knDown = (e: L.LeafletMouseEvent) => {
       knPts = [e.latlng];
@@ -251,12 +282,8 @@ export default function LeafletMap() {
       map.on("mouseup", knUp);
     };
     const knClick = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); };
-    const knDbl = () => {
-      const line = knCoords();
-      knStop();
-      applyKnifeCut(line);
-    };
-    const knifeStartCommon = () => {
+    const knDbl = () => knFinish();
+    function knArm(mode: KnifeMode) {
       disableFreehand();
       map.pm.disableDraw();
       map.pm.disableGlobalEditMode();
@@ -264,7 +291,16 @@ export default function LeafletMap() {
       map.pm.disableGlobalRemovalMode();
       knStop();
       L.DomUtil.addClass(map.getContainer(), "picking");
-    };
+      if (mode === "draw") {
+        map.dragging.disable();
+        map.on("mousedown", knDown);
+      } else {
+        map.doubleClickZoom.disable();
+        map.on("click", knClick);
+        map.on("dblclick", knDbl);
+      }
+      knMode = mode;
+    }
 
     // Register the imperative command handle for panels.
     setHandle({
@@ -304,17 +340,8 @@ export default function LeafletMap() {
       dragMode: () => { disableFreehand(); map.pm.toggleGlobalDragMode(); },
       eraseMode: () => { disableFreehand(); map.pm.toggleGlobalRemovalMode(); },
       freehand: () => { if (fhActive) disableFreehand(); else enableFreehand(); },
-      knifeFreehand: () => {
-        knifeStartCommon();
-        map.dragging.disable();
-        map.on("mousedown", knDown);
-      },
-      knifeStraight: () => {
-        knifeStartCommon();
-        map.doubleClickZoom.disable();
-        map.on("click", knClick);
-        map.on("dblclick", knDbl);
-      },
+      knifeFreehand: () => knArm("draw"),
+      knifeStraight: () => knArm("straight"),
       knifeStop: () => knStop(),
       stopModes: () => {
         disableFreehand();
@@ -384,6 +411,26 @@ export default function LeafletMap() {
         .addTo(grp);
     }
   }, [savedShapes, shapesVisible, shapeOpacity, selectedShapes]);
+
+  // ---- live slicing preview (alternating fills so the blade gaps read) ----
+  useEffect(() => {
+    const grp = sliceLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    if (!slice) return;
+    slice.slices.forEach((g, i) => {
+      L.geoJSON(g as never, {
+        // Non-interactive: a slice must never swallow a knife click.
+        interactive: false,
+        style: {
+          color: "#ffffff",
+          weight: 1.5,
+          fillColor: i % 2 === 0 ? "#cfcfcf" : "#a6a6a6",
+          fillOpacity: 0.35,
+        },
+      }).addTo(grp);
+    });
+  }, [slice]);
 
   // ---- working polygon (dashed outline of what will be generated) ----
   useEffect(() => {

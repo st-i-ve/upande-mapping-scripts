@@ -4,7 +4,7 @@
  * from the polygon (difference) — splitting it into pieces with a real gap.
  * Pure + testable.
  */
-import { lineString, buffer, difference, featureCollection, feature } from "@turf/turf";
+import { lineString, buffer, difference, featureCollection, feature, area } from "@turf/turf";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import type { GeoGeometry } from "@/lib/types";
 
@@ -35,6 +35,56 @@ export function cutPolygon(
   } catch {
     return null;
   }
+}
+
+/** Gather Polygons/MultiPolygons into a single MultiPolygon. */
+export function mergePolygons(geoms: GeoGeometry[]): GeoGeometry | null {
+  const coords: unknown[] = [];
+  for (const g of geoms) {
+    if (g.type === "Polygon") coords.push(g.coordinates);
+    else if (g.type === "MultiPolygon") coords.push(...(g.coordinates as unknown[]));
+  }
+  return coords.length ? { type: "MultiPolygon", coordinates: coords } : null;
+}
+
+/**
+ * Slice a set of pieces with one blade stroke — the cake cut. Every piece the
+ * line crosses splits; the rest pass through untouched, so a long stroke cuts
+ * the whole shape and a short one subdivides a single slice.
+ *
+ * @returns the new slice set, or null when the stroke changes nothing or would
+ *          consume everything (blade wider than the shape) — callers treat null
+ *          as a no-op rather than destroying the current slices.
+ */
+export function sliceAll(
+  slices: GeoGeometry[],
+  line: [number, number][],
+  widthM: number,
+): GeoGeometry[] | null {
+  const merged = mergePolygons(slices);
+  if (!merged) return null;
+  const cut = cutPolygon(merged, line, widthM);
+  if (!cut) return null;
+  const pieces = explodePolygons(cut);
+  if (!pieces.length) return null;
+  // A stroke clear of the shape leaves the set untouched — report that as a no-op
+  // so callers don't record a cut that did nothing.
+  const before = totalArea(slices);
+  if (pieces.length === slices.length && Math.abs(totalArea(pieces) - before) <= before * 1e-9) {
+    return null;
+  }
+  return pieces;
+}
+
+/** Combined area of a set of polygons, in m². */
+function totalArea(geoms: GeoGeometry[]): number {
+  return geoms.reduce((sum, g) => {
+    try {
+      return sum + area(feature(g as unknown as Polygon | MultiPolygon));
+    } catch {
+      return sum;
+    }
+  }, 0);
 }
 
 /** Split a Polygon/MultiPolygon into separate Polygon geometries (one per part). */

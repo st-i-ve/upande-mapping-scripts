@@ -15,6 +15,28 @@ import type {
 } from "@/lib/types";
 import type { TreePoint } from "@/lib/geometry/treeGrid";
 
+/**
+ * An in-progress slicing session — cut a saved shape repeatedly, like slicing a
+ * cake, with the blade width free to change between strokes. The source shape is
+ * never mutated; slices only become saved shapes on finishSlice(). Deliberately
+ * NOT persisted: a transient editing buffer that outlived a reload is exactly
+ * what left an undeletable outline on the map before.
+ */
+export interface SliceSession {
+  /** Name of the saved shape being sliced. */
+  source: string;
+  /** Untouched copy of the source geometry, for restoring on cancel. */
+  original: GeoGeometry;
+  /** Current slice set. */
+  slices: GeoGeometry[];
+  /** Slice sets before each cut — the undo stack. */
+  history: GeoGeometry[][];
+  /** Blade width used for each cut so far, in metres. */
+  widths: number[];
+  /** Whether the source shape was visible when the session started. */
+  sourceWasVisible: boolean;
+}
+
 /** Bed/zone generation parameters (mirror the backend GenerateRequest). */
 export interface GenParams {
   name: string;
@@ -74,6 +96,18 @@ export interface AppState {
   knifeWidth: number; // blade width / gap in metres
   setKnifeWidth: (w: number) => void;
 
+  // ---- slicing session (cut one saved shape repeatedly) ----
+  slice: SliceSession | null;
+  /** Begin slicing a saved shape; hides the source so the slice gaps read. */
+  startSlice: (name: string) => void;
+  /** Record a cut: pushes the previous set onto the undo stack. */
+  applySlice: (slices: GeoGeometry[], width: number) => void;
+  undoSlice: () => void;
+  /** Discard the session and restore the source shape's visibility. */
+  cancelSlice: () => void;
+  /** Save the slices as new shapes (source kept, left hidden). Returns their names. */
+  finishSlice: () => string[];
+
   // ---- shape selection (shift-click multi-select) ----
   selectedShapes: string[];
   toggleSelectedShape: (name: string, additive: boolean) => void;
@@ -119,7 +153,7 @@ const PALETTE = ["#e5e5e5", "#9aa0a6", "#b8b8b8", "#d4d4d4", "#f5f5f5", "#8a8a8a
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       refPoints: [],
       savedShapes: [],
       basemapKeys: {},
@@ -146,6 +180,91 @@ export const useAppStore = create<AppState>()(
 
       knifeWidth: 1,
       setKnifeWidth: (knifeWidth) => set({ knifeWidth }),
+
+      slice: null,
+      startSlice: (name) =>
+        set((s) => {
+          const shape = s.savedShapes.find((x) => x.name === name);
+          if (!shape) return {};
+          const prev = s.slice; // starting a session abandons any session in progress
+          const wasVisible = prev?.source === name ? prev.sourceWasVisible : shape.visible;
+          return {
+            slice: {
+              source: name,
+              original: shape.geometry,
+              slices: [shape.geometry],
+              history: [],
+              widths: [],
+              sourceWasVisible: wasVisible,
+            },
+            savedShapes: s.savedShapes.map((x) => {
+              // Hide the new source — its solid fill would sit over the slice gaps.
+              if (x.name === name) return { ...x, visible: false };
+              // Don't leave the abandoned session's source stuck hidden.
+              if (prev && x.name === prev.source) return { ...x, visible: prev.sourceWasVisible };
+              return x;
+            }),
+          };
+        }),
+      applySlice: (slices, width) =>
+        set((s) =>
+          s.slice
+            ? {
+                slice: {
+                  ...s.slice,
+                  slices,
+                  history: [...s.slice.history, s.slice.slices],
+                  widths: [...s.slice.widths, width],
+                },
+              }
+            : {},
+        ),
+      undoSlice: () =>
+        set((s) => {
+          if (!s.slice?.history.length) return {};
+          const history = [...s.slice.history];
+          const slices = history.pop()!;
+          return { slice: { ...s.slice, slices, history, widths: s.slice.widths.slice(0, -1) } };
+        }),
+      cancelSlice: () =>
+        set((s) => {
+          if (!s.slice) return {};
+          const { source, sourceWasVisible } = s.slice;
+          return {
+            slice: null,
+            savedShapes: s.savedShapes.map((x) =>
+              x.name === source ? { ...x, visible: sourceWasVisible } : x,
+            ),
+          };
+        }),
+      finishSlice: () => {
+        const sess = get().slice;
+        if (!sess) return [];
+        // Number the slices past any name already taken, so a second session on
+        // the same shape appends rather than overwriting the first batch.
+        const taken = new Set(get().savedShapes.map((x) => x.name));
+        const names = sess.slices.map(() => {
+          let n = 1;
+          while (taken.has(`${sess.source} ${n}`)) n++;
+          const nm = `${sess.source} ${n}`;
+          taken.add(nm);
+          return nm;
+        });
+        set((s) => {
+          const next = [...s.savedShapes];
+          sess.slices.forEach((geometry, i) => {
+            next.push({
+              name: names[i],
+              geometry,
+              visible: true,
+              color: PALETTE[next.length % PALETTE.length],
+            });
+          });
+          // Source is kept but stays hidden, so the slices read on the map.
+          return { savedShapes: next, slice: null };
+        });
+        return names;
+      },
 
       selectedShapes: [],
       toggleSelectedShape: (name, additive) =>

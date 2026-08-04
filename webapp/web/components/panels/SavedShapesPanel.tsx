@@ -49,7 +49,9 @@ export function SavedShapesPanel() {
   const setSelectedShapes = useAppStore((s) => s.setSelectedShapes);
   const clearSelectedShapes = useAppStore((s) => s.clearSelectedShapes);
   const toggleSelectedShape = useAppStore((s) => s.toggleSelectedShape);
+  const startSlice = useAppStore((s) => s.startSlice);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
+  const knifeFreehand = useMapBridge((s) => s.handle?.knifeFreehand);
 
   const [name, setName] = useState("");
   const [text, setText] = useState("");
@@ -76,6 +78,13 @@ export function SavedShapesPanel() {
   const deleteSelected = () => {
     if (!selectedShapes.length) return;
     removeSavedShapes(selectedShapes); // prunes the selection itself
+  };
+
+  /** Start a slicing session and put the shape on screen with the knife armed. */
+  const startSliceOn = (name: string, geometry: GeoGeometry) => {
+    startSlice(name);
+    fitGeometry?.(geometry);
+    knifeFreehand?.();
   };
 
   const applyBoolean = (op: BooleanOp) => {
@@ -151,6 +160,13 @@ export function SavedShapesPanel() {
                     <button className="text-muted-foreground hover:text-primary" onClick={() => toggleShapeVisible(s.name)}>{s.visible ? "hide" : "show"}</button>
                     <button className="text-muted-foreground hover:text-primary" onClick={() => fitGeometry?.(s.geometry)}>zoom</button>
                     <button className="text-muted-foreground hover:text-primary" title="Use as working polygon" onClick={() => setWorkingPolygon(s.geometry)}>use</button>
+                    <button
+                      className="text-muted-foreground hover:text-primary"
+                      title="Slice this shape repeatedly with the knife (original kept)"
+                      onClick={() => startSliceOn(s.name, s.geometry)}
+                    >
+                      slice
+                    </button>
                     <button className="text-muted-foreground hover:text-destructive" onClick={() => removeSavedShape(s.name)}>delete</button>
                   </>
                 }
