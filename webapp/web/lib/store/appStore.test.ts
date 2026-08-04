@@ -150,10 +150,79 @@ describe("appStore", () => {
 
       useAppStore.getState().startSlice("Block A");
       const sess = session()!;
-      expect(sess.adopted).toEqual(["Block A 1", "Block A 2"]);
+      expect(sess.adopted.map((a) => a.name)).toEqual(["Block A 1", "Block A 2"]);
+      expect(sess.resumedFrom).toBe(2);
       expect(sess.slices).toEqual([polyA, polyB]); // the slices, not the whole shape
       // Adopted slices are hidden while the session draws them itself.
       expect(shapes().filter((s) => s.visible)).toHaveLength(0);
+    });
+
+    it("breaks one slice down further, leaving its siblings alone", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2); // → Block A 1, Block A 2
+      useAppStore.getState().finishSlice();
+
+      useAppStore.getState().startSlice("Block A 2");
+      expect(session()!.resumedFrom).toBe(0); // nothing under it yet
+      expect(session()!.slices).toEqual([polyB]); // just that piece
+      useAppStore.getState().applySlice([polyB, polyA], 1);
+      expect(useAppStore.getState().finishSlice()).toEqual(["Block A 2 1", "Block A 2 2"]);
+
+      const names = shapes().map((s) => s.name);
+      expect(names).toEqual(["Block A", "Block A 1", "Block A 2", "Block A 2 1", "Block A 2 2"]);
+      // The sibling is untouched; the piece that was split is kept but hidden.
+      expect(shapes().find((s) => s.name === "Block A 1")!.visible).toBe(true);
+      expect(shapes().find((s) => s.name === "Block A 2")!.visible).toBe(false);
+    });
+
+    it("resumes a parent from its leaves, not from superseded pieces", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().finishSlice();
+      useAppStore.getState().startSlice("Block A 2");
+      useAppStore.getState().applySlice([polyB, polyA], 1); // Block A 2 → 2 1, 2 2
+      useAppStore.getState().finishSlice();
+
+      useAppStore.getState().startSlice("Block A");
+      const sess = session()!;
+      // Block A 1 + the two pieces of Block A 2 — three pieces on the ground.
+      expect(sess.resumedFrom).toBe(3);
+      expect(sess.slices).toHaveLength(3);
+      // But every generation is adopted, so none can be orphaned on finish.
+      expect(sess.adopted.map((a) => a.name)).toEqual([
+        "Block A 1", "Block A 2", "Block A 2 1", "Block A 2 2",
+      ]);
+    });
+
+    it("leaves no orphaned grandchildren when the parent is re-cut", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().finishSlice();
+      useAppStore.getState().startSlice("Block A 2");
+      useAppStore.getState().applySlice([polyB, polyA], 1);
+      useAppStore.getState().finishSlice();
+
+      useAppStore.getState().startSlice("Block A");
+      useAppStore.getState().applySlice([polyA, polyB, polyA], 1);
+      expect(useAppStore.getState().finishSlice()).toEqual([
+        "Block A 1", "Block A 2", "Block A 3",
+      ]);
+      // "Block A 2 1"/"Block A 2 2" described ground the new set now owns — gone.
+      expect(shapes().map((s) => s.name)).toEqual([
+        "Block A", "Block A 1", "Block A 2", "Block A 3",
+      ]);
+    });
+
+    it("restores adopted slices with their original visibility on cancel", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().finishSlice();
+      useAppStore.getState().toggleShapeVisible("Block A 2"); // user hid one
+
+      useAppStore.getState().startSlice("Block A");
+      useAppStore.getState().cancelSlice();
+      expect(shapes().find((s) => s.name === "Block A 1")!.visible).toBe(true);
+      expect(shapes().find((s) => s.name === "Block A 2")!.visible).toBe(false);
     });
 
     it("replaces the adopted slices on finish, renumbered from 1", () => {

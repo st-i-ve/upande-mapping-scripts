@@ -46,8 +46,8 @@ export function KnifePanel() {
         <p className="mb-2 text-[9px] text-muted-foreground/70">
           Slicing <strong>{slicing.source}</strong> — cut as many times as you like, changing the
           blade width between cuts. The original is kept; nothing is saved until you finish.
-          {slicing.adopted.length > 0 && (
-            <> Picked up its {slicing.adopted.length} existing slices, so you carry on cutting those.</>
+          {slicing.resumedFrom > 0 && (
+            <> Picked up its {slicing.resumedFrom} existing slices, so you carry on cutting those.</>
           )}
         </p>
       ) : (

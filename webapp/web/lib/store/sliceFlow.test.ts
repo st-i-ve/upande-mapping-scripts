@@ -126,7 +126,7 @@ describe("slicing a saved shape like a cake", () => {
 
     // A second session cuts those two pieces, not the pristine original.
     useAppStore.getState().startSlice("Field");
-    expect(useAppStore.getState().slice!.adopted).toEqual(first);
+    expect(useAppStore.getState().slice!.adopted.map((a) => a.name)).toEqual(first);
     expect(useAppStore.getState().slice!.slices).toHaveLength(2);
     stroke(HORIZONTAL, 2);
     const second = useAppStore.getState().finishSlice();

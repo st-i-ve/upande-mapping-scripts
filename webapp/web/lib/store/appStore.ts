@@ -36,22 +36,51 @@ export interface SliceSession {
   /** Whether the source shape was visible when the session started. */
   sourceWasVisible: boolean;
   /**
-   * Names of already-saved slices of this source that the session took over
-   * (hidden for the duration). Finishing removes them and saves the new set;
-   * cancelling gives them back untouched. Without this, re-slicing a shape would
-   * cut the pristine original and leave the earlier slices overlapping it.
+   * Every already-saved slice descended from this source, with the visibility it
+   * had, hidden for the session's duration. Finishing removes them all and saves
+   * the new set; cancelling gives them back exactly as they were. Includes
+   * superseded intermediates ("Field 2" once it has been split further) so that
+   * re-cutting a shape can't leave stale, overlapping generations behind.
    */
-  adopted: string[];
+  adopted: { name: string; wasVisible: boolean }[];
+  /** How many slices the session resumed from — 0 when starting from the whole shape. */
+  resumedFrom: number;
 }
 
-/** Saved slices of `source`, in index order — "Field 1", "Field 2", … */
-export function sliceChildren(shapes: SavedShape[], source: string): SavedShape[] {
-  const re = new RegExp(`^${source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (\\d+)$`);
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Numeric-suffix segments of a slice name: "Field 2 10" → [2, 10]. */
+function sliceIndex(name: string, source: string): number[] {
+  return name
+    .slice(source.length)
+    .trim()
+    .split(/\s+/)
+    .map(Number)
+    .filter((n) => !Number.isNaN(n));
+}
+
+/** Every saved slice descended from `source`, any depth — "F 1", "F 2", "F 2 1", … */
+export function sliceDescendants(shapes: SavedShape[], source: string): SavedShape[] {
+  const re = new RegExp(`^${escapeRe(source)}( \\d+)+$`);
   return shapes
-    .map((s) => ({ s, m: re.exec(s.name) }))
-    .filter((x): x is { s: SavedShape; m: RegExpExecArray } => x.m != null)
-    .sort((a, b) => +a.m[1] - +b.m[1])
-    .map((x) => x.s);
+    .filter((s) => re.test(s.name))
+    .sort((a, b) => {
+      const ai = sliceIndex(a.name, source);
+      const bi = sliceIndex(b.name, source);
+      for (let i = 0; i < Math.max(ai.length, bi.length); i++) {
+        if ((ai[i] ?? 0) !== (bi[i] ?? 0)) return (ai[i] ?? 0) - (bi[i] ?? 0);
+      }
+      return 0;
+    });
+}
+
+/**
+ * The shape's current partition: descendants that were never split further. A
+ * piece that has been broken down is represented by its own pieces, not itself.
+ */
+export function sliceLeaves(shapes: SavedShape[], source: string): SavedShape[] {
+  const desc = sliceDescendants(shapes, source);
+  return desc.filter((d) => !desc.some((o) => o.name.startsWith(`${d.name} `)));
 }
 
 /** Bed/zone generation parameters (mirror the backend GenerateRequest). */
@@ -205,20 +234,25 @@ export const useAppStore = create<AppState>()(
           if (!shape) return {};
           const prev = s.slice; // starting a session abandons any session in progress
           const wasVisible = prev?.source === name ? prev.sourceWasVisible : shape.visible;
-          // Pick up where the last session left off: cut the existing slices, not
-          // the whole shape again.
-          const children = sliceChildren(s.savedShapes, name);
-          const adopted = children.map((c) => c.name);
-          const hide = new Set([name, ...adopted]);
+          // Pick up where the last session left off: cut the pieces that are
+          // actually on the ground now, not the whole shape again. Deeper
+          // generations come along too, so none are left orphaned on finish.
+          const leaves = sliceLeaves(s.savedShapes, name);
+          const adopted = sliceDescendants(s.savedShapes, name).map((d) => ({
+            name: d.name,
+            wasVisible: d.visible,
+          }));
+          const hide = new Set([name, ...adopted.map((a) => a.name)]);
           return {
             slice: {
               source: name,
               original: shape.geometry,
-              slices: children.length ? children.map((c) => c.geometry) : [shape.geometry],
+              slices: leaves.length ? leaves.map((c) => c.geometry) : [shape.geometry],
               history: [],
               widths: [],
               sourceWasVisible: wasVisible,
               adopted,
+              resumedFrom: leaves.length,
             },
             savedShapes: s.savedShapes.map((x) => {
               // Hide the source and its slices — the session draws them itself.
@@ -253,12 +287,13 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           if (!s.slice) return {};
           const { source, sourceWasVisible, adopted } = s.slice;
-          const back = new Set(adopted);
+          const back = new Map(adopted.map((a) => [a.name, a.wasVisible]));
           return {
             slice: null,
             savedShapes: s.savedShapes.map((x) => {
               if (x.name === source) return { ...x, visible: sourceWasVisible };
-              if (back.has(x.name)) return { ...x, visible: true }; // adopted slices unharmed
+              // Adopted slices go back exactly as they were, visibility included.
+              if (back.has(x.name)) return { ...x, visible: back.get(x.name)! };
               return x;
             }),
           };
@@ -266,9 +301,10 @@ export const useAppStore = create<AppState>()(
       finishSlice: () => {
         const sess = get().slice;
         if (!sess) return [];
-        // The adopted slices are replaced by this session's set, so their names
-        // free up first; anything else keeps its name and we number past it.
-        const dropped = new Set(sess.adopted);
+        // The adopted slices — every generation of them — are replaced by this
+        // session's set, so their names free up first; anything else keeps its
+        // name and we number past it.
+        const dropped = new Set(sess.adopted.map((a) => a.name));
         const taken = new Set(
           get().savedShapes.map((x) => x.name).filter((n) => !dropped.has(n)),
         );
