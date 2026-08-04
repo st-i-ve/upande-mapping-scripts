@@ -119,15 +119,22 @@ describe("slicing a saved shape like a cake", () => {
     expect(sess.slices).toEqual([field]);
   });
 
-  it("re-slicing the same shape appends instead of overwriting", () => {
+  it("re-slicing carries on from the slices already saved", () => {
     stroke(VERTICAL, 2);
     const first = useAppStore.getState().finishSlice();
+    expect(first).toHaveLength(2);
 
+    // A second session cuts those two pieces, not the pristine original.
     useAppStore.getState().startSlice("Field");
+    expect(useAppStore.getState().slice!.adopted).toEqual(first);
+    expect(useAppStore.getState().slice!.slices).toHaveLength(2);
     stroke(HORIZONTAL, 2);
     const second = useAppStore.getState().finishSlice();
 
-    expect(new Set([...first, ...second]).size).toBe(first.length + second.length);
-    expect(shapes()).toHaveLength(1 + first.length + second.length);
+    expect(second).toEqual(["Field 1", "Field 2", "Field 3", "Field 4"]);
+    // The old two are replaced, not left overlapping the new four.
+    expect(shapes().map((s) => s.name)).toEqual(["Field", ...second]);
+    // Two cuts' worth of gaps have come out of the original.
+    expect(totalArea(shapes().slice(1).map((s) => s.geometry))).toBeLessThan(totalArea([field]));
   });
 });

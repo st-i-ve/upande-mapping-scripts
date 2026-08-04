@@ -10,6 +10,7 @@ import { useMapBridge } from "@/lib/map/mapBridge";
 import { buildBaseLayers, buildKeyedLayers, addWayback } from "@/lib/map/baseLayers";
 import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
+import { shapeLetter } from "@/lib/shapeLabels";
 import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
@@ -202,11 +203,68 @@ export default function LeafletMap() {
     type KnifeMode = "draw" | "straight";
     let knPts: L.LatLng[] = [];
     let knTemp: L.Polyline | null = null;
+    let knBand: L.Polyline | null = null;
     let knMode: KnifeMode | null = null;
+    const knDots = L.layerGroup().addTo(map);
     const knCoords = (): [number, number][] => knPts.map((p) => [p.lng, p.lat]);
+    /**
+     * Blade width in screen pixels at the current zoom — the gap you'll get. A
+     * 1 m blade is under a pixel at z16, so it gets a floor of 2px to stay
+     * visible; the metre readout on the band is what's authoritative.
+     */
+    const knBladePx = () => {
+      const width = useAppStore.getState().knifeWidth || 1;
+      const mPerPx =
+        (156543.03392 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / 2 ** map.getZoom();
+      return Math.max(2, width / mPerPx);
+    };
     const knRedraw = () => {
+      // Translucent band = the blade at its true width; dashed line = the path.
+      const label = `${useAppStore.getState().knifeWidth || 1} m`;
+      if (knBand) {
+        knBand.setLatLngs(knPts).setStyle({ weight: knBladePx() });
+        knBand.setTooltipContent(label);
+      } else {
+        knBand = L.polyline(knPts, {
+          color: "#ffffff",
+          weight: knBladePx(),
+          opacity: 0.28,
+          lineCap: "butt",
+          lineJoin: "round",
+          interactive: false,
+          className: "knife-band",
+        })
+          .bindTooltip(label, {
+            permanent: true,
+            direction: "right",
+            className: "shape-letter knife-width-tip",
+          })
+          .addTo(map);
+      }
       if (knTemp) knTemp.setLatLngs(knPts);
       else knTemp = L.polyline(knPts, { color: "#ffffff", weight: 2, dashArray: "6 4" }).addTo(map);
+      // Dots on the placed points, so a straight path shows what Backspace removes.
+      knDots.clearLayers();
+      if (knMode === "straight") {
+        knPts.forEach((p, i) =>
+          L.circleMarker(p, {
+            radius: i === knPts.length - 1 ? 4 : 3,
+            color: "#ffffff",
+            weight: 1.5,
+            fillColor: i === knPts.length - 1 ? "#ffffff" : "#1a1a1a",
+            fillOpacity: 1,
+            interactive: false,
+            className: "knife-dot",
+          }).addTo(knDots),
+        );
+      }
+    };
+    /** Straight-path undo: drop the last placed point. */
+    const knPopPoint = () => {
+      if (knMode !== "straight" || !knPts.length) return false;
+      knPts.pop();
+      knRedraw();
+      return true;
     };
     // A stroke during a slicing session cuts the session's slice set — the source
     // shape and the working polygon are both left alone. Returns true so the
@@ -252,10 +310,13 @@ export default function LeafletMap() {
       map.off("mouseup", knUp);
       map.off("click", knClick);
       map.off("dblclick", knDbl);
+      map.off("zoomend", knRedraw);
       map.dragging.enable();
       map.doubleClickZoom.enable();
       L.DomUtil.removeClass(map.getContainer(), "picking");
+      knDots.clearLayers();
       if (knTemp) { map.removeLayer(knTemp); knTemp = null; }
+      if (knBand) { map.removeLayer(knBand); knBand = null; }
     }
     const knMove = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); };
     // End of a stroke: apply it, then re-arm the same knife mode if we're slicing,
@@ -300,6 +361,8 @@ export default function LeafletMap() {
         map.on("dblclick", knDbl);
       }
       knMode = mode;
+      // The blade band is sized in pixels, so it has to be redrawn on zoom.
+      map.on("zoomend", knRedraw);
     }
 
     // Register the imperative command handle for panels.
@@ -343,6 +406,7 @@ export default function LeafletMap() {
       knifeFreehand: () => knArm("draw"),
       knifeStraight: () => knArm("straight"),
       knifeStop: () => knStop(),
+      knifePopPoint: () => knPopPoint(),
       stopModes: () => {
         disableFreehand();
         knStop();
@@ -387,29 +451,37 @@ export default function LeafletMap() {
   }, [refPoints, refVisible, refOpacity]);
 
   // ---- saved-shape overlays (click to select; shift-click to multi-select) ----
+  // Outline + letter rather than a solid fill, so the imagery stays readable.
+  // Fill is opt-in via the opacity slider (0 by default).
   useEffect(() => {
     const grp = shapeLayerRef.current;
     if (!grp) return;
     grp.clearLayers();
     if (!shapesVisible) return;
-    for (const s of savedShapes) {
-      if (!s.visible) continue;
+    savedShapes.forEach((s, i) => {
+      if (!s.visible) return;
       const color = s.color || ACCENT;
       const selected = selectedShapes.includes(s.name);
       L.geoJSON(s.geometry as never, {
         style: {
           color: selected ? "#ffffff" : color,
           weight: selected ? 3 : 2,
+          fill: shapeOpacity > 0,
           fillColor: color,
-          fillOpacity: selected ? Math.min(0.55, shapeOpacity + 0.25) : shapeOpacity,
+          fillOpacity: shapeOpacity,
         },
       })
+        .bindTooltip(shapeLetter(i), {
+          permanent: true,
+          direction: "center",
+          className: `shape-letter${selected ? " shape-letter-sel" : ""}`,
+        })
         .on("click", (e: L.LeafletMouseEvent) => {
           L.DomEvent.stop(e);
           useAppStore.getState().toggleSelectedShape(s.name, e.originalEvent.shiftKey);
         })
         .addTo(grp);
-    }
+    });
   }, [savedShapes, shapesVisible, shapeOpacity, selectedShapes]);
 
   // ---- live slicing preview (alternating fills so the blade gaps read) ----
@@ -422,13 +494,16 @@ export default function LeafletMap() {
       L.geoJSON(g as never, {
         // Non-interactive: a slice must never swallow a knife click.
         interactive: false,
-        style: {
-          color: "#ffffff",
-          weight: 1.5,
-          fillColor: i % 2 === 0 ? "#cfcfcf" : "#a6a6a6",
-          fillOpacity: 0.35,
-        },
-      }).addTo(grp);
+        // Outline only — the point of slicing is seeing the ground you're cutting.
+        style: { color: "#ffffff", weight: 1.5, fill: false },
+      })
+        // Numbered as they'll be saved: "<Source> 1", "<Source> 2", …
+        .bindTooltip(String(i + 1), {
+          permanent: true,
+          direction: "center",
+          className: "shape-letter shape-letter-slice",
+        })
+        .addTo(grp);
     });
   }, [slice]);
 

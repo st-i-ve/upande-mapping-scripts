@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { booleanOp, OP_LABEL, type BooleanOp } from "@/lib/geometry/booleanOps";
+import { shapeLetter } from "@/lib/shapeLabels";
 import type { GeoGeometry } from "@/lib/types";
 
 function extractGeometry(raw: string): GeoGeometry | null {
@@ -109,7 +110,7 @@ export function SavedShapesPanel() {
       }
     >
       <div className="mt-1 flex items-center gap-2">
-        <span className="text-[8px] uppercase tracking-wider text-muted-foreground">Opacity</span>
+        <span className="text-[8px] uppercase tracking-wider text-muted-foreground" title="Shapes are drawn as outline + letter; add fill only if you want it">Fill</span>
         <Slider value={[Math.round(shapeOpacity * 100)]} max={100} step={1} onValueChange={(v) => setShapeOpacity((Array.isArray(v) ? v[0] : v) / 100)} className="flex-1" />
         <span className="tabular w-8 text-right text-[8px] text-muted-foreground">{Math.round(shapeOpacity * 100)}%</span>
       </div>
@@ -152,7 +153,7 @@ export function SavedShapesPanel() {
             </div>
           )}
           <ul className="mt-1">
-            {shapes.map((s) => (
+            {shapes.map((s, i) => (
               <ListRow
                 key={s.name}
                 actions={
@@ -173,6 +174,10 @@ export function SavedShapesPanel() {
               >
                 <label className="flex items-center gap-1.5">
                   <input type="checkbox" className="accent-primary" checked={selectedSet.has(s.name)} onChange={() => toggleSelectedShape(s.name, true)} />
+                  {/* Same letter the map draws on the shape. */}
+                  <span className="tabular w-5 shrink-0 text-[10px] font-bold" style={{ color: s.color }} title="Label shown on the map">
+                    {shapeLetter(i)}
+                  </span>
                   <span style={{ color: s.color }}>{s.visible ? "●" : "○"}</span>
                   <strong>{s.name}</strong>
                 </label>

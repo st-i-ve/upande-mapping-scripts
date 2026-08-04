@@ -2,11 +2,13 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useShapeKeyboard } from "./useShapeKeyboard";
 import { useAppStore } from "@/lib/store/appStore";
+import { useMapBridge } from "@/lib/map/mapBridge";
 import type { GeoGeometry } from "@/lib/types";
 
 const geom: GeoGeometry = { type: "Point", coordinates: [35.748, 0.0686] };
 
 function seed(selected: string[]) {
+  useMapBridge.setState({ handle: null });
   useAppStore.setState({ savedShapes: [], selectedShapes: [] });
   const { addSavedShape } = useAppStore.getState();
   addSavedShape("Cut 1", geom);
@@ -58,6 +60,27 @@ describe("useShapeKeyboard", () => {
     press("Backspace", input);
     expect(names()).toEqual(["Cut 1", "Cut 2"]);
     input.remove();
+  });
+
+  it("gives the knife first claim on Backspace while points are being placed", () => {
+    seed(["Cut 1"]);
+    let popped = 0;
+    useMapBridge.setState({
+      handle: { knifePopPoint: () => { popped++; return true; } } as never,
+    });
+    renderHook(() => useShapeKeyboard());
+    const e = press("Backspace");
+    expect(popped).toBe(1);
+    expect(names()).toEqual(["Cut 1", "Cut 2"]); // shape survived
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it("deletes shapes when the knife isn't placing points", () => {
+    seed(["Cut 1"]);
+    useMapBridge.setState({ handle: { knifePopPoint: () => false } as never });
+    renderHook(() => useShapeKeyboard());
+    press("Backspace");
+    expect(names()).toEqual(["Cut 2"]);
   });
 
   it("unbinds on unmount", () => {

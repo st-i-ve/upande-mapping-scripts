@@ -7,16 +7,26 @@
 
 export type ShapeKeyAction = "delete";
 
-const TYPING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
+const TYPING_TAGS = new Set(["TEXTAREA", "SELECT"]);
+
+/**
+ * Input types that take no text — focus sitting on one of these (after ticking a
+ * shape's checkbox, say) must NOT swallow the shortcut.
+ */
+const NON_TEXT_INPUTS = new Set([
+  "checkbox", "radio", "button", "submit", "reset", "file", "range", "color", "image",
+]);
 
 /** True when focus sits somewhere the user is typing, so shortcuts must stay out of the way. */
 export function isTypingTarget(target: EventTarget | null | undefined): boolean {
   const el = target as
-    | (Partial<HTMLElement> & { tagName?: string; isContentEditable?: boolean })
+    | (Partial<HTMLElement> & { tagName?: string; type?: string; isContentEditable?: boolean })
     | null
     | undefined;
   if (!el || typeof el.tagName !== "string") return false;
-  if (TYPING_TAGS.has(el.tagName.toUpperCase())) return true;
+  const tag = el.tagName.toUpperCase();
+  if (tag === "INPUT") return !NON_TEXT_INPUTS.has((el.type ?? "text").toLowerCase());
+  if (TYPING_TAGS.has(tag)) return true;
   if (el.isContentEditable) return true;
   // Focus can land on a child of a contenteditable host.
   return typeof el.closest === "function" && el.closest("[contenteditable='true']") != null;

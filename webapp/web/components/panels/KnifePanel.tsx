@@ -46,6 +46,9 @@ export function KnifePanel() {
         <p className="mb-2 text-[9px] text-muted-foreground/70">
           Slicing <strong>{slicing.source}</strong> — cut as many times as you like, changing the
           blade width between cuts. The original is kept; nothing is saved until you finish.
+          {slicing.adopted.length > 0 && (
+            <> Picked up its {slicing.adopted.length} existing slices, so you carry on cutting those.</>
+          )}
         </p>
       ) : (
         <p className="mb-2 text-[9px] text-muted-foreground/70">
@@ -57,14 +60,16 @@ export function KnifePanel() {
 
       <label className="block text-[9px] text-muted-foreground">
         Blade width / gap (m)
-        <Input type="number" step={0.1} min={0.1} value={knifeWidth} onChange={(e) => setKnifeWidth(+e.target.value)} className="mt-1 h-8 tabular" />
+        <Input aria-label="Blade width in metres" type="number" step={0.1} min={0.1} value={knifeWidth} onChange={(e) => setKnifeWidth(+e.target.value)} className="mt-1 h-8 tabular" />
       </label>
       <div className="mt-2 flex gap-1.5">
         <Button size="sm" className="flex-1" disabled={!ready} onClick={() => handle?.knifeStraight()}>Straight cut</Button>
         <Button size="sm" variant="secondary" className="flex-1" disabled={!ready} onClick={() => handle?.knifeFreehand()}>Freehand cut</Button>
       </div>
       <p className="mt-2 text-[8px] text-muted-foreground/60">
-        Straight: click points on the map, double-click to finish. Freehand: drag across the polygon.
+        Straight: click points on the map, <strong>Backspace</strong> removes the last one,
+        double-click to finish. Freehand: drag across the polygon. The pale band shows the
+        blade at its true width.
       </p>
 
       {slicing && (

@@ -31,6 +31,11 @@ export interface MapHandle {
   knifeStraight: () => void;
   /** Exit any knife mode and clear the temp cut line. */
   knifeStop: () => void;
+  /**
+   * Drop the last point of a straight cut path. Returns true if it consumed the
+   * request, so a Backspace while placing points doesn't also delete shapes.
+   */
+  knifePopPoint: () => boolean;
   stopModes: () => void;
   clearDrawn: () => void;
 }

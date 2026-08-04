@@ -19,9 +19,18 @@ describe("resolveShapeKey", () => {
     expect(resolveShapeKey({ key: "Delete", altKey: true })).toBeNull();
   });
 
+  it("fires when focus is on a checkbox — ticking a row then pressing Delete must work", () => {
+    for (const type of ["checkbox", "radio", "button", "range"]) {
+      expect(resolveShapeKey({ key: "Delete", target: { tagName: "INPUT", type } as never })).toBe("delete");
+    }
+  });
+
   it("stays out of the way while the user is typing", () => {
     for (const tagName of ["INPUT", "TEXTAREA", "SELECT"]) {
       expect(resolveShapeKey({ key: "Backspace", target: { tagName } as never })).toBeNull();
+    }
+    for (const type of ["text", "number", "search", "email", "password"]) {
+      expect(resolveShapeKey({ key: "Backspace", target: { tagName: "INPUT", type } as never })).toBeNull();
     }
     expect(
       resolveShapeKey({ key: "Delete", target: { tagName: "DIV", isContentEditable: true } as never }),

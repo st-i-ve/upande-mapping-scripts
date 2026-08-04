@@ -114,15 +114,14 @@ describe("appStore", () => {
       expect(shapes()[1].color).toBeTruthy();
     });
 
-    it("appends past taken names when the same shape is sliced again", () => {
-      startOn("Block A");
+    it("numbers around slices belonging to a different source", () => {
+      useAppStore.getState().addSavedShape("Block", polyB);
+      useAppStore.getState().addSavedShape("Block 1", polyB); // a slice of "Block"
+      startOn("Block A"); // different source — must not disturb "Block 1"
       useAppStore.getState().applySlice([polyA, polyB], 2);
-      expect(useAppStore.getState().finishSlice()).toEqual(["Block A 1", "Block A 2"]);
 
-      useAppStore.getState().startSlice("Block A");
-      useAppStore.getState().applySlice([polyA, polyB], 1);
-      expect(useAppStore.getState().finishSlice()).toEqual(["Block A 3", "Block A 4"]);
-      expect(shapes()).toHaveLength(5); // source + 4 slices, nothing overwritten
+      expect(useAppStore.getState().finishSlice()).toEqual(["Block A 1", "Block A 2"]);
+      expect(shapes().map((s) => s.name)).toContain("Block 1");
     });
 
     it("restores the first source when a session on another shape starts", () => {
@@ -142,6 +141,47 @@ describe("appStore", () => {
       expect(session()!.sourceWasVisible).toBe(true);
       useAppStore.getState().cancelSlice();
       expect(shapes()[0].visible).toBe(true);
+    });
+
+    it("picks up existing slices instead of re-cutting the original", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().finishSlice(); // → Block A 1, Block A 2
+
+      useAppStore.getState().startSlice("Block A");
+      const sess = session()!;
+      expect(sess.adopted).toEqual(["Block A 1", "Block A 2"]);
+      expect(sess.slices).toEqual([polyA, polyB]); // the slices, not the whole shape
+      // Adopted slices are hidden while the session draws them itself.
+      expect(shapes().filter((s) => s.visible)).toHaveLength(0);
+    });
+
+    it("replaces the adopted slices on finish, renumbered from 1", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().finishSlice();
+
+      useAppStore.getState().startSlice("Block A");
+      useAppStore.getState().applySlice([polyA, polyB, polyA], 1);
+      const names = useAppStore.getState().finishSlice();
+
+      expect(names).toEqual(["Block A 1", "Block A 2", "Block A 3"]);
+      expect(shapes().map((s) => s.name)).toEqual([
+        "Block A", "Block A 1", "Block A 2", "Block A 3",
+      ]); // 3 slices replace the old 2 — no leftovers
+    });
+
+    it("hands the adopted slices back untouched on cancel", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      const first = useAppStore.getState().finishSlice();
+
+      useAppStore.getState().startSlice("Block A");
+      useAppStore.getState().applySlice([polyA], 1); // would have merged them
+      useAppStore.getState().cancelSlice();
+
+      expect(shapes().map((s) => s.name)).toEqual(["Block A", ...first]);
+      expect(shapes().filter((s) => s.name !== "Block A").every((s) => s.visible)).toBe(true);
     });
 
     it("finish is a no-op with no session", () => {

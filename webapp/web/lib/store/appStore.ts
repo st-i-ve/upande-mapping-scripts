@@ -35,6 +35,23 @@ export interface SliceSession {
   widths: number[];
   /** Whether the source shape was visible when the session started. */
   sourceWasVisible: boolean;
+  /**
+   * Names of already-saved slices of this source that the session took over
+   * (hidden for the duration). Finishing removes them and saves the new set;
+   * cancelling gives them back untouched. Without this, re-slicing a shape would
+   * cut the pristine original and leave the earlier slices overlapping it.
+   */
+  adopted: string[];
+}
+
+/** Saved slices of `source`, in index order — "Field 1", "Field 2", … */
+export function sliceChildren(shapes: SavedShape[], source: string): SavedShape[] {
+  const re = new RegExp(`^${source.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} (\\d+)$`);
+  return shapes
+    .map((s) => ({ s, m: re.exec(s.name) }))
+    .filter((x): x is { s: SavedShape; m: RegExpExecArray } => x.m != null)
+    .sort((a, b) => +a.m[1] - +b.m[1])
+    .map((x) => x.s);
 }
 
 /** Bed/zone generation parameters (mirror the backend GenerateRequest). */
@@ -160,7 +177,7 @@ export const useAppStore = create<AppState>()(
       refVisible: true,
       refOpacity: 0.9,
       shapesVisible: true,
-      shapeOpacity: 0.4,
+      shapeOpacity: 0, // outline + letter by default; fill is opt-in
 
       workingPolygon: null,
       drawnGeometry: null,
@@ -188,18 +205,24 @@ export const useAppStore = create<AppState>()(
           if (!shape) return {};
           const prev = s.slice; // starting a session abandons any session in progress
           const wasVisible = prev?.source === name ? prev.sourceWasVisible : shape.visible;
+          // Pick up where the last session left off: cut the existing slices, not
+          // the whole shape again.
+          const children = sliceChildren(s.savedShapes, name);
+          const adopted = children.map((c) => c.name);
+          const hide = new Set([name, ...adopted]);
           return {
             slice: {
               source: name,
               original: shape.geometry,
-              slices: [shape.geometry],
+              slices: children.length ? children.map((c) => c.geometry) : [shape.geometry],
               history: [],
               widths: [],
               sourceWasVisible: wasVisible,
+              adopted,
             },
             savedShapes: s.savedShapes.map((x) => {
-              // Hide the new source — its solid fill would sit over the slice gaps.
-              if (x.name === name) return { ...x, visible: false };
+              // Hide the source and its slices — the session draws them itself.
+              if (hide.has(x.name)) return { ...x, visible: false };
               // Don't leave the abandoned session's source stuck hidden.
               if (prev && x.name === prev.source) return { ...x, visible: prev.sourceWasVisible };
               return x;
@@ -229,20 +252,26 @@ export const useAppStore = create<AppState>()(
       cancelSlice: () =>
         set((s) => {
           if (!s.slice) return {};
-          const { source, sourceWasVisible } = s.slice;
+          const { source, sourceWasVisible, adopted } = s.slice;
+          const back = new Set(adopted);
           return {
             slice: null,
-            savedShapes: s.savedShapes.map((x) =>
-              x.name === source ? { ...x, visible: sourceWasVisible } : x,
-            ),
+            savedShapes: s.savedShapes.map((x) => {
+              if (x.name === source) return { ...x, visible: sourceWasVisible };
+              if (back.has(x.name)) return { ...x, visible: true }; // adopted slices unharmed
+              return x;
+            }),
           };
         }),
       finishSlice: () => {
         const sess = get().slice;
         if (!sess) return [];
-        // Number the slices past any name already taken, so a second session on
-        // the same shape appends rather than overwriting the first batch.
-        const taken = new Set(get().savedShapes.map((x) => x.name));
+        // The adopted slices are replaced by this session's set, so their names
+        // free up first; anything else keeps its name and we number past it.
+        const dropped = new Set(sess.adopted);
+        const taken = new Set(
+          get().savedShapes.map((x) => x.name).filter((n) => !dropped.has(n)),
+        );
         const names = sess.slices.map(() => {
           let n = 1;
           while (taken.has(`${sess.source} ${n}`)) n++;
@@ -251,7 +280,7 @@ export const useAppStore = create<AppState>()(
           return nm;
         });
         set((s) => {
-          const next = [...s.savedShapes];
+          const next = s.savedShapes.filter((x) => !dropped.has(x.name));
           sess.slices.forEach((geometry, i) => {
             next.push({
               name: names[i],
@@ -261,7 +290,11 @@ export const useAppStore = create<AppState>()(
             });
           });
           // Source is kept but stays hidden, so the slices read on the map.
-          return { savedShapes: next, slice: null };
+          return {
+            savedShapes: next,
+            selectedShapes: s.selectedShapes.filter((n) => !dropped.has(n)),
+            slice: null,
+          };
         });
         return names;
       },
@@ -340,6 +373,13 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "upande-mapper",
+      // v1: shapes are drawn as outline + letter, so fill starts off. Without this
+      // a previously persisted 0.4 would keep hiding the imagery.
+      version: 1,
+      migrate: (persisted, version) =>
+        version < 1
+          ? { ...(persisted as object), shapeOpacity: 0 }
+          : (persisted as never),
       partialize: (s) => ({
         refPoints: s.refPoints,
         savedShapes: s.savedShapes,

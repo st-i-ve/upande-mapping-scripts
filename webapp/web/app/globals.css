@@ -248,6 +248,43 @@
 .ref-tip.leaflet-tooltip-right::before {
   border-right-color: var(--popover);
 }
+/* ---- Shape letters: identify a shape without filling it in ---- */
+.shape-letter.leaflet-tooltip {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  /* Legible over satellite imagery — bright greenhouse roofs included — without
+     putting a chip behind it and hiding the ground. */
+  text-shadow:
+    0 0 2px oklch(0 0 0 / 95%),
+    0 0 5px oklch(0 0 0 / 85%),
+    0 1px 6px oklch(0 0 0 / 70%);
+}
+.shape-letter.leaflet-tooltip::before {
+  display: none; /* no callout arrow on a centred label */
+}
+.shape-letter-sel.leaflet-tooltip {
+  font-size: 17px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.shape-letter-slice.leaflet-tooltip {
+  font-size: 13px;
+  opacity: 0.95;
+}
+/* Blade thickness readout on the cut line — a 1m blade is sub-pixel at low zoom,
+   so the number is what tells you the real gap. */
+.knife-width-tip.leaflet-tooltip {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .leaflet-container.picking {
   cursor: crosshair;
 }
