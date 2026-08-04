@@ -7,10 +7,14 @@ describe("resolveShapeKey", () => {
     expect(resolveShapeKey({ key: "Backspace" })).toBe("delete");
   });
 
+  it("maps Escape to escape", () => {
+    expect(resolveShapeKey({ key: "Escape" })).toBe("escape");
+  });
+
   it("ignores keys that aren't ours", () => {
     expect(resolveShapeKey({ key: "d" })).toBeNull();
-    expect(resolveShapeKey({ key: "Escape" })).toBeNull();
     expect(resolveShapeKey({ key: "Enter" })).toBeNull();
+    expect(resolveShapeKey({ key: "Esc" })).toBeNull(); // legacy spelling, not fired by browsers
   });
 
   it("ignores modifier combos so ⌘⌫ / ctrl+backspace still reach the browser", () => {

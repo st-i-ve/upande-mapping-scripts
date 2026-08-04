@@ -83,6 +83,32 @@ describe("useShapeKeyboard", () => {
     expect(names()).toEqual(["Cut 2"]);
   });
 
+  it("Escape puts an armed knife away", () => {
+    seed(["Cut 1"]);
+    let stopped = 0;
+    useMapBridge.setState({
+      handle: { knifeArmed: () => true, knifeStop: () => { stopped++; } } as never,
+    });
+    renderHook(() => useShapeKeyboard());
+    const e = press("Escape");
+    expect(stopped).toBe(1);
+    expect(e.defaultPrevented).toBe(true);
+    expect(names()).toEqual(["Cut 1", "Cut 2"]); // and leaves shapes alone
+  });
+
+  it("Escape does nothing when no knife is armed", () => {
+    seed(["Cut 1"]);
+    let stopped = 0;
+    useMapBridge.setState({
+      handle: { knifeArmed: () => false, knifeStop: () => { stopped++; } } as never,
+    });
+    renderHook(() => useShapeKeyboard());
+    const e = press("Escape");
+    expect(stopped).toBe(0);
+    expect(e.defaultPrevented).toBe(false); // a pick or edit session keeps the key
+    expect(names()).toEqual(["Cut 1", "Cut 2"]);
+  });
+
   it("unbinds on unmount", () => {
     seed(["Cut 1"]);
     const { unmount } = renderHook(() => useShapeKeyboard());

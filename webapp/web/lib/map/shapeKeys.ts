@@ -5,7 +5,7 @@
  * the user is typing" guard — are testable without a map or a real DOM event.
  */
 
-export type ShapeKeyAction = "delete";
+export type ShapeKeyAction = "delete" | "escape";
 
 const TYPING_TAGS = new Set(["TEXTAREA", "SELECT"]);
 
@@ -47,5 +47,8 @@ export function resolveShapeKey(e: ShapeKeyEvent): ShapeKeyAction | null {
   // Modifier combos belong to the browser / OS (⌘⌫ = back, etc.).
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   if (e.key === "Delete" || e.key === "Backspace") return "delete";
+  // Escape puts the knife away — nothing else, so it can't disturb a pick or an
+  // edit session the user is in the middle of.
+  if (e.key === "Escape") return "escape";
   return null;
 }

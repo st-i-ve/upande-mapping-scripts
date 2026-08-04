@@ -68,8 +68,12 @@ export function KnifePanel() {
       </div>
       <p className="mt-2 text-[8px] text-muted-foreground/60">
         Straight: click points on the map, <strong>Backspace</strong> removes the last one,
-        double-click to finish. Freehand: drag across the polygon. The pale band shows the
-        blade at its true width.
+        double-click to finish the cut. Freehand: drag across the polygon. The pale band shows
+        the blade at its true width.
+      </p>
+      <p className="mt-1 text-[8px] text-muted-foreground/60">
+        The knife stays out for the next cut — press <strong>Esc</strong> (or double-click
+        without drawing a path) to put it away.
       </p>
 
       {slicing && (

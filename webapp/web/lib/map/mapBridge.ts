@@ -31,6 +31,8 @@ export interface MapHandle {
   knifeStraight: () => void;
   /** Exit any knife mode and clear the temp cut line. */
   knifeStop: () => void;
+  /** True while a knife mode is armed — lets Escape exit only the knife. */
+  knifeArmed: () => boolean;
   /**
    * Drop the last point of a straight cut path. Returns true if it consumed the
    * request, so a Backspace while placing points doesn't also delete shapes.
@@ -43,13 +45,28 @@ export interface MapHandle {
 interface MapBridge {
   handle: MapHandle | null;
   picking: boolean;
+  /** True while a knife mode is armed. Mirrors handle.knifeArmed() for readers. */
+  knifeArmed: boolean;
   setHandle: (h: MapHandle | null) => void;
   setPicking: (p: boolean) => void;
+  setKnifeArmed: (k: boolean) => void;
 }
 
 export const useMapBridge = create<MapBridge>((set) => ({
   handle: null,
   picking: false,
+  knifeArmed: false,
   setHandle: (handle) => set({ handle }),
   setPicking: (picking) => set({ picking }),
+  setKnifeArmed: (knifeArmed) => set({ knifeArmed }),
 }));
+
+/**
+ * True when a map click belongs to a tool rather than to shape selection — while
+ * the knife is armed or a point/edge pick is waiting. Shape layers must let those
+ * clicks through to the map instead of consuming them.
+ */
+export function clickBelongsToTool(): boolean {
+  const { picking, knifeArmed } = useMapBridge.getState();
+  return picking || knifeArmed;
+}

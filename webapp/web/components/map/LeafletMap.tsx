@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAppStore } from "@/lib/store/appStore";
-import { useMapBridge } from "@/lib/map/mapBridge";
+import { useMapBridge, clickBelongsToTool } from "@/lib/map/mapBridge";
 import { buildBaseLayers, buildKeyedLayers, addWayback } from "@/lib/map/baseLayers";
 import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
@@ -219,6 +219,14 @@ export default function LeafletMap() {
       return Math.max(2, width / mPerPx);
     };
     const knRedraw = () => {
+      // Nothing drawn yet: clear up rather than leaving an empty band and its
+      // width label sitting on the map (a zoomend can land here with no points).
+      if (!knPts.length) {
+        knDots.clearLayers();
+        if (knTemp) { map.removeLayer(knTemp); knTemp = null; }
+        if (knBand) { map.removeLayer(knBand); knBand = null; }
+        return;
+      }
       // Translucent band = the blade at its true width; dashed line = the path.
       const label = `${useAppStore.getState().knifeWidth || 1} m`;
       if (knBand) {
@@ -305,6 +313,7 @@ export default function LeafletMap() {
     function knStop() {
       knPts = [];
       knMode = null;
+      useMapBridge.getState().setKnifeArmed(false);
       map.off("mousedown", knDown);
       map.off("mousemove", knMove);
       map.off("mouseup", knUp);
@@ -319,12 +328,25 @@ export default function LeafletMap() {
       if (knBand) { map.removeLayer(knBand); knBand = null; }
     }
     const knMove = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); };
+    /**
+     * A path going nowhere — every point within a few pixels of the first. A
+     * double-click on open ground looks like this (its two clicks each place a
+     * point), and that's the gesture for putting the knife away.
+     */
+    const knDegenerate = () => {
+      if (knPts.length < 2) return true;
+      const first = map.latLngToLayerPoint(knPts[0]);
+      return knPts.every((p) => map.latLngToLayerPoint(p).distanceTo(first) < 6);
+    };
     // End of a stroke: apply it, then re-arm the same knife mode if we're slicing,
-    // so cut after cut needs no trip back to the tool rail.
+    // so cut after cut needs no trip back to the tool rail. A degenerate path
+    // ends the tool instead — otherwise straight mode would never let go.
     const knFinish = () => {
       const mode = knMode;
       const line = knCoords();
+      const nowhere = knDegenerate();
       knStop();
+      if (nowhere) return;
       if (applySliceCut(line)) {
         if (mode) knArm(mode);
         return;
@@ -361,6 +383,7 @@ export default function LeafletMap() {
         map.on("dblclick", knDbl);
       }
       knMode = mode;
+      useMapBridge.getState().setKnifeArmed(true);
       // The blade band is sized in pixels, so it has to be redrawn on zoom.
       map.on("zoomend", knRedraw);
     }
@@ -406,6 +429,7 @@ export default function LeafletMap() {
       knifeFreehand: () => knArm("draw"),
       knifeStraight: () => knArm("straight"),
       knifeStop: () => knStop(),
+      knifeArmed: () => knMode != null,
       knifePopPoint: () => knPopPoint(),
       stopModes: () => {
         disableFreehand();
@@ -477,6 +501,9 @@ export default function LeafletMap() {
           className: `shape-letter${selected ? " shape-letter-sel" : ""}`,
         })
         .on("click", (e: L.LeafletMouseEvent) => {
+          // A knife point or a pick outranks selection: leave the click alone so
+          // it reaches the map, or clicking near an outline swallows it.
+          if (clickBelongsToTool()) return;
           L.DomEvent.stop(e);
           useAppStore.getState().toggleSelectedShape(s.name, e.originalEvent.shiftKey);
         })
