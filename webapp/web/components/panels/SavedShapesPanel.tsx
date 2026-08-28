@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shapes, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
+import { Shapes, Eye, EyeOff, Pencil, Check, X, Triangle } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -52,6 +52,7 @@ export function SavedShapesPanel() {
   const clearSelectedShapes = useAppStore((s) => s.clearSelectedShapes);
   const toggleSelectedShape = useAppStore((s) => s.toggleSelectedShape);
   const startSlice = useAppStore((s) => s.startSlice);
+  const setTriadQueue = useAppStore((s) => s.setTriadQueue);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
   const knifeFreehand = useMapBridge((s) => s.handle?.knifeFreehand);
 
@@ -153,9 +154,20 @@ export function SavedShapesPanel() {
               />
               Select all
             </label>
-            <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selectedShapes.length} title="Or press Delete" onClick={deleteSelected}>
-              Delete selected{selectedShapes.length ? ` (${selectedShapes.length})` : ""}
-            </Button>
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                className="h-7 text-[9px]"
+                disabled={!selectedShapes.length}
+                title="Queue these shapes for band/triad generation"
+                onClick={() => setTriadQueue(selectedShapes)}
+              >
+                <Triangle size={10} /> Generate triads{selectedShapes.length ? ` (${selectedShapes.length})` : ""}
+              </Button>
+              <Button variant="destructive" size="sm" className="h-7 text-[9px]" disabled={!selectedShapes.length} title="Or press Delete" onClick={deleteSelected}>
+                Delete{selectedShapes.length ? ` (${selectedShapes.length})` : ""}
+              </Button>
+            </div>
           </div>
           {selectedShapes.length >= 2 && (
             <div className="mb-1 flex gap-1.5">

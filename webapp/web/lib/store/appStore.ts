@@ -172,6 +172,14 @@ export interface AppState {
   setSelectedShapes: (names: string[]) => void;
   clearSelectedShapes: () => void;
 
+  /**
+   * Shapes queued for triad generation, by name. Generation walks these one at a
+   * time so a long run can be stopped between blocks, and each finished block
+   * gets its own output.
+   */
+  triadQueue: string[];
+  setTriadQueue: (names: string[]) => void;
+
   // ---- triad (hexagonal triangle tessellation) ----
   triad: FeatureCollection | null;
   triadHexes: FeatureCollection | null;
@@ -400,6 +408,9 @@ export const useAppStore = create<AppState>()(
         }),
       setSelectedShapes: (selectedShapes) => set({ selectedShapes }),
       clearSelectedShapes: () => set({ selectedShapes: [] }),
+
+      triadQueue: [],
+      setTriadQueue: (triadQueue) => set({ triadQueue }),
 
       triad: null,
       triadHexes: null,

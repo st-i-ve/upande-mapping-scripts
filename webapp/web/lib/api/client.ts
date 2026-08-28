@@ -70,6 +70,15 @@ export const api = {
 
   listOutputs: () => request<{ outputs: OutputInfo[] }>("/outputs"),
 
+  /** Store a client-generated FeatureCollection alongside the server's outputs. */
+  saveOutput: (name: string, geojson: FeatureCollection, signal?: AbortSignal) =>
+    request<{ filename: string }>("/outputs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, geojson }),
+      signal,
+    }),
+
   getOutput: (filename: string) =>
     request<FeatureCollection>(`/outputs/${encodeURIComponent(filename)}`),
 

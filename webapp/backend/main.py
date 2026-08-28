@@ -129,6 +129,28 @@ def terrace(req: TerraceRequest) -> JSONResponse:
     return JSONResponse(result)
 
 
+class SaveOutputRequest(BaseModel):
+    """A FeatureCollection generated in the browser, stored as an output.
+
+    Triads are tessellated client-side (pure, unit-tested TS), but their results
+    belong in the same store the bed/zone generator writes to, so one panel lists
+    everything and one route feeds Frappe.
+    """
+
+    name: str = Field("output", max_length=120)
+    geojson: dict[str, Any]
+
+
+@app.post("/api/outputs")
+def save_output(req: SaveOutputRequest) -> JSONResponse:
+    if req.geojson.get("type") != "FeatureCollection":
+        raise HTTPException(400, "Expected a FeatureCollection")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    fname = f"{ts}_{_safe_name(req.name)}_{uuid.uuid4().hex[:6]}.geojson"
+    (STORAGE / fname).write_text(json.dumps(req.geojson))
+    return JSONResponse({"filename": fname})
+
+
 @app.get("/api/outputs")
 def list_outputs() -> dict:
     items = []
@@ -166,12 +188,59 @@ def delete_output(filename: str) -> dict:
 _DIGIT_RE = re.compile(r"\d+")
 
 
-def _to_frappe_ndjson(fc: dict) -> str:
-    """Convert a generate_beds_zones result into the textarea format used by
-    the Frappe `Bed And Zone Automation` doctype: one FeatureCollection per
-    line, each FC holding exactly one zone LineString feature with int
-    `fid` / `line_id` / `segment_id` / `zone_id` properties.
+def _triads_to_frappe_ndjson(fc: dict) -> str:
+    """Triad output → the `unit_id` / `child_id` convention.
+
+    `Field Unit Automation` reads unit/child ids under three naming conventions;
+    `unit_id`/`child_id` is the one it documents, and it is what the tessellation
+    already tags each triad with — `unit_id` is the Band and `child_id` the Triad
+    within it. Paste the result into a Field Unit Automation with the Block
+    selected and Unit Type "Band".
     """
+    lines: list[str] = []
+    fid = 0
+    for f in fc.get("features", []):
+        props = f.get("properties", {}) or {}
+        unit = props.get("unit_id")
+        child = props.get("child_id")
+        if unit is None or child is None:
+            continue
+        fid += 1
+        lines.append(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "properties": {
+                                "fid": fid,
+                                "unit_id": int(unit),
+                                "child_id": int(child),
+                            },
+                            "geometry": f.get("geometry"),
+                        }
+                    ],
+                }
+            )
+        )
+    return "\n".join(lines)
+
+
+def _to_frappe_ndjson(fc: dict) -> str:
+    """Convert a stored result into the textarea format the Frappe field-unit
+    automations read: one FeatureCollection per line.
+
+    Triad outputs already carry `unit_id`/`child_id` and pass through as those;
+    bed/zone results are mapped to the rose convention
+    (`line_id` / `segment_id` / `zone_id`).
+    """
+    if any(
+        (f.get("properties") or {}).get("unit_id") is not None
+        for f in fc.get("features", [])
+    ):
+        return _triads_to_frappe_ndjson(fc)
+
     lines: list[str] = []
     fid = 0
     counter_by_bed: dict[int, int] = {}

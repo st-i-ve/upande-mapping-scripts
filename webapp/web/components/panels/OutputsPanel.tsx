@@ -116,6 +116,14 @@ export function OutputsPanel() {
         ))}
       </ul>
       {!items.length && <p className="text-[9px] text-muted-foreground/70">No saved outputs yet — Generate creates them.</p>}
+      {items.length > 0 && (
+        <p className="mt-2 text-[8px] text-muted-foreground/60">
+          <strong>frappe</strong> copies the automation format. For bands/triads, paste it
+          into a <strong>Field Unit Automation</strong> with the Block selected and Unit
+          Type <strong>Band</strong> — it creates the bands and their triads the same way
+          rows and orchard trees are created.
+        </p>
+      )}
     </SectionCard>
   );
 }
