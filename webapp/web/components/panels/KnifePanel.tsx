@@ -1,13 +1,12 @@
 "use client";
 
-import { Scissors, Undo2, Check, X } from "lucide-react";
+import { Scissors } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { SectionCard } from "@/components/console/SectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mergePolygons } from "@/lib/geometry/knife";
 
 export function KnifePanel() {
   const hydrated = useHydrated();
@@ -15,26 +14,13 @@ export function KnifePanel() {
   const knifeWidth = useAppStore((s) => s.knifeWidth);
   const setKnifeWidth = useAppStore((s) => s.setKnifeWidth);
   const slice = useAppStore((s) => s.slice);
-  const undoSlice = useAppStore((s) => s.undoSlice);
-  const cancelSlice = useAppStore((s) => s.cancelSlice);
-  const finishSlice = useAppStore((s) => s.finishSlice);
   const handle = useMapBridge((s) => s.handle);
 
   const slicing = hydrated ? slice : null;
   // While slicing, the knife cuts the slice set — no working polygon needed.
   const ready = !!handle && (slicing != null || (hydrated && !!workingPolygon));
 
-  const finish = () => {
-    const merged = mergePolygons(slicing?.slices ?? []);
-    finishSlice();
-    handle?.knifeStop();
-    if (merged) handle?.fitGeometry(merged);
-  };
 
-  const cancel = () => {
-    cancelSlice();
-    handle?.knifeStop();
-  };
 
   return (
     <SectionCard
@@ -77,30 +63,16 @@ export function KnifePanel() {
       </p>
 
       {slicing && (
-        <div className="mt-2.5 rounded-md border border-border/60 bg-muted/30 p-2">
-          <div className="flex items-baseline justify-between">
-            <span className="text-[9px] text-muted-foreground">
-              {slicing.widths.length} cut{slicing.widths.length === 1 ? "" : "s"} ·{" "}
-              <strong className="text-foreground">{slicing.slices.length} slices</strong>
+        <p className="mt-2.5 rounded-md border border-border/60 bg-muted/30 p-2 text-[9px] text-muted-foreground">
+          {slicing.widths.length} cut{slicing.widths.length === 1 ? "" : "s"} ·{" "}
+          <strong className="text-foreground">{slicing.slices.length} segments</strong>
+          {slicing.widths.length > 0 && (
+            <span className="tabular block text-[8px] text-muted-foreground/70">
+              {slicing.widths.map((w) => `${w}m`).join(" · ")}
             </span>
-            {slicing.widths.length > 0 && (
-              <span className="tabular text-[8px] text-muted-foreground/70">
-                {slicing.widths.map((w) => `${w}m`).join(" · ")}
-              </span>
-            )}
-          </div>
-          <div className="mt-1.5 flex gap-1.5">
-            <Button size="sm" variant="secondary" className="h-7 flex-1 text-[9px]" disabled={!slicing.widths.length} onClick={undoSlice}>
-              <Undo2 size={11} /> Undo cut
-            </Button>
-            <Button size="sm" className="h-7 flex-1 text-[9px]" disabled={slicing.slices.length < 2} onClick={finish}>
-              <Check size={11} /> Finish ({slicing.slices.length})
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-[9px]" onClick={cancel} title="Discard the slices">
-              <X size={11} />
-            </Button>
-          </div>
-        </div>
+          )}
+          <span className="mt-1 block">Finish or discard them in <strong>Segments</strong> above.</span>
+        </p>
       )}
 
       {!slicing && !workingPolygon && hydrated && (

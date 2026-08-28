@@ -253,8 +253,69 @@ describe("appStore", () => {
       expect(shapes().filter((s) => s.name !== "Block A").every((s) => s.visible)).toBe(true);
     });
 
+    it("saves reviewed names verbatim", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      expect(useAppStore.getState().sliceNames()).toEqual(["Block A 1", "Block A 2"]);
+
+      const names = useAppStore.getState().finishSlice(["North strip", " South strip "]);
+      expect(names).toEqual(["North strip", "South strip"]); // trimmed
+      expect(shapes().map((s) => s.name)).toEqual(["Block A", "North strip", "South strip"]);
+    });
+
+    it("falls back to generated names when the review list is the wrong length", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      expect(useAppStore.getState().finishSlice(["only one"])).toEqual([
+        "Block A 1", "Block A 2",
+      ]);
+    });
+
     it("finish is a no-op with no session", () => {
       expect(useAppStore.getState().finishSlice()).toEqual([]);
+    });
+  });
+
+  describe("renameSavedShape", () => {
+    const names = () => useAppStore.getState().savedShapes.map((s) => s.name);
+
+    it("renames a shape and carries its slices with it", () => {
+      const { addSavedShape, renameSavedShape } = useAppStore.getState();
+      addSavedShape("Field", geom);
+      addSavedShape("Field 1", geom);
+      addSavedShape("Field 2", geom);
+      addSavedShape("Field 2 1", geom);
+      addSavedShape("Fieldwork", geom); // shares a prefix but is not a slice
+
+      expect(renameSavedShape("Field", "Plot")).toBe(4);
+      expect(names()).toEqual(["Plot", "Plot 1", "Plot 2", "Plot 2 1", "Fieldwork"]);
+    });
+
+    it("follows the rename through the selection", () => {
+      const { addSavedShape, toggleSelectedShape, renameSavedShape } = useAppStore.getState();
+      addSavedShape("Field", geom);
+      addSavedShape("Field 1", geom);
+      toggleSelectedShape("Field 1", true);
+      renameSavedShape("Field", "Plot");
+      expect(useAppStore.getState().selectedShapes).toEqual(["Plot 1"]);
+    });
+
+    it("refuses a name another shape already has, in any case", () => {
+      const { addSavedShape, renameSavedShape } = useAppStore.getState();
+      addSavedShape("Field", geom);
+      addSavedShape("Block", geom);
+      expect(renameSavedShape("Field", "Block")).toBe(0);
+      expect(renameSavedShape("Field", "block")).toBe(0);
+      expect(names()).toEqual(["Field", "Block"]);
+    });
+
+    it("ignores an empty name, an unchanged name, or an unknown shape", () => {
+      const { addSavedShape, renameSavedShape } = useAppStore.getState();
+      addSavedShape("Field", geom);
+      expect(renameSavedShape("Field", "   ")).toBe(0);
+      expect(renameSavedShape("Field", "Field")).toBe(0);
+      expect(renameSavedShape("Nope", "X")).toBe(0);
+      expect(names()).toEqual(["Field"]);
     });
   });
 

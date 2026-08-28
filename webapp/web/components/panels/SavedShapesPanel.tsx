@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shapes } from "lucide-react";
+import { Shapes, Eye, EyeOff, Pencil, Check, X } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { booleanOp, OP_LABEL, type BooleanOp } from "@/lib/geometry/booleanOps";
 import { shapeLetter } from "@/lib/shapeLabels";
+import { checkNames, NAME_ISSUE_TEXT } from "@/lib/shapeNames";
 import type { GeoGeometry } from "@/lib/types";
 
 function extractGeometry(raw: string): GeoGeometry | null {
@@ -54,6 +55,9 @@ export function SavedShapesPanel() {
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
   const knifeFreehand = useMapBridge((s) => s.handle?.knifeFreehand);
 
+  const renameSavedShape = useAppStore((s) => s.renameSavedShape);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
@@ -79,6 +83,16 @@ export function SavedShapesPanel() {
   const deleteSelected = () => {
     if (!selectedShapes.length) return;
     removeSavedShapes(selectedShapes); // prunes the selection itself
+  };
+
+  const startRename = (n: string) => { setEditing(n); setDraft(n); };
+  /** The problem with the draft name, or null while it is usable. */
+  const renameIssue =
+    editing === null ? null : checkNames([draft], shapes.map((s) => s.name), [editing])[0];
+  const commitRename = () => {
+    if (editing === null || renameIssue) return;
+    renameSavedShape(editing, draft);
+    setEditing(null);
   };
 
   /** Start a slicing session and put the shape on screen with the knife armed. */
@@ -158,7 +172,22 @@ export function SavedShapesPanel() {
                 key={s.name}
                 actions={
                   <>
-                    <button className="text-muted-foreground hover:text-primary" onClick={() => toggleShapeVisible(s.name)}>{s.visible ? "hide" : "show"}</button>
+                    <button
+                      className="text-muted-foreground hover:text-primary"
+                      title={s.visible ? "Hide on the map" : "Show on the map"}
+                      aria-label={s.visible ? `Hide ${s.name}` : `Show ${s.name}`}
+                      onClick={() => toggleShapeVisible(s.name)}
+                    >
+                      {s.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+                    </button>
+                    <button
+                      className="text-muted-foreground hover:text-primary"
+                      title="Rename"
+                      aria-label={`Rename ${s.name}`}
+                      onClick={() => startRename(s.name)}
+                    >
+                      <Pencil size={11} />
+                    </button>
                     <button className="text-muted-foreground hover:text-primary" onClick={() => fitGeometry?.(s.geometry)}>zoom</button>
                     <button className="text-muted-foreground hover:text-primary" title="Use as working polygon" onClick={() => setWorkingPolygon(s.geometry)}>use</button>
                     <button
@@ -172,6 +201,40 @@ export function SavedShapesPanel() {
                   </>
                 }
               >
+                {editing === s.name ? (
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        autoFocus
+                        aria-label="New name"
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename();
+                          if (e.key === "Escape") setEditing(null);
+                        }}
+                        className={`h-7 text-[11px] ${renameIssue ? "border-destructive" : ""}`}
+                      />
+                      <button className="text-muted-foreground hover:text-primary disabled:opacity-40"
+                        disabled={!!renameIssue} onClick={commitRename} aria-label="Save name">
+                        <Check size={13} />
+                      </button>
+                      <button className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setEditing(null)} aria-label="Cancel rename">
+                        <X size={13} />
+                      </button>
+                    </div>
+                    {renameIssue ? (
+                      <p className="mt-0.5 text-[9px] text-destructive">{NAME_ISSUE_TEXT[renameIssue]}</p>
+                    ) : (
+                      shapes.some((x) => x.name.startsWith(`${s.name} `)) && (
+                        <p className="mt-0.5 text-[9px] text-muted-foreground/70">
+                          Renames its {shapes.filter((x) => x.name.startsWith(`${s.name} `)).length} slices too.
+                        </p>
+                      )
+                    )}
+                  </div>
+                ) : (
                 <label className="flex items-center gap-1.5">
                   <input type="checkbox" className="accent-primary" checked={selectedSet.has(s.name)} onChange={() => toggleSelectedShape(s.name, true)} />
                   {/* Same letter the map draws on the shape. */}
@@ -181,6 +244,7 @@ export function SavedShapesPanel() {
                   <span style={{ color: s.color }}>{s.visible ? "●" : "○"}</span>
                   <strong>{s.name}</strong>
                 </label>
+                )}
               </ListRow>
             ))}
           </ul>

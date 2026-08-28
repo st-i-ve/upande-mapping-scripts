@@ -151,8 +151,20 @@ export interface AppState {
   undoSlice: () => void;
   /** Discard the session and restore the source shape's visibility. */
   cancelSlice: () => void;
-  /** Save the slices as new shapes (source kept, left hidden). Returns their names. */
-  finishSlice: () => string[];
+  /**
+   * Save the slices as new shapes (source kept, left hidden). Pass reviewed
+   * names to use them verbatim; omit for the generated defaults. Returns the
+   * names used.
+   */
+  finishSlice: (names?: string[]) => string[];
+  /** The names the slices would be saved under right now. */
+  sliceNames: () => string[];
+  /**
+   * Rename a shape and, with it, every slice descended from it — the hierarchy
+   * lives in the names ("Field 2 1"), so leaving children behind would orphan
+   * them. Returns the number of shapes renamed, 0 if the name was unusable.
+   */
+  renameSavedShape: (from: string, to: string) => number;
 
   // ---- shape selection (shift-click multi-select) ----
   selectedShapes: string[];
@@ -298,7 +310,47 @@ export const useAppStore = create<AppState>()(
             }),
           };
         }),
-      finishSlice: () => {
+      sliceNames: () => {
+        const sess = get().slice;
+        if (!sess) return [];
+        const dropped = new Set(sess.adopted.map((a) => a.name));
+        const taken = new Set(
+          get().savedShapes.map((x) => x.name).filter((n) => !dropped.has(n)),
+        );
+        return sess.slices.map(() => {
+          let n = 1;
+          while (taken.has(`${sess.source} ${n}`)) n++;
+          const nm = `${sess.source} ${n}`;
+          taken.add(nm);
+          return nm;
+        });
+      },
+      renameSavedShape: (from, to) => {
+        const name = to.trim();
+        if (!name || name === from) return 0;
+        const shapes = get().savedShapes;
+        if (!shapes.some((x) => x.name === from)) return 0;
+        if (shapes.some((x) => x.name.toLowerCase() === name.toLowerCase() && x.name !== from)) {
+          return 0; // caller should have checked; never silently overwrite
+        }
+        // "Field" -> "Plot" also moves "Field 1" and "Field 2 1".
+        const rename = (n: string) =>
+          n === from ? name : n.startsWith(`${from} `) ? `${name}${n.slice(from.length)}` : n;
+        const touched = shapes.filter((x) => rename(x.name) !== x.name).length;
+        set((st) => ({
+          savedShapes: st.savedShapes.map((x) => ({ ...x, name: rename(x.name) })),
+          selectedShapes: st.selectedShapes.map(rename),
+          slice: st.slice
+            ? {
+                ...st.slice,
+                source: rename(st.slice.source),
+                adopted: st.slice.adopted.map((a) => ({ ...a, name: rename(a.name) })),
+              }
+            : st.slice,
+        }));
+        return touched;
+      },
+      finishSlice: (reviewed) => {
         const sess = get().slice;
         if (!sess) return [];
         // The adopted slices — every generation of them — are replaced by this
@@ -308,13 +360,16 @@ export const useAppStore = create<AppState>()(
         const taken = new Set(
           get().savedShapes.map((x) => x.name).filter((n) => !dropped.has(n)),
         );
-        const names = sess.slices.map(() => {
-          let n = 1;
-          while (taken.has(`${sess.source} ${n}`)) n++;
-          const nm = `${sess.source} ${n}`;
-          taken.add(nm);
-          return nm;
-        });
+        const names =
+          reviewed && reviewed.length === sess.slices.length
+            ? reviewed.map((n) => n.trim())
+            : sess.slices.map(() => {
+                let n = 1;
+                while (taken.has(`${sess.source} ${n}`)) n++;
+                const nm = `${sess.source} ${n}`;
+                taken.add(nm);
+                return nm;
+              });
         set((s) => {
           const next = s.savedShapes.filter((x) => !dropped.has(x.name));
           sess.slices.forEach((geometry, i) => {

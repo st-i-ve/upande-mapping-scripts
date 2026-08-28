@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import { ReferencePointsPanel } from "@/components/panels/ReferencePointsPanel";
 import { SavedShapesPanel } from "@/components/panels/SavedShapesPanel";
+import { SegmentsPanel } from "@/components/panels/SegmentsPanel";
 import { ShapeBuilderPanel } from "@/components/panels/ShapeBuilderPanel";
 import { ParametersPanel } from "@/components/panels/ParametersPanel";
 import { TerracePanel } from "@/components/panels/TerracePanel";
@@ -32,6 +33,7 @@ export function Panels2D() {
   const panels = [
     ["sec-ref", <ReferencePointsPanel key="ref" />],
     ["sec-shapes", <SavedShapesPanel key="shapes" />],
+    ["sec-segments", <SegmentsPanel key="segments" />],
     ["sec-build", <ShapeBuilderPanel key="build" />],
     ["sec-params", <ParametersPanel key="params" />],
     ["sec-terrace", <TerracePanel key="terrace" />],
