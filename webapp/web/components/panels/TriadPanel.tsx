@@ -195,7 +195,7 @@ export function TriadPanel() {
 
       <div className="mt-2 flex gap-1.5">
         <Button size="sm" variant={queue.length ? "secondary" : "default"} className="flex-1" onClick={generate}>
-          {queue.length ? "Preview on working polygon" : "Generate triads"}
+          Generate from working polygon
         </Button>
         {count > 0 && (
           <>
