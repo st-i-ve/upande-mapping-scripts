@@ -7,7 +7,13 @@ import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge, clickBelongsToTool } from "@/lib/map/mapBridge";
-import { buildBaseLayers, buildKeyedLayers, addWayback } from "@/lib/map/baseLayers";
+import {
+  buildBaseLayers,
+  buildKeyedLayers,
+  buildOverlays,
+  addWayback,
+  LABEL_PANE,
+} from "@/lib/map/baseLayers";
 import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import { shapeLetter } from "@/lib/shapeLabels";
@@ -70,11 +76,21 @@ export default function LeafletMap() {
     });
     mapRef.current = map;
 
+    // Reference overlays get their own pane between the base tiles (z 200) and
+    // our data (z 400) — otherwise switching the base layer re-appends it on top
+    // and buries them. Non-interactive, so labels never swallow a map click.
+    map.createPane(LABEL_PANE);
+    const labelPane = map.getPane(LABEL_PANE);
+    if (labelPane) {
+      labelPane.style.zIndex = "350";
+      labelPane.style.pointerEvents = "none";
+    }
+
     // Full base-layer set (ported from the vanilla app), default Google Satellite.
     const { baseLayers, defaultLayer } = buildBaseLayers();
     defaultLayer.addTo(map);
     const layerControl = L.control
-      .layers(baseLayers, {}, { position: "topright", collapsed: true })
+      .layers(baseLayers, buildOverlays(), { position: "topright", collapsed: true })
       .addTo(map);
     layerControlRef.current = layerControl;
     addWayback(layerControl);

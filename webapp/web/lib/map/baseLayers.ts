@@ -7,6 +7,24 @@
 import L from "leaflet";
 import type { BasemapKeys } from "@/lib/types";
 
+/**
+ * Esri advertises World Imagery to z23 worldwide, but coverage is regional: over
+ * these farms (western Kenya) the deepest real tile is z18, Clarity stops at z17
+ * and the labels overlay at z19. Ask past that and the service answers with a
+ * grey "Map data not available" placeholder. maxNativeZoom makes Leaflet upscale
+ * the deepest real tile instead — soft, but it still shows the ground.
+ *
+ * Re-probe if coverage improves: <service>/tilemap/{z}/{y}/{x}/1/1 answers
+ * {"data":[1]} when a tile exists. Google, the default base, does have imagery
+ * past z18 here — this cap is per-layer, not a cap on the map.
+ */
+const ESRI_IMAGERY_NATIVE_ZOOM = 18;
+const ESRI_CLARITY_NATIVE_ZOOM = 17;
+const ESRI_LABELS_NATIVE_ZOOM = 19;
+
+/** Pane for reference overlays: above every base tile layer, below our data. */
+export const LABEL_PANE = "reference-labels";
+
 export interface BaseLayerSet {
   baseLayers: Record<string, L.Layer>;
   defaultLayer: L.Layer;
@@ -49,6 +67,26 @@ export function buildKeyedLayers(keys: BasemapKeys): Record<string, L.Layer> {
   return keyed;
 }
 
+/**
+ * Reference overlays, drawn on top of whichever satellite base is selected —
+ * unlike Google Hybrid, whose labels are welded to Google's own imagery. They
+ * live in their own pane so switching the base layer doesn't bury them, and the
+ * layer control offers them as checkboxes (off until ticked).
+ */
+export function buildOverlays(): Record<string, L.Layer> {
+  return {
+    "Place labels": L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+      {
+        pane: LABEL_PANE,
+        maxZoom: 22,
+        maxNativeZoom: ESRI_LABELS_NATIVE_ZOOM,
+        attribution: "Esri Reference (Boundaries and Places)",
+      },
+    ),
+  };
+}
+
 export function buildBaseLayers(): BaseLayerSet {
   const g = (lyr: string) =>
     L.tileLayer(`https://mt{s}.google.com/vt/lyrs=${lyr}&x={x}&y={y}&z={z}`, {
@@ -62,18 +100,22 @@ export function buildBaseLayers(): BaseLayerSet {
   const googleTerrain = g("p");
   const googleRoad = g("m");
 
-  const esri = (svc: string, max = 22) =>
+  const esri = (svc: string, max = 22, native?: number) =>
     L.tileLayer(
       `https://server.arcgisonline.com/ArcGIS/rest/services/${svc}/MapServer/tile/{z}/{y}/{x}`,
-      { maxZoom: max, attribution: `Esri ${svc}` },
+      { maxZoom: max, maxNativeZoom: native, attribution: `Esri ${svc}` },
     );
 
-  const esriSat = esri("World_Imagery");
+  const esriSat = esri("World_Imagery", 22, ESRI_IMAGERY_NATIVE_ZOOM);
   const esriTopo = esri("World_Topo_Map", 19);
   const esriStreet = esri("World_Street_Map", 19);
   const esriClarity = L.tileLayer(
     "https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    { maxZoom: 22, attribution: "Esri Clarity (World Imagery)" },
+    {
+      maxZoom: 22,
+      maxNativeZoom: ESRI_CLARITY_NATIVE_ZOOM,
+      attribution: "Esri Clarity (World Imagery)",
+    },
   );
 
   const yandexSat = L.tileLayer(
@@ -167,23 +209,54 @@ export function buildBaseLayers(): BaseLayerSet {
   return { baseLayers, defaultLayer: googleSat };
 }
 
+/** One entry of Esri's waybackconfig.json (only the fields we use). */
+export interface WaybackEntry {
+  itemURL?: string;
+  itemTitle?: string;
+}
+
+/** Release date embedded in a Wayback title: "World Imagery (Wayback 2026-08-05)". */
+function waybackDate(title?: string): string {
+  return /(\d{4}-\d{2}-\d{2})/.exec(title ?? "")?.[1] ?? "";
+}
+
+/**
+ * Newest Wayback release, as a Leaflet URL template and a label.
+ *
+ * Picked by the date in the title, NOT by the numeric config key: those keys are
+ * release ids in no chronological order — the highest one is a 2023 release,
+ * while the newest is filed under a much lower number. Sorting by key served
+ * three-year-old imagery from a layer whose whole point is being current.
+ */
+export function pickWaybackRelease(
+  cfg: Record<string, WaybackEntry>,
+): { url: string; label: string } | null {
+  const newest = Object.values(cfg ?? {})
+    .filter((e) => e?.itemURL && waybackDate(e.itemTitle))
+    .sort((a, b) => waybackDate(b.itemTitle).localeCompare(waybackDate(a.itemTitle)))[0];
+  if (!newest?.itemURL) return null;
+  return {
+    url: newest.itemURL
+      .replace("{level}", "{z}")
+      .replace("{row}", "{y}")
+      .replace("{col}", "{x}"),
+    label: `Esri Wayback (${waybackDate(newest.itemTitle)})`,
+  };
+}
+
 /** Esri Wayback — freshest imagery release, fetched async and added as a base layer. */
 export function addWayback(control: L.Control.Layers) {
   fetch("https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json")
     .then((r) => r.json())
-    .then((cfg: Record<string, { itemURL: string; itemReleaseName: string }>) => {
-      const releases = Object.keys(cfg).map(Number).sort((a, b) => b - a);
-      const latest = cfg[String(releases[0])];
-      if (!latest?.itemURL) return;
-      const url = latest.itemURL
-        .replace("{level}", "{z}")
-        .replace("{row}", "{y}")
-        .replace("{col}", "{x}");
-      const wb = L.tileLayer(url, {
+    .then((cfg: Record<string, WaybackEntry>) => {
+      const release = pickWaybackRelease(cfg);
+      if (!release) return;
+      const wb = L.tileLayer(release.url, {
         maxZoom: 22,
-        attribution: `Esri Wayback ${latest.itemReleaseName}`,
+        maxNativeZoom: ESRI_IMAGERY_NATIVE_ZOOM,
+        attribution: release.label,
       });
-      control.addBaseLayer(wb, `Esri Wayback (${latest.itemReleaseName})`);
+      control.addBaseLayer(wb, release.label);
     })
     .catch(() => {
       /* offline / blocked — skip the wayback layer */
