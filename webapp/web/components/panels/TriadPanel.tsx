@@ -9,7 +9,7 @@ import { AnimatedNumber } from "@/components/console/AnimatedNumber";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { generateTriads } from "@/lib/geometry/triad";
+import { generateTriads, type BandDirection, type TriadDirection } from "@/lib/geometry/triad";
 
 export function TriadPanel() {
   const hydrated = useHydrated();
@@ -21,6 +21,10 @@ export function TriadPanel() {
 
   const [sideLength, setSideLength] = useState(5);
   const [rotationDeg, setRotationDeg] = useState(0);
+  // Which end the numbering starts from — bands run north→south by default and
+  // triads west→east, matching how the blocks are walked on the ground.
+  const [bandDirection, setBandDirection] = useState<BandDirection>("north-south");
+  const [triadDirection, setTriadDirection] = useState<TriadDirection>("west-east");
   const [err, setErr] = useState("");
 
   const source = drawnGeometry ?? workingPolygon;
@@ -31,7 +35,9 @@ export function TriadPanel() {
 
   const generate = () => {
     if (!source) return setErr("Draw a shape or set a working polygon first.");
-    const { triads, hexagons } = generateTriads(source, { sideLength, rotationDeg });
+    const { triads, hexagons } = generateTriads(source, {
+      sideLength, rotationDeg, bandDirection, triadDirection,
+    });
     if (!triads.features.length) return setErr("No triangles fit — check side length / polygon.");
     setErr("");
     setTriad(triads);
@@ -65,6 +71,33 @@ export function TriadPanel() {
         </div>
         <Slider value={[rotationDeg]} min={-90} max={90} step={1} onValueChange={(v) => setRotationDeg(Array.isArray(v) ? v[0] : v)} />
       </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="block text-[9px] text-muted-foreground">
+          Bands numbered
+          <select
+            aria-label="Band direction"
+            value={bandDirection}
+            onChange={(e) => setBandDirection(e.target.value as BandDirection)}
+            className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-[10px]"
+          >
+            <option value="north-south">North → south</option>
+            <option value="south-north">South → north</option>
+          </select>
+        </label>
+        <label className="block text-[9px] text-muted-foreground">
+          Triads numbered
+          <select
+            aria-label="Triad direction"
+            value={triadDirection}
+            onChange={(e) => setTriadDirection(e.target.value as TriadDirection)}
+            className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-[10px]"
+          >
+            <option value="west-east">West → east</option>
+            <option value="east-west">East → west</option>
+            <option value="north-south">North → south</option>
+          </select>
+        </label>
+      </div>
       {err && <p className="mt-1.5 text-[9px] text-destructive">{err}</p>}
       <div className="mt-2 flex gap-1.5">
         <Button size="sm" className="flex-1" onClick={generate}>Generate triads</Button>
@@ -76,9 +109,11 @@ export function TriadPanel() {
         )}
       </div>
       <p className="mt-2 text-[8px] text-muted-foreground/60">
-        Hexagonal grid — 6 equilateral triads per hexagon, grouped into horizontal
-        bands (the row-equivalent unit: each shape is “… · Band N”), clipped to the
-        boundary (edge units are partial). Uses the drawn shape or working polygon.
+        Hexagonal grid — 6 equilateral triads per hexagon, grouped into bands (the
+        row-equivalent unit), clipped to the boundary (edge units are partial).
+        Bands number from 1 within each block and triads from 1 within each band,
+        which is what the ERP names <strong>Band N</strong> and
+        <strong> Triad N</strong> from. Uses the drawn shape or working polygon.
       </p>
     </SectionCard>
   );

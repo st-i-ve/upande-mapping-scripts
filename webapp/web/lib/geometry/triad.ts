@@ -12,18 +12,27 @@
  * within the AOI is named "<shape> · Band N"), analogous to a row of orchard
  * trees: a band's members are colinear and reconstructable from its endpoints.
  */
-import { polygon as turfPolygon, intersect, area, featureCollection, feature } from "@turf/turf";
+import { polygon as turfPolygon, intersect, area, featureCollection, feature, centroid } from "@turf/turf";
 import type { Feature, Polygon, MultiPolygon } from "geojson";
 import type { FeatureCollection, GeoFeature, GeoGeometry } from "@/lib/types";
 
 const M_PER_DEG_LAT = 111320;
 const MAX_TRIANGLES = 40000; // guard against tiny side lengths freezing the UI
 
+/** Which end of the shape band 1 sits at. */
+export type BandDirection = "north-south" | "south-north";
+/** The order triads are numbered in, within their band. */
+export type TriadDirection = "west-east" | "east-west" | "north-south";
+
 export interface TriadOptions {
   /** Hexagon size = equilateral triangle side length, in metres. */
   sideLength: number;
   /** Rotate the tiling by this many degrees around the AOI centre. */
   rotationDeg?: number;
+  /** Band 1 at the north end (default) or the south. */
+  bandDirection?: BandDirection;
+  /** Triad 1 at the west end of its band (default), the east, or the north. */
+  triadDirection?: TriadDirection;
 }
 
 export interface TriadProps {
@@ -31,7 +40,18 @@ export interface TriadProps {
   hex: number; // hexagon number (row-major)
   tri: number; // 1..6 within the hexagon
   band: number; // the "band" — a horizontal line of hexes (the row-equivalent unit)
-  label: string; // "Band {band} · Triad H{hex}-{tri}"
+  /** The triad's number within its band, 1..n, in `triadDirection` order. */
+  triadNo: number;
+  /**
+   * The ERP contract (upande_scp `Field Unit Automation`): `unit_id` names the
+   * Band and `child_id` the Triad within it. Band is a `Bed` with
+   * unit_type="Band" and Triad is named "{band} - Triad {child_id}", so
+   * child_id has to be unique within its band — which `tri` (1..6 within a
+   * hexagon) is not.
+   */
+  unit_id: number;
+  child_id: number;
+  label: string; // "Band {band} · Triad {triadNo}"
   kind: "full" | "edge";
   [k: string]: unknown;
 }
@@ -60,8 +80,9 @@ function outerRing(geom: GeoGeometry): [number, number][] | null {
 
 export function generateTriads(
   poly: GeoGeometry,
-  { sideLength: s, rotationDeg = 0 }: TriadOptions,
+  opts: TriadOptions,
 ): TriadResult {
+  const { sideLength: s, rotationDeg = 0 } = opts;
   const empty: TriadResult = {
     triads: { type: "FeatureCollection", features: [] },
     hexagons: { type: "FeatureCollection", features: [] },
@@ -114,7 +135,11 @@ export function generateTriads(
   const features: GeoFeature<TriadProps>[] = [];
   const hexFeatures: GeoFeature<HexProps>[] = [];
   let hexNum = 0;
-  let bandNum = 0; // the band index — a horizontal line of hexes (row-equivalent)
+  // `rowIndex` is geometric and drives the alternate-row offset; `bandNum` is
+  // what gets emitted and only advances for rows that actually produced hexes,
+  // so bands are contiguous 1..N with no gaps where the shape was empty.
+  let rowIndex = 0;
+  let bandNum = 0;
 
   const clipToPoly = (ringLonLat: [number, number][]) => {
     const f = turfPolygon([[...ringLonLat, ringLonLat[0]]]);
@@ -129,8 +154,9 @@ export function generateTriads(
   // Iterate top→bottom (rotated-y high→low), left→right.
   for (let y = maxY + rowStep; y >= minY - rowStep; y -= rowStep) {
     if (features.length >= MAX_TRIANGLES) break;
-    bandNum++;
-    const xOff = bandNum % 2 === 0 ? colStep / 2 : 0; // offset alternate bands
+    rowIndex++;
+    const xOff = rowIndex % 2 === 0 ? colStep / 2 : 0; // offset alternate rows
+    let bandUsed = false;
     for (let x = minX - colStep + xOff; x <= maxX + colStep; x += colStep) {
       const verts = angles.map(
         (a): [number, number] => [x + R * Math.cos(a), y + R * Math.sin(a)],
@@ -146,6 +172,7 @@ export function generateTriads(
         if (clip) kept.push({ geom: clip.geom, full: clip.full, tri: k + 1 });
       }
       if (!kept.length) continue;
+      if (!bandUsed) { bandUsed = true; bandNum++; }
       hexNum++;
       for (const t of kept) {
         features.push({
@@ -156,6 +183,9 @@ export function generateTriads(
             hex: hexNum,
             tri: t.tri,
             band: bandNum,
+            triadNo: 0,
+            unit_id: bandNum,
+            child_id: 0,
             label: `Band ${bandNum} · Triad H${hexNum}-${t.tri}`,
             kind: t.full ? "full" : "edge",
           },
@@ -172,6 +202,95 @@ export function generateTriads(
       if (features.length >= MAX_TRIANGLES) break;
     }
   }
+
+  return numberTriads(
+    { type: "FeatureCollection", features },
+    { type: "FeatureCollection", features: hexFeatures },
+    opts,
+  );
+}
+
+/** [lon, lat] of a geometry's centroid. */
+function centre(geom: GeoGeometry | null): [number, number] {
+  if (!geom) return [0, 0];
+  try {
+    const c = centroid(feature(geom as unknown as Polygon | MultiPolygon));
+    const [lon, lat] = c.geometry.coordinates as [number, number];
+    return [lon, lat];
+  } catch {
+    return [0, 0];
+  }
+}
+
+/**
+ * Assign the numbers the ERP needs: bands 1..N from the chosen end of the shape,
+ * and triads 1..n within each band in the chosen direction.
+ *
+ * Kept separate from the tiling so the ordering rules can be tested on their own,
+ * and so re-numbering never has to re-cut the geometry.
+ */
+export function numberTriads(
+  triads: FeatureCollection<TriadProps>,
+  hexagons: FeatureCollection<HexProps>,
+  opts: { bandDirection?: BandDirection; triadDirection?: TriadDirection } = {},
+): TriadResult {
+  const bandDir = opts.bandDirection ?? "north-south";
+  const triadDir = opts.triadDirection ?? "west-east";
+
+  const withCentre = triads.features.map((f) => ({ f, c: centre(f.geometry) }));
+
+  // Group by the band the tiling produced, then order those groups by latitude
+  // rather than trusting the loop — so the direction means north/south on the
+  // ground even when the grid is rotated.
+  const groups = new Map<number, { f: GeoFeature<TriadProps>; c: [number, number] }[]>();
+  for (const item of withCentre) {
+    const b = item.f.properties.band;
+    if (!groups.has(b)) groups.set(b, []);
+    groups.get(b)!.push(item);
+  }
+  const meanLat = (items: { c: [number, number] }[]) =>
+    items.reduce((sum, i) => sum + i.c[1], 0) / (items.length || 1);
+
+  const ordered = [...groups.entries()].sort((a, b) => meanLat(b[1]) - meanLat(a[1])); // north first
+  if (bandDir === "south-north") ordered.reverse();
+
+  const bandMap = new Map<number, number>();
+  ordered.forEach(([oldBand], i) => bandMap.set(oldBand, i + 1));
+
+  const order = (a: [number, number], b: [number, number]) => {
+    if (triadDir === "west-east") return a[0] - b[0];
+    if (triadDir === "east-west") return b[0] - a[0];
+    return b[1] - a[1]; // north-south
+  };
+
+  const features: GeoFeature<TriadProps>[] = [];
+  for (const [oldBand, items] of ordered) {
+    const band = bandMap.get(oldBand)!;
+    [...items]
+      .sort((x, y) => order(x.c, y.c))
+      .forEach((item, i) => {
+        const triadNo = i + 1;
+        features.push({
+          ...item.f,
+          properties: {
+            ...item.f.properties,
+            band,
+            triadNo,
+            unit_id: band,
+            child_id: triadNo,
+            label: `Band ${band} · Triad ${triadNo}`,
+          },
+        });
+      });
+  }
+
+  const hexFeatures = hexagons.features.map((h) => {
+    const band = bandMap.get(h.properties.band) ?? h.properties.band;
+    return {
+      ...h,
+      properties: { ...h.properties, band, label: `Band ${band} · Hex ${h.properties.id}` },
+    };
+  });
 
   return {
     triads: { type: "FeatureCollection", features },
