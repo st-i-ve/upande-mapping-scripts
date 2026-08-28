@@ -33,6 +33,11 @@ export interface SliceSession {
   history: GeoGeometry[][];
   /** Blade width used for each cut so far, in metres. */
   widths: number[];
+  /**
+   * Cuts undone but not yet discarded, newest first — the redo stack. Making a
+   * new cut clears it, because the branch it belonged to no longer exists.
+   */
+  future: { slices: GeoGeometry[]; width: number }[];
   /** Whether the source shape was visible when the session started. */
   sourceWasVisible: boolean;
   /**
@@ -149,6 +154,8 @@ export interface AppState {
   /** Record a cut: pushes the previous set onto the undo stack. */
   applySlice: (slices: GeoGeometry[], width: number) => void;
   undoSlice: () => void;
+  /** Put back the cut that undo took away. */
+  redoSlice: () => void;
   /** Discard the session and restore the source shape's visibility. */
   cancelSlice: () => void;
   /**
@@ -270,6 +277,7 @@ export const useAppStore = create<AppState>()(
               slices: leaves.length ? leaves.map((c) => c.geometry) : [shape.geometry],
               history: [],
               widths: [],
+              future: [],
               sourceWasVisible: wasVisible,
               adopted,
               resumedFrom: leaves.length,
@@ -292,6 +300,7 @@ export const useAppStore = create<AppState>()(
                   slices,
                   history: [...s.slice.history, s.slice.slices],
                   widths: [...s.slice.widths, width],
+                  future: [], // a new cut abandons whatever redo was holding
                 },
               }
             : {},
@@ -301,7 +310,31 @@ export const useAppStore = create<AppState>()(
           if (!s.slice?.history.length) return {};
           const history = [...s.slice.history];
           const slices = history.pop()!;
-          return { slice: { ...s.slice, slices, history, widths: s.slice.widths.slice(0, -1) } };
+          const width = s.slice.widths[s.slice.widths.length - 1] ?? 1;
+          return {
+            slice: {
+              ...s.slice,
+              slices,
+              history,
+              widths: s.slice.widths.slice(0, -1),
+              // Keep the cut we just took off, so it can be put back.
+              future: [{ slices: s.slice.slices, width }, ...s.slice.future],
+            },
+          };
+        }),
+      redoSlice: () =>
+        set((s) => {
+          if (!s.slice?.future.length) return {};
+          const [next, ...future] = s.slice.future;
+          return {
+            slice: {
+              ...s.slice,
+              slices: next.slices,
+              history: [...s.slice.history, s.slice.slices],
+              widths: [...s.slice.widths, next.width],
+              future,
+            },
+          };
         }),
       cancelSlice: () =>
         set((s) => {

@@ -221,6 +221,12 @@ export default function LeafletMap() {
     let knTemp: L.Polyline | null = null;
     let knBand: L.Polyline | null = null;
     let knMode: KnifeMode | null = null;
+    /**
+     * When a click on the end knot last closed a cut. The browser fires dblclick
+     * right after that second click, and knDbl must not treat it as a fresh
+     * (empty, therefore tool-ending) path.
+     */
+    let knClosedAt = 0;
     const knDots = L.layerGroup().addTo(map);
     const knCoords = (): [number, number][] => knPts.map((p) => [p.lng, p.lat]);
     /**
@@ -380,8 +386,28 @@ export default function LeafletMap() {
       map.on("mousemove", knMove);
       map.on("mouseup", knUp);
     };
-    const knClick = (e: L.LeafletMouseEvent) => { knPts.push(e.latlng); knRedraw(); };
-    const knDbl = () => knFinish();
+    /** Screen distance from a placed point, in pixels. */
+    const knPxFrom = (a: L.LatLng, b: L.LatLng) =>
+      map.latLngToLayerPoint(a).distanceTo(map.latLngToLayerPoint(b));
+
+    const knClick = (e: L.LeafletMouseEvent) => {
+      // Clicking the end knot again ties off this cut: apply it and stay armed,
+      // ready to start the next one somewhere else. Same gesture as a polyline
+      // tool, and it beats hunting for a double-click on a long path.
+      const last = knPts[knPts.length - 1];
+      if (last && knPxFrom(last, e.latlng) < 10 && !knDegenerate()) {
+        knClosedAt = Date.now();
+        knFinish();
+        return;
+      }
+      knPts.push(e.latlng);
+      knRedraw();
+    };
+    const knDbl = () => {
+      // The dblclick that follows a knot-closing click has already been handled.
+      if (Date.now() - knClosedAt < 500) return;
+      knFinish();
+    };
     function knArm(mode: KnifeMode) {
       disableFreehand();
       map.pm.disableDraw();

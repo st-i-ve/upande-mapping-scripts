@@ -53,9 +53,10 @@ export function KnifePanel() {
         <Button size="sm" variant="secondary" className="flex-1" disabled={!ready} onClick={() => handle?.knifeFreehand()}>Freehand cut</Button>
       </div>
       <p className="mt-2 text-[8px] text-muted-foreground/60">
-        Straight: click points on the map, <strong>Backspace</strong> removes the last one,
-        double-click to finish the cut. Freehand: drag across the polygon. The pale band shows
-        the blade at its true width.
+        Straight: click points on the map, <strong>Backspace</strong> removes the last one, and
+        click the last point again — or double-click — to tie off the cut. The knife stays out,
+        so you can start the next cut somewhere else. Freehand: drag across the polygon. The
+        pale band shows the blade at its true width.
       </p>
       <p className="mt-1 text-[8px] text-muted-foreground/60">
         The knife stays out for the next cut — press <strong>Esc</strong> (or double-click

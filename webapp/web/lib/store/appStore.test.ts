@@ -253,6 +253,58 @@ describe("appStore", () => {
       expect(shapes().filter((s) => s.name !== "Block A").every((s) => s.visible)).toBe(true);
     });
 
+    it("redoes a cut that was undone, width and all", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().applySlice([polyA, polyB, polyA], 0.5);
+      expect(session()!.slices).toHaveLength(3);
+
+      useAppStore.getState().undoSlice();
+      expect(session()!.slices).toHaveLength(2);
+      expect(session()!.widths).toEqual([2]);
+      expect(session()!.future).toHaveLength(1);
+
+      useAppStore.getState().redoSlice();
+      expect(session()!.slices).toHaveLength(3);
+      expect(session()!.widths).toEqual([2, 0.5]); // the blade width comes back too
+      expect(session()!.future).toEqual([]);
+    });
+
+    it("walks the whole stack back and forward", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().applySlice([polyA, polyB, polyA], 1);
+      useAppStore.getState().undoSlice();
+      useAppStore.getState().undoSlice();
+      expect(session()!.slices).toEqual([polyA]); // back to the untouched shape
+      expect(session()!.future).toHaveLength(2);
+
+      useAppStore.getState().redoSlice();
+      useAppStore.getState().redoSlice();
+      expect(session()!.slices).toHaveLength(3);
+      expect(session()!.widths).toEqual([2, 1]);
+    });
+
+    it("has nothing to redo until something is undone", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      expect(session()!.future).toEqual([]);
+      useAppStore.getState().redoSlice(); // no-op
+      expect(session()!.slices).toHaveLength(2);
+    });
+
+    it("drops the redo stack once a new cut is made", () => {
+      startOn("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      useAppStore.getState().undoSlice();
+      expect(session()!.future).toHaveLength(1);
+
+      useAppStore.getState().applySlice([polyB, polyA, polyB], 3); // a different branch
+      expect(session()!.future).toEqual([]);
+      useAppStore.getState().redoSlice();
+      expect(session()!.slices).toHaveLength(3); // still the new branch
+    });
+
     it("saves reviewed names verbatim", () => {
       startOn("Block A");
       useAppStore.getState().applySlice([polyA, polyB], 2);

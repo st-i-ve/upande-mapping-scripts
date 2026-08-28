@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Scissors, Check, X, Undo2, AlertTriangle } from "lucide-react";
+import { Scissors, Check, X, Undo2, Redo2, AlertTriangle } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -26,6 +26,7 @@ export function SegmentsPanel() {
   const slice = useAppStore((s) => s.slice);
   const savedShapes = useAppStore((s) => s.savedShapes);
   const undoSlice = useAppStore((s) => s.undoSlice);
+  const redoSlice = useAppStore((s) => s.redoSlice);
   const cancelSlice = useAppStore((s) => s.cancelSlice);
   const finishSlice = useAppStore((s) => s.finishSlice);
   const sliceNames = useAppStore((s) => s.sliceNames);
@@ -69,8 +70,12 @@ export function SegmentsPanel() {
           <Check size={12} /> Finish slicing ({session.slices.length})
         </Button>
         <Button size="sm" variant="secondary" className="h-8" disabled={!session.widths.length}
-          onClick={undoSlice} title="Undo the last cut">
+          onClick={undoSlice} aria-label="Undo cut" title="Step back one cut">
           <Undo2 size={12} />
+        </Button>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!session.future.length}
+          onClick={redoSlice} aria-label="Redo cut" title="Put back the cut you undid">
+          <Redo2 size={12} />
         </Button>
         <Button size="sm" variant="ghost" className="h-8" onClick={stop} title="Discard these segments">
           <X size={12} />
@@ -79,8 +84,9 @@ export function SegmentsPanel() {
 
       <p className="mt-2 text-[9px] text-muted-foreground/70">
         Cutting <strong>{session.source}</strong> — {session.widths.length} cut
-        {session.widths.length === 1 ? "" : "s"}. The original is kept, hidden in Saved shapes.
-        Nothing is saved until you finish.
+        {session.widths.length === 1 ? "" : "s"}
+        {session.future.length > 0 && `, ${session.future.length} undone`}. The original is
+        kept, hidden in Saved shapes. Nothing is saved until you finish.
       </p>
 
       <ul className="mt-1.5">
