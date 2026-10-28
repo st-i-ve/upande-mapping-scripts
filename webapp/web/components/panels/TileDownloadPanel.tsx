@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { api, type TileJob } from "@/lib/api/client";
+import { tileTemplate } from "@/lib/map/tileTemplate";
 import { SectionCard } from "@/components/console/SectionCard";
 import { ListRow } from "@/components/console/ListRow";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ export function TileDownloadPanel() {
   const [count, setCount] = useState<{ count: number; max: number; est_bytes: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templated, setTemplated] = useState(false);
 
   const shape = hydrated && selectedShapes.length === 1
     ? savedShapes.find((s) => s.name === selectedShapes[0]) ?? null
@@ -101,9 +103,12 @@ export function TileDownloadPanel() {
   });
 
   const onUrl = (v: string) => {
-    setUrl(v);
+    // A link to one tile becomes the pattern for the whole service.
+    const t = tileTemplate(v.trim());
+    setTemplated(t != null);
+    setUrl(t ?? v);
     setCount(null);
-    const f = formatOf(v);
+    const f = formatOf(t ?? v);
     if (f) setFormat(f);
   };
 
@@ -127,6 +132,12 @@ export function TileDownloadPanel() {
         <Input aria-label="Tile URL" placeholder="https://…/{z}/{x}/{y}.png" value={url}
           onChange={(e) => onUrl(e.target.value)} className="mt-1 h-8 text-[10px]" />
       </label>
+      {templated && (
+        <p className="mt-1 text-[8px] text-primary">
+          That was one tile — turned its numbers into {"{z}/{x}/{y}"} so the whole area downloads.
+          {!formatOf(url) && " Set the format: the link doesn't say."}
+        </p>
+      )}
 
       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
         {url.includes("{s}") && (
