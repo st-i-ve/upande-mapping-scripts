@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from beds_zones import generate_beds_zones, preview_split, terrace_sections
+from tile_layers import router as tile_layers_router
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
@@ -23,6 +24,7 @@ STORAGE.mkdir(parents=True, exist_ok=True)
 TILES = ROOT.parent / "tiles"
 
 app = FastAPI(title="Upande Bed & Zone Mapper")
+app.include_router(tile_layers_router)
 
 
 class GenerateRequest(BaseModel):

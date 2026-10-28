@@ -12,6 +12,10 @@ import type { GeoGeometry } from "@/lib/types";
 export interface MapHandle {
   flyTo: (lat: number, lon: number, zoom?: number) => void;
   fitGeometry: (geom: GeoGeometry) => void;
+  /** The current map view as a Polygon. */
+  viewPolygon: () => GeoGeometry;
+  /** Switch the base map to a downloaded tile layer, by slug. */
+  showTileLayer: (slug: string) => void;
   /** Arm a one-shot map click that returns the clicked coordinate. */
   pickPoint: (cb: (lat: number, lon: number) => void) => void;
   cancelPick: () => void;
@@ -31,6 +35,11 @@ export interface MapHandle {
   knifeStraight: () => void;
   /** Exit any knife mode and clear the temp cut line. */
   knifeStop: () => void;
+  /**
+   * Pivot circle tool: click the centre, move out, click the circumference. The
+   * circle lands in the store's `pivot` draft. Ended by knifeStop / Escape.
+   */
+  pivotDraw: () => void;
   /** True while a knife mode is armed — lets Escape exit only the knife. */
   knifeArmed: () => boolean;
   /**

@@ -15,6 +15,7 @@ import {
   LABEL_PANE,
 } from "@/lib/map/baseLayers";
 import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
+import { pivotCircle, pivotSlices, pivotSpokes } from "@/lib/geometry/pivot";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import { shapeLetter } from "@/lib/shapeLabels";
 import type { GeoGeometry } from "@/lib/types";
@@ -44,6 +45,8 @@ export default function LeafletMap() {
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
   const selectedShapes = useAppStore((s) => s.selectedShapes);
   const slice = useAppStore((s) => s.slice);
+  const pivot = useAppStore((s) => s.pivot);
+  const pivotSettings = useAppStore((s) => s.pivotSettings);
   const workingPolygon = useAppStore((s) => s.workingPolygon);
   const genResult = useAppStore((s) => s.genResult);
   const treeGrid = useAppStore((s) => s.treeGrid);
@@ -55,8 +58,10 @@ export default function LeafletMap() {
   const setPicking = useMapBridge((s) => s.setPicking);
 
   const basemapKeys = useAppStore((s) => s.basemapKeys);
+  const tileLayers = useAppStore((s) => s.tileLayers);
 
   const sliceLayerRef = useRef<L.LayerGroup | null>(null);
+  const pivotLayerRef = useRef<L.LayerGroup | null>(null);
   const workingLayerRef = useRef<L.LayerGroup | null>(null);
   const genLayerRef = useRef<L.LayerGroup | null>(null);
   const treeLayerRef = useRef<L.LayerGroup | null>(null);
@@ -65,6 +70,9 @@ export default function LeafletMap() {
   const cornerLayerRef = useRef<L.LayerGroup | null>(null);
   const layerControlRef = useRef<L.Control.Layers | null>(null);
   const keyedRef = useRef<Record<string, L.Layer>>({});
+  const tileLayersRef = useRef<Record<string, L.TileLayer>>({});
+  const baseRef = useRef<L.Layer | null>(null);
+  const defaultBaseRef = useRef<L.Layer | null>(null);
 
   // ---- map bootstrap (once) ----
   useEffect(() => {
@@ -89,6 +97,9 @@ export default function LeafletMap() {
     // Full base-layer set (ported from the vanilla app), default Google Satellite.
     const { baseLayers, defaultLayer } = buildBaseLayers();
     defaultLayer.addTo(map);
+    baseRef.current = defaultLayer;
+    defaultBaseRef.current = defaultLayer;
+    map.on("baselayerchange", (e: L.LayersControlEvent) => { baseRef.current = e.layer; });
     const layerControl = L.control
       .layers(baseLayers, buildOverlays(), { position: "topright", collapsed: true })
       .addTo(map);
@@ -98,6 +109,7 @@ export default function LeafletMap() {
 
     shapeLayerRef.current = L.layerGroup().addTo(map);
     sliceLayerRef.current = L.layerGroup().addTo(map);
+    pivotLayerRef.current = L.layerGroup().addTo(map);
     workingLayerRef.current = L.layerGroup().addTo(map);
     terraceLayerRef.current = L.layerGroup().addTo(map);
     cornerLayerRef.current = L.layerGroup().addTo(map);
@@ -333,6 +345,7 @@ export default function LeafletMap() {
       }
     };
     function knStop() {
+      pvStop();
       knPts = [];
       knMode = null;
       useMapBridge.getState().setKnifeArmed(false);
@@ -430,6 +443,67 @@ export default function LeafletMap() {
       map.on("zoomend", knRedraw);
     }
 
+    // ---- pivot: click the centre, move out to the circumference, click again ----
+    let pvArmed = false;
+    let pvCenter: L.LatLng | null = null;
+    let pvTemp: L.Circle | null = null;
+    let pvSpoke: L.Polyline | null = null;
+    function pvStop() {
+      if (!pvArmed) return;
+      pvArmed = false;
+      pvCenter = null;
+      map.off("click", pvClick);
+      map.off("mousemove", pvMove);
+      map.doubleClickZoom.enable();
+      L.DomUtil.removeClass(map.getContainer(), "picking");
+      if (pvTemp) { map.removeLayer(pvTemp); pvTemp = null; }
+      if (pvSpoke) { map.removeLayer(pvSpoke); pvSpoke = null; }
+      useMapBridge.getState().setKnifeArmed(false);
+    }
+    const pvMove = (e: L.LeafletMouseEvent) => {
+      if (!pvCenter) return;
+      const r = map.distance(pvCenter, e.latlng);
+      const label = `${r.toFixed(1)} m`;
+      if (pvTemp) pvTemp.setRadius(r);
+      else {
+        pvTemp = L.circle(pvCenter, {
+          radius: r, color: "#ffffff", weight: 2, dashArray: "6 4", fill: false, interactive: false,
+        }).addTo(map);
+      }
+      if (pvSpoke) pvSpoke.setLatLngs([pvCenter, e.latlng]).setTooltipContent(label);
+      else {
+        pvSpoke = L.polyline([pvCenter, e.latlng], { color: "#ffffff", weight: 1, dashArray: "2 4", interactive: false })
+          .bindTooltip(label, { permanent: true, direction: "right", className: "shape-letter knife-width-tip" })
+          .addTo(map);
+      }
+    };
+    const pvClick = (e: L.LeafletMouseEvent) => {
+      if (!pvCenter) {
+        pvCenter = e.latlng;
+        map.on("mousemove", pvMove);
+        return;
+      }
+      const radiusM = map.distance(pvCenter, e.latlng);
+      const center: [number, number] = [pvCenter.lng, pvCenter.lat];
+      pvStop();
+      if (radiusM < 1) return; // a double-click on the centre — nothing drawn
+      useAppStore.getState().setPivot({ center, radiusM });
+    };
+    function pvArm() {
+      disableFreehand();
+      map.pm.disableDraw();
+      map.pm.disableGlobalEditMode();
+      map.pm.disableGlobalDragMode();
+      map.pm.disableGlobalRemovalMode();
+      knStop();
+      pvArmed = true;
+      L.DomUtil.addClass(map.getContainer(), "picking");
+      map.doubleClickZoom.disable();
+      map.on("click", pvClick);
+      // Shares the knife's flag: shapes let the clicks through and Escape ends it.
+      useMapBridge.getState().setKnifeArmed(true);
+    }
+
     // Register the imperative command handle for panels.
     setHandle({
       flyTo: (lat, lon, z) => map.flyTo([lat, lon], z ?? Math.max(map.getZoom(), 18)),
@@ -440,6 +514,19 @@ export default function LeafletMap() {
         } catch {
           /* ignore bad geometry */
         }
+      },
+      viewPolygon: () => {
+        const b = map.getBounds();
+        const [w, s2, e, n] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        return { type: "Polygon", coordinates: [[[w, s2], [e, s2], [e, n], [w, n], [w, s2]]] };
+      },
+      showTileLayer: (slug) => {
+        const lyr = tileLayersRef.current[slug];
+        if (!lyr || map.hasLayer(lyr)) return;
+        // Removing the old base and adding this one moves the layer menu's radio
+        // with it, and fires baselayerchange, which keeps baseRef current.
+        if (baseRef.current) map.removeLayer(baseRef.current);
+        map.addLayer(lyr);
       },
       pickPoint: (cb) => {
         pickCbRef.current = cb;
@@ -471,7 +558,8 @@ export default function LeafletMap() {
       knifeFreehand: () => knArm("draw"),
       knifeStraight: () => knArm("straight"),
       knifeStop: () => knStop(),
-      knifeArmed: () => knMode != null,
+      knifeArmed: () => knMode != null || pvArmed,
+      pivotDraw: () => pvArm(),
       knifePopPoint: () => knPopPoint(),
       stopModes: () => {
         disableFreehand();
@@ -576,6 +664,39 @@ export default function LeafletMap() {
     });
   }, [slice]);
 
+  // ---- pivot layout preview: the slices as they'll be cut, dotted spokes, and
+  // the dotted machinery disc — redrawn on every settings change ----
+  useEffect(() => {
+    const grp = pivotLayerRef.current;
+    if (!grp) return;
+    grp.clearLayers();
+    if (!pivot) return;
+    const { center, radiusM } = pivot;
+    const { count, pathM, centerRadiusM, rotation, clockwise } = pivotSettings;
+    const ll = (c: [number, number]) => L.latLng(c[1], c[0]);
+    L.circle(ll(center), { radius: radiusM, color: "#ffffff", weight: 2, fill: false, interactive: false }).addTo(grp);
+    const pieces = pivotSlices(pivotCircle(center, radiusM), {
+      center, count, pathM, centerRadiusM, startBearing: rotation, clockwise,
+    }) ?? [];
+    pieces.forEach((g, i) => {
+      L.geoJSON(g as never, {
+        interactive: false,
+        style: { color: "#ffffff", weight: 1, opacity: 0.7, fillColor: "#ffffff", fillOpacity: i % 2 ? 0.08 : 0.16 },
+      })
+        .bindTooltip(String(i + 1), { permanent: true, direction: "center", className: "shape-letter shape-letter-slice" })
+        .addTo(grp);
+    });
+    for (const sp of pivotSpokes(center, radiusM, count, centerRadiusM, rotation)) {
+      L.polyline(sp.map(ll), { color: "#ffffff", weight: 1.5, dashArray: "2 5", interactive: false }).addTo(grp);
+    }
+    if (centerRadiusM > 0) {
+      L.circle(ll(center), {
+        radius: centerRadiusM, color: "#ffffff", weight: 1.5, dashArray: "2 5", fill: false, interactive: false,
+      }).addTo(grp);
+    }
+    L.circleMarker(ll(center), { radius: 3, color: "#ffffff", fillColor: "#ffffff", fillOpacity: 1, interactive: false }).addTo(grp);
+  }, [pivot, pivotSettings]);
+
   // ---- working polygon (dashed outline of what will be generated) ----
   useEffect(() => {
     const grp = workingLayerRef.current;
@@ -648,6 +769,44 @@ export default function LeafletMap() {
     for (const [name, lyr] of Object.entries(keyed)) control.addBaseLayer(lyr, name);
     keyedRef.current = keyed;
   }, [basemapKeys]);
+
+  // ---- downloaded tile layers, offered as base maps in the layer menu ----
+  // Rebuilt only when a layer appears, goes or changes state — not on every
+  // progress poll — so a finished download picks up the tiles that were 404s.
+  const tileKey = tileLayers.map((l) => `${l.slug}:${l.state}`).join("|");
+  useEffect(() => {
+    const map = mapRef.current;
+    const control = layerControlRef.current;
+    if (!map || !control) return;
+    const shown = Object.entries(tileLayersRef.current).find(([, l]) => map.hasLayer(l))?.[0];
+    for (const lyr of Object.values(tileLayersRef.current)) {
+      control.removeLayer(lyr);
+      if (map.hasLayer(lyr)) map.removeLayer(lyr);
+    }
+    const next: Record<string, L.TileLayer> = {};
+    for (const t of useAppStore.getState().tileLayers) {
+      let bounds: L.LatLngBounds | undefined;
+      try {
+        bounds = L.geoJSON(t.area.geometry as never).getBounds();
+      } catch {
+        /* no bounds: Leaflet just asks for tiles everywhere */
+      }
+      const lyr = L.tileLayer(t.tile_url, {
+        minZoom: t.min_zoom,
+        maxNativeZoom: t.max_zoom,
+        maxZoom: 22,
+        bounds,
+        attribution: `${t.name} (downloaded tiles)`,
+      });
+      control.addBaseLayer(lyr, `⬇ ${t.name}`);
+      next[t.slug] = lyr;
+    }
+    tileLayersRef.current = next;
+    // Keep showing the layer that was on screen, now rebuilt.
+    if (shown && next[shown]) map.addLayer(next[shown]);
+    // It was deleted while on screen: fall back to the default imagery.
+    else if (shown && defaultBaseRef.current) map.addLayer(defaultBaseRef.current);
+  }, [tileKey]);
 
   // ---- terrace block corner pickers (click to set a block's start corner) ----
   useEffect(() => {
@@ -728,7 +887,9 @@ export default function LeafletMap() {
   }, [treeGrid]);
 
   return (
-    <div className="relative h-full w-full">
+    // `isolate` keeps Leaflet's pane z-indices (400–1000) inside the map, so
+    // portalled dialogs at z-50 still draw above it.
+    <div className="relative isolate h-full w-full">
       <div ref={hostRef} className="h-full w-full" />
       <div className="pointer-events-none absolute bottom-3 right-3 z-[500] rounded-md border border-border/60 bg-popover/85 px-2.5 py-1 text-[9px] text-muted-foreground shadow-lg backdrop-blur tabular">
         <span className="text-primary">◍</span> {coords}

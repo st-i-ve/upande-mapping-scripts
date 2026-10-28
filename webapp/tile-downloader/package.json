@@ -1,0 +1,17 @@
+{
+  "name": "map-tile-downloader",
+  "version": "1.0.8-upande.1",
+  "private": true,
+  "description": "Vendored copy of gislayer/map-tile-downloader, driven by cli.js for the mapper's tile layers",
+  "main": "index.js",
+  "bin": { "upande-tile-downloader": "cli.js" },
+  "author": "Ali Kilic (upstream)",
+  "license": "ISC",
+  "dependencies": {
+    "@turf/bbox-polygon": "^6.5.0",
+    "axios": "^1.5.1",
+    "jszip": "^3.10.1",
+    "map-tiles-generator": "^1.0.5",
+    "wkt": "^0.1.1"
+  }
+}

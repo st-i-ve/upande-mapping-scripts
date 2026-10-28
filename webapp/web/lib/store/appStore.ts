@@ -14,6 +14,29 @@ import type {
   TerraceResult,
 } from "@/lib/types";
 import type { TreePoint } from "@/lib/geometry/treeGrid";
+import type { TileLayerInfo } from "@/lib/api/client";
+
+/**
+ * A pivot being laid out: the circle drawn on the map plus the slicing settings,
+ * previewed live until it's confirmed into a slicing session. Not persisted.
+ */
+export interface PivotDraft {
+  /** Pivot point [lon, lat]. */
+  center: [number, number];
+  /** Radius out to the circumference, in metres. */
+  radiusM: number;
+}
+
+export interface PivotSettings {
+  count: number;
+  /** Path width along each spoke, in metres. */
+  pathM: number;
+  /** Radius of the empty machinery disc, in metres. */
+  centerRadiusM: number;
+  /** Bearing of the first spoke, degrees clockwise from north. */
+  rotation: number;
+  clockwise: boolean;
+}
 
 /**
  * An in-progress slicing session — cut a saved shape repeatedly, like slicing a
@@ -147,6 +170,16 @@ export interface AppState {
   knifeWidth: number; // blade width / gap in metres
   setKnifeWidth: (w: number) => void;
 
+  // ---- downloaded tile layers (server-side; polled, not persisted) ----
+  tileLayers: TileLayerInfo[];
+  setTileLayers: (l: TileLayerInfo[]) => void;
+
+  // ---- pivot layout (draw a circle, preview pizza slices, confirm) ----
+  pivot: PivotDraft | null;
+  setPivot: (p: PivotDraft | null) => void;
+  pivotSettings: PivotSettings;
+  setPivotSettings: (p: Partial<PivotSettings>) => void;
+
   // ---- slicing session (cut one saved shape repeatedly) ----
   slice: SliceSession | null;
   /** Begin slicing a saved shape; hides the source so the slice gaps read. */
@@ -253,6 +286,14 @@ export const useAppStore = create<AppState>()(
 
       knifeWidth: 1,
       setKnifeWidth: (knifeWidth) => set({ knifeWidth }),
+
+      tileLayers: [],
+      setTileLayers: (tileLayers) => set({ tileLayers }),
+
+      pivot: null,
+      setPivot: (pivot) => set({ pivot }),
+      pivotSettings: { count: 4, pathM: 3, centerRadiusM: 10, rotation: 0, clockwise: true },
+      setPivotSettings: (p) => set((s) => ({ pivotSettings: { ...s.pivotSettings, ...p } })),
 
       slice: null,
       startSlice: (name) =>
@@ -526,6 +567,7 @@ export const useAppStore = create<AppState>()(
         workingPolygon: s.workingPolygon,
         genParams: s.genParams,
         terraceGrouping: s.terraceGrouping,
+        pivotSettings: s.pivotSettings,
       }),
     },
   ),

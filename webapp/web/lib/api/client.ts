@@ -3,7 +3,7 @@
  * the migration. All calls are same-origin: in dev, next.config rewrites
  * `/api/*` to the local uvicorn server; in prod, nginx routes it.
  */
-import type { FeatureCollection, OutputInfo, TerraceResult } from "@/lib/types";
+import type { FeatureCollection, GeoGeometry, OutputInfo, TerraceResult } from "@/lib/types";
 
 export class ApiError extends Error {
   constructor(
@@ -30,6 +30,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const ct = res.headers.get("content-type") ?? "";
   return (ct.includes("application/json") ? res.json() : res.text()) as Promise<T>;
 }
+
+/** What a tile download needs: the service, the zooms and the area to cover. */
+export interface TileJob {
+  url: string;
+  subdomains: string[];
+  min_zoom: number;
+  max_zoom: number;
+  format: string;
+  area: GeoGeometry;
+}
+
+/** A downloaded tile layer on the server, with its download progress. */
+export interface TileLayerInfo {
+  name: string;
+  slug: string;
+  source_url: string;
+  format: string;
+  min_zoom: number;
+  max_zoom: number;
+  state: "starting" | "downloading" | "done" | "stopped" | "error";
+  current: number;
+  total: number;
+  failed: number;
+  created: string;
+  /** Leaflet template for the stored tiles, e.g. /tiles/downloaded/x/{z}/{x}/{y}.png */
+  tile_url: string;
+  area: { geometry: GeoGeometry };
+}
+
+const json = (body: unknown): RequestInit => ({
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
 
 export interface GenerateParams {
   [key: string]: unknown;
@@ -91,4 +125,17 @@ export const api = {
   /** URL for the Frappe-format export (used as a download href). */
   frappeUrl: (filename: string) =>
     `/api/outputs/${encodeURIComponent(filename)}/frappe`,
+
+  // ---- downloaded tile layers ----
+  countTiles: (job: TileJob) =>
+    request<{ count: number; max: number; est_bytes: number }>("/tiles/count", json(job)),
+
+  /** Start downloading; returns at once — poll listTileLayers for progress. */
+  downloadTiles: (job: TileJob & { name: string }) =>
+    request<TileLayerInfo>("/tiles/download", json(job)),
+
+  listTileLayers: () => request<{ layers: TileLayerInfo[] }>("/tiles/layers"),
+
+  deleteTileLayer: (slug: string) =>
+    request<{ deleted: string }>(`/tiles/layers/${encodeURIComponent(slug)}`, { method: "DELETE" }),
 };
