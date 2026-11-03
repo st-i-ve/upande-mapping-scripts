@@ -19,7 +19,7 @@ export function AppSidebar() {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={logo} alt="Upande" className="h-10 w-10 shrink-0 object-contain" />
+              <img src={logo} alt="Upande" className="h-8 w-8 shrink-0 object-contain" />
               <div className="leading-[1.05]">
                 <div className="text-xl font-bold tracking-[0.16em]">UPANDE</div>
                 <div className="text-xl font-semibold tracking-[0.16em] text-muted-foreground">MAPPER</div>

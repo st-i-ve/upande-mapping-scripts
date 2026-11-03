@@ -45,18 +45,18 @@ export function BasemapKeysPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><KeyRound size={14} /> Basemap keys</span>}
+      title={<span className="inline-flex items-center gap-1.5"><KeyRound size={11} /> Basemap keys</span>}
     >
-      <p className="mb-2 text-[12px] text-muted-foreground/70">
+      <p className="mb-2 text-[10px] text-muted-foreground/70">
         Add provider keys to unlock their satellite layers in the layer control.
         Stored locally in your browser only.
       </p>
       <div className="space-y-2">
         {PROVIDERS.map((p) => (
-          <label key={p.key} className="block text-[12px] text-muted-foreground">
+          <label key={p.key} className="block text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1.5">
               {p.label}
-              {hydrated && basemapKeys[p.key] && <Check size={13} className="text-primary" />}
+              {hydrated && basemapKeys[p.key] && <Check size={11} className="text-primary" />}
             </span>
             <Input
               type="password"
@@ -64,7 +64,7 @@ export function BasemapKeysPanel() {
               placeholder={p.hint}
               value={draft[p.key]}
               onChange={(e) => setDraft((d) => ({ ...d, [p.key]: e.target.value }))}
-              className="mt-1 h-9 tabular"
+              className="mt-1 h-7 tabular"
             />
           </label>
         ))}

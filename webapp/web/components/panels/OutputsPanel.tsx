@@ -16,7 +16,7 @@ function kb(bytes: number) {
   return bytes > 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 const stem = (f: string) => f.replace(/\.geojson$/i, "");
-const ICON = "flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40";
+const ICON = "flex h-6 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40";
 
 function saveBlob(blob: Blob, filename: string) {
   const a = document.createElement("a");
@@ -120,15 +120,15 @@ export function OutputsPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Archive size={14} /> Saved outputs</span>}
+      title={<span className="inline-flex items-center gap-1.5"><Archive size={11} /> Saved outputs</span>}
       meta={
         <button onClick={() => void load()} aria-label="Refresh" title="Refresh" className="text-muted-foreground hover:text-primary">
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
         </button>
       }
     >
       {items.length > 0 && (
-        <label className="mb-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+        <label className="mb-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
           <input type="checkbox" className="accent-primary" checked={allChecked}
             onChange={(e) => setSelected(e.target.checked ? new Set(items.map((i) => i.filename)) : new Set())} />
           Select all <span className="tabular">({items.length})</span>
@@ -143,16 +143,16 @@ export function OutputsPanel() {
               className={`group/row flex items-center gap-2 rounded-md px-1.5 py-1 ${isSel ? "bg-primary/10" : isShown ? "bg-muted/60" : "hover:bg-muted/40"}`}>
               <input type="checkbox" className="accent-primary" aria-label={`Select ${o.filename}`} checked={isSel} onChange={() => toggle(o.filename)} />
               <button className="min-w-0 flex-1 text-left" onClick={() => void show(o.filename)} title={isShown ? "Hide from the map" : "Show on the map and zoom to it"}>
-                <span title={o.filename} className={`block truncate text-[13px] ${isShown ? "font-medium text-primary" : "text-foreground"}`}>{stem(o.filename)}</span>
-                <span className="tabular block text-[11px] text-muted-foreground">{kb(o.size_bytes)}{isShown && " · on the map"}</span>
+                <span title={o.filename} className={`block truncate text-[10px] ${isShown ? "font-medium text-primary" : "text-foreground"}`}>{stem(o.filename)}</span>
+                <span className="tabular block text-[9px] text-muted-foreground">{kb(o.size_bytes)}{isShown && " · on the map"}</span>
               </button>
               <span className="flex shrink-0 items-center">
-                <button className={`${ICON} ${isShown ? "text-primary" : ""}`} title={isShown ? "Hide from the map" : "Show on the map"} aria-label={`Show ${o.filename}`} onClick={() => void show(o.filename)}><Eye size={14} /></button>
-                <button className={ICON} title="Zoom to it" aria-label={`Zoom to ${o.filename}`} onClick={() => void zoomTo(o.filename)}><LocateFixed size={14} /></button>
-                <button className={ICON} title="Download GeoJSON" aria-label={`Download ${o.filename}`} onClick={() => void download(o.filename)}><Download size={14} /></button>
-                <button className={ICON} title="Copy the Frappe automation format" aria-label={`Copy Frappe format of ${o.filename}`} onClick={() => void copyFrappe(o.filename)}><ClipboardCopy size={14} /></button>
-                <a className={ICON} title="Download the Frappe format (.txt)" aria-label={`Download Frappe text of ${o.filename}`} href={api.frappeUrl(o.filename)} download><FileText size={14} /></a>
-                <button className={`${ICON} hover:!bg-destructive/10 hover:!text-destructive`} title="Delete" aria-label={`Delete ${o.filename}`} onClick={() => void del(o.filename)}><Trash2 size={14} /></button>
+                <button className={`${ICON} ${isShown ? "text-primary" : ""}`} title={isShown ? "Hide from the map" : "Show on the map"} aria-label={`Show ${o.filename}`} onClick={() => void show(o.filename)}><Eye size={11} /></button>
+                <button className={ICON} title="Zoom to it" aria-label={`Zoom to ${o.filename}`} onClick={() => void zoomTo(o.filename)}><LocateFixed size={11} /></button>
+                <button className={ICON} title="Download GeoJSON" aria-label={`Download ${o.filename}`} onClick={() => void download(o.filename)}><Download size={11} /></button>
+                <button className={ICON} title="Copy the Frappe automation format" aria-label={`Copy Frappe format of ${o.filename}`} onClick={() => void copyFrappe(o.filename)}><ClipboardCopy size={11} /></button>
+                <a className={ICON} title="Download the Frappe format (.txt)" aria-label={`Download Frappe text of ${o.filename}`} href={api.frappeUrl(o.filename)} download><FileText size={11} /></a>
+                <button className={`${ICON} hover:!bg-destructive/10 hover:!text-destructive`} title="Delete" aria-label={`Delete ${o.filename}`} onClick={() => void del(o.filename)}><Trash2 size={11} /></button>
               </span>
             </li>
           );
@@ -161,33 +161,33 @@ export function OutputsPanel() {
 
       {picked.length > 0 && (
         <div className="sticky bottom-0 mt-2 rounded-md border border-primary/30 bg-card/95 p-2 shadow-lg backdrop-blur">
-          <div className="flex items-center justify-between text-[12px]">
+          <div className="flex items-center justify-between text-[10px]">
             <span className="font-medium text-foreground">{picked.length} selected</span>
             <button className="text-muted-foreground hover:text-primary" onClick={() => setSelected(new Set())}>Clear</button>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <Button size="sm" variant="secondary" className="h-8 text-[12px]" onClick={() => void exportTogether()} title="All the selected outputs in one GeoJSON file">
-              <Layers size={13} /> Export as one
+            <Button size="sm" variant="secondary" className="h-7 text-[10px]" onClick={() => void exportTogether()} title="All the selected outputs in one GeoJSON file">
+              <Layers size={11} /> Export as one
             </Button>
-            <Button size="sm" variant="secondary" className="h-8 text-[12px]" onClick={() => void exportEach()} title="One GeoJSON file per output, zipped">
-              <Files size={13} /> Export each
+            <Button size="sm" variant="secondary" className="h-7 text-[10px]" onClick={() => void exportEach()} title="One GeoJSON file per output, zipped">
+              <Files size={11} /> Export each
             </Button>
-            <Button size="sm" variant="destructive" className="ml-auto h-8 text-[12px]" onClick={() => void delSelected()}>
-              <Trash2 size={13} /> Delete
+            <Button size="sm" variant="destructive" className="ml-auto h-7 text-[10px]" onClick={() => void delSelected()}>
+              <Trash2 size={11} /> Delete
             </Button>
           </div>
         </div>
       )}
 
       {note && (
-        <p className={`mt-1.5 flex items-center gap-1 text-[12px] ${note.ok ? "text-primary" : "text-destructive"}`}>
-          {note.ok && <Check size={13} />} {note.text}
+        <p className={`mt-1.5 flex items-center gap-1 text-[10px] ${note.ok ? "text-primary" : "text-destructive"}`}>
+          {note.ok && <Check size={11} />} {note.text}
         </p>
       )}
-      {!items.length && <p className="text-[12px] text-muted-foreground/70">No saved outputs yet — the Units tab creates them.</p>}
+      {!items.length && <p className="text-[10px] text-muted-foreground/70">No saved outputs yet — the Units tab creates them.</p>}
       {items.length > 0 && (
-        <p className="mt-2 text-[11px] text-muted-foreground/60">
-          <ClipboardCopy size={11} className="inline" /> copies the automation format. For bands/triads, paste it
+        <p className="mt-2 text-[9px] text-muted-foreground/60">
+          <ClipboardCopy size={9} className="inline" /> copies the automation format. For bands/triads, paste it
           into a <strong>Field Unit Automation</strong> with the Block selected and Unit
           Type <strong>Band</strong> — it creates the bands and their triads the same way
           rows and orchard trees are created.

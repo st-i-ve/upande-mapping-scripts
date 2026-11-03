@@ -216,8 +216,10 @@ export interface AppState {
   tileLayers: TileLayerInfo[];
   setTileLayers: (l: TileLayerInfo[]) => void;
   /** A downloaded layer laid over the current base map to compare them, and its opacity (0..1). */
-  overlayTile: string | null;
-  setOverlayTile: (slug: string | null) => void;
+  /** Imported layers drawn over the standard base map, bottom to top. */
+  overlayTiles: string[];
+  /** Switch an imported layer on (it goes on top) or off. */
+  setOverlayTileOn: (slug: string, on: boolean) => void;
   overlayOpacity: number;
   setOverlayOpacity: (o: number) => void;
 
@@ -417,9 +419,10 @@ export const useAppStore = create<AppState>()(
 
       tileLayers: [],
       setTileLayers: (tileLayers) => set({ tileLayers }),
-      overlayTile: null,
-      setOverlayTile: (overlayTile) => set({ overlayTile }),
-      overlayOpacity: 0.7,
+      overlayTiles: [],
+      setOverlayTileOn: (slug, on) =>
+        set((s) => ({ overlayTiles: [...s.overlayTiles.filter((x) => x !== slug), ...(on ? [slug] : [])] })),
+      overlayOpacity: 1,
       setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
 
       pivot: null,
@@ -709,6 +712,8 @@ export const useAppStore = create<AppState>()(
         folders: s.folders,
         sideTab: s.sideTab,
         openUnits: s.openUnits,
+        overlayTiles: s.overlayTiles,
+        overlayOpacity: s.overlayOpacity,
       }),
     },
   ),

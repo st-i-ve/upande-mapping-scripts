@@ -61,7 +61,7 @@ const TOOLS_3D = [
   { id: "3d-orient", label: "Orientation", icon: Compass },
 ];
 
-const BTN = "flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-30";
+const BTN = "flex h-8 w-8 items-center justify-center rounded-full transition-colors disabled:pointer-events-none disabled:opacity-30";
 const IDLE = "text-muted-foreground hover:bg-primary/10 hover:text-primary";
 
 function RailButton({ label, icon: Icon, onClick, disabled, active, danger }: {
@@ -80,12 +80,12 @@ function RailButton({ label, icon: Icon, onClick, disabled, active, danger }: {
         : IDLE
       }`}
     >
-      <Icon size={19} />
+      <Icon size={16} />
     </button>
   );
 }
 
-const Divider = () => <span aria-hidden className="my-1 h-px w-7 shrink-0 bg-border" />;
+const Divider = () => <span aria-hidden className="my-1 h-px w-6 shrink-0 bg-border" />;
 
 /** Pinned to the rail's foot: downloads the tile-cache browser extension (zipped by the backend). */
 function TileExtensionLink() {
@@ -97,7 +97,7 @@ function TileExtensionLink() {
       title={"Download the Tile Cache Inspector browser extension.\nTo install: unzip it, open chrome://extensions, turn on Developer mode, click Load unpacked and pick the unzipped folder."}
       className={`mt-auto ${BTN} ${IDLE}`}
     >
-      <Puzzle size={19} />
+      <Puzzle size={16} />
     </a>
   );
 }
@@ -122,10 +122,10 @@ export function LeftRail() {
 
   if (view === "3d") {
     return (
-      <nav className="flex w-14 shrink-0 flex-col items-center gap-1 py-2">
+      <nav className="flex w-11 shrink-0 flex-col items-center gap-1 py-2">
         {TOOLS_3D.map((t) => (
           <span key={t.id} title={`${t.label} (in 3D canvas)`} className={`${BTN} text-muted-foreground/50`}>
-            <t.icon size={19} />
+            <t.icon size={16} />
           </span>
         ))}
         <TileExtensionLink />
@@ -152,7 +152,7 @@ export function LeftRail() {
   const st = () => useAppStore.getState();
 
   return (
-    <nav className="relative flex w-14 shrink-0 flex-col items-center gap-0.5 overflow-y-auto py-2" aria-label="Shape tools">
+    <nav className="relative flex w-11 shrink-0 flex-col items-center gap-0.5 overflow-y-auto py-2" aria-label="Shape tools">
       {TOOL_GROUPS.map((g, gi) => (
         <div key={g.label} role="group" aria-label={g.label} className="flex flex-col items-center gap-0.5">
           {gi > 0 && <Divider />}
@@ -188,7 +188,7 @@ export function LeftRail() {
       </div>
 
       {flash && (
-        <p role="status" className="fixed left-14 top-24 z-[1000] max-w-56 rounded-md border border-destructive/40 bg-popover px-2 py-1 text-[13px] text-destructive shadow-lg">
+        <p role="status" className="fixed left-14 top-24 z-[1000] max-w-56 rounded-md border border-destructive/40 bg-popover px-2 py-1 text-[10px] text-destructive shadow-lg">
           {flash}
         </p>
       )}

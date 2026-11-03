@@ -92,24 +92,24 @@ export function HexPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Hexagon size={14} /> Hexagons</span>}
-      meta={count > 0 ? <span className="tabular text-[12px] text-primary">{count} hexagons · {bands} bands</span> : undefined}
+      title={<span className="inline-flex items-center gap-1.5"><Hexagon size={11} /> Hexagons</span>}
+      meta={count > 0 ? <span className="tabular text-[10px] text-primary">{count} hexagons · {bands} bands</span> : undefined}
     >
-      <label className="block text-[12px] text-muted-foreground">
+      <label className="block text-[10px] text-muted-foreground">
         Hexagon size (side, m)
-        <Input type="number" step={0.5} min={0.5} value={sideLength} onChange={(e) => setSideLength(+e.target.value)} className="mt-1 h-9 tabular" />
+        <Input type="number" step={0.5} min={0.5} value={sideLength} onChange={(e) => setSideLength(+e.target.value)} className="mt-1 h-7 tabular" />
       </label>
       <div className="mt-2">
-        <div className="mb-1 flex justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+        <div className="mb-1 flex justify-between text-[9px] uppercase tracking-wider text-muted-foreground">
           <span>Rotation</span>
           <span className="tabular text-primary">{rotationDeg}°</span>
         </div>
         <Slider value={[rotationDeg]} min={-90} max={90} step={1} onValueChange={(v) => setRotationDeg(Array.isArray(v) ? v[0] : v)} />
       </div>
-      <label className="mt-2 block text-[12px] text-muted-foreground">
+      <label className="mt-2 block text-[10px] text-muted-foreground">
         Bands numbered
         <select aria-label="Hexagon band direction" value={bandDirection} onChange={(e) => setBandDirection(e.target.value as BandDirection)}
-          className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-[13px]">
+          className="mt-1 h-7 w-full rounded-md border border-input bg-transparent px-2 text-[10px]">
           <option value="north-south">North → south</option>
           <option value="south-north">South → north</option>
         </select>
@@ -119,9 +119,9 @@ export function HexPanel() {
         <Button size="sm" className="flex-1" onClick={generate}>Generate from working polygon</Button>
         {count > 0 && (
           <>
-            <Button size="sm" variant="secondary" disabled={busy} onClick={save} title="Save to Saved outputs"><Save size={14} /></Button>
-            <Button size="sm" variant="secondary" onClick={() => preview && downloadGeoJson(preview, "hexagons")} title="Download GeoJSON"><Download size={14} /></Button>
-            <Button size="sm" variant="secondary" onClick={() => setTriadHexes(null)} title="Clear from the map"><X size={14} /></Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={save} title="Save to Saved outputs"><Save size={11} /></Button>
+            <Button size="sm" variant="secondary" onClick={() => preview && downloadGeoJson(preview, "hexagons")} title="Download GeoJSON"><Download size={11} /></Button>
+            <Button size="sm" variant="secondary" onClick={() => setTriadHexes(null)} title="Clear from the map"><X size={11} /></Button>
           </>
         )}
       </div>
@@ -130,8 +130,8 @@ export function HexPanel() {
           {busy ? "Generating…" : `Generate for the ${selected.length} selected shape${selected.length === 1 ? "" : "s"}`}
         </Button>
       )}
-      {msg && <p className={`mt-1.5 text-[12px] ${msg.ok ? "text-primary" : "text-destructive"}`}>{msg.text}</p>}
-      <p className="mt-2 text-[11px] text-muted-foreground/60">
+      {msg && <p className={`mt-1.5 text-[10px] ${msg.ok ? "text-primary" : "text-destructive"}`}>{msg.text}</p>}
+      <p className="mt-2 text-[9px] text-muted-foreground/60">
         Whole hexagons as units, grouped into bands and clipped to the boundary. Each
         hexagon is 6 triads — use <strong>Triads</strong> for the split version.
       </p>

@@ -19,7 +19,7 @@ export function StatusBadge({ status, children }: StatusBadgeProps) {
   return (
     <span
       role="status"
-      className="tabular inline-flex items-center gap-1.5 text-[12px] text-muted-foreground"
+      className="tabular inline-flex items-center gap-1.5 text-[10px] text-muted-foreground"
     >
       <span className={DOT[status]} aria-hidden>
         ◍

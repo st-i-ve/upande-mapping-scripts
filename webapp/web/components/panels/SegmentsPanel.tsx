@@ -59,29 +59,29 @@ export function SegmentsPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Scissors size={14} /> Segments</span>}
-      meta={<span className="text-[11px] uppercase tracking-wider text-primary">slicing</span>}
+      title={<span className="inline-flex items-center gap-1.5"><Scissors size={11} /> Segments</span>}
+      meta={<span className="text-[9px] uppercase tracking-wider text-primary">slicing</span>}
     >
       {/* Finish sits at the top: it is the action this panel exists for. */}
       <div className="flex gap-1.5">
         <Button size="sm" className="flex-1" disabled={session.slices.length < 2}
           onClick={() => setReview(defaults)}>
-          <Check size={14} /> Finish slicing ({session.slices.length})
+          <Check size={11} /> Finish slicing ({session.slices.length})
         </Button>
-        <Button size="sm" variant="secondary" className="h-9" disabled={!session.widths.length}
+        <Button size="sm" variant="secondary" className="h-7" disabled={!session.widths.length}
           onClick={undoSlice} aria-label="Undo cut" title="Step back one cut">
-          <Undo2 size={14} />
+          <Undo2 size={11} />
         </Button>
-        <Button size="sm" variant="secondary" className="h-9" disabled={!session.future.length}
+        <Button size="sm" variant="secondary" className="h-7" disabled={!session.future.length}
           onClick={redoSlice} aria-label="Redo cut" title="Put back the cut you undid">
-          <Redo2 size={14} />
+          <Redo2 size={11} />
         </Button>
-        <Button size="sm" variant="ghost" className="h-9" onClick={stop} title="Discard these segments">
-          <X size={14} />
+        <Button size="sm" variant="ghost" className="h-7" onClick={stop} title="Discard these segments">
+          <X size={11} />
         </Button>
       </div>
 
-      <p className="mt-2 text-[12px] text-muted-foreground/70">
+      <p className="mt-2 text-[10px] text-muted-foreground/70">
         Cutting <strong>{session.source}</strong> — {session.widths.length} cut
         {session.widths.length === 1 ? "" : "s"}
         {session.future.length > 0 && `, ${session.future.length} undone`}. The original is
@@ -91,7 +91,7 @@ export function SegmentsPanel() {
       <ul className="mt-1.5">
         {session.slices.map((_, i) => (
           <ListRow key={i}>
-            <span className="tabular mr-1.5 text-[13px] font-bold text-primary">{i + 1}</span>
+            <span className="tabular mr-1.5 text-[10px] font-bold text-primary">{i + 1}</span>
             <span className="text-muted-foreground">{defaults[i]}</span>
           </ListRow>
         ))}
@@ -112,7 +112,7 @@ export function SegmentsPanel() {
             {(review ?? []).map((name, i) => (
               <div key={i}>
                 <div className="flex items-center gap-2">
-                  <span className="tabular w-5 shrink-0 text-[13px] font-bold text-muted-foreground">
+                  <span className="tabular w-5 shrink-0 text-[10px] font-bold text-muted-foreground">
                     {i + 1}
                   </span>
                   <Input
@@ -121,11 +121,11 @@ export function SegmentsPanel() {
                     onChange={(e) =>
                       setReview((r) => r!.map((n, j) => (j === i ? e.target.value : n)))
                     }
-                    className={`h-9 ${issues[i] ? "border-destructive" : ""}`}
+                    className={`h-7 ${issues[i] ? "border-destructive" : ""}`}
                   />
                 </div>
                 {issues[i] && (
-                  <p className="ml-7 mt-0.5 text-[12px] text-destructive">
+                  <p className="ml-7 mt-0.5 text-[10px] text-destructive">
                     {NAME_ISSUE_TEXT[issues[i]!]}
                   </p>
                 )}
@@ -134,8 +134,8 @@ export function SegmentsPanel() {
           </div>
 
           {!clean && (
-            <p className="flex items-center gap-1.5 text-[12px] text-destructive">
-              <AlertTriangle size={13} /> Fix the names above before moving them across.
+            <p className="flex items-center gap-1.5 text-[10px] text-destructive">
+              <AlertTriangle size={11} /> Fix the names above before moving them across.
             </p>
           )}
 

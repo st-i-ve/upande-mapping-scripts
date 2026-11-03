@@ -111,40 +111,40 @@ export function TriadPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Triangle size={14} /> Triad</span>}
-      meta={count > 0 ? <span className="tabular text-[12px] text-primary"><AnimatedNumber value={count} /> triads · {bandCount} bands</span> : undefined}
+      title={<span className="inline-flex items-center gap-1.5"><Triangle size={11} /> Triad</span>}
+      meta={count > 0 ? <span className="tabular text-[10px] text-primary"><AnimatedNumber value={count} /> triads · {bandCount} bands</span> : undefined}
     >
-      <label className="block text-[12px] text-muted-foreground">
+      <label className="block text-[10px] text-muted-foreground">
         Hexagon size (triangle side, m)
-        <Input type="number" step={0.5} min={0.5} value={sideLength} onChange={(e) => setSideLength(+e.target.value)} className="mt-1 h-9 tabular" />
+        <Input type="number" step={0.5} min={0.5} value={sideLength} onChange={(e) => setSideLength(+e.target.value)} className="mt-1 h-7 tabular" />
       </label>
       <div className="mt-2">
-        <div className="mb-1 flex justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+        <div className="mb-1 flex justify-between text-[9px] uppercase tracking-wider text-muted-foreground">
           <span>Rotation</span>
           <span className="tabular text-primary">{rotationDeg}°</span>
         </div>
         <Slider value={[rotationDeg]} min={-90} max={90} step={1} onValueChange={(v) => setRotationDeg(Array.isArray(v) ? v[0] : v)} />
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
-        <label className="block text-[12px] text-muted-foreground">
+        <label className="block text-[10px] text-muted-foreground">
           Bands numbered
           <select
             aria-label="Band direction"
             value={bandDirection}
             onChange={(e) => setBandDirection(e.target.value as BandDirection)}
-            className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-[13px]"
+            className="mt-1 h-7 w-full rounded-md border border-input bg-transparent px-2 text-[10px]"
           >
             <option value="north-south">North → south</option>
             <option value="south-north">South → north</option>
           </select>
         </label>
-        <label className="block text-[12px] text-muted-foreground">
+        <label className="block text-[10px] text-muted-foreground">
           Triads numbered
           <select
             aria-label="Triad direction"
             value={triadDirection}
             onChange={(e) => setTriadDirection(e.target.value as TriadDirection)}
-            className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-[13px]"
+            className="mt-1 h-7 w-full rounded-md border border-input bg-transparent px-2 text-[10px]"
           >
             <option value="west-east">West → east</option>
             <option value="east-west">East → west</option>
@@ -152,40 +152,40 @@ export function TriadPanel() {
           </select>
         </label>
       </div>
-      {err && <p className="mt-1.5 text-[12px] text-destructive">{err}</p>}
+      {err && <p className="mt-1.5 text-[10px] text-destructive">{err}</p>}
       {queue.length > 0 && (
         <div className="mt-2.5 rounded-md border border-border/60 bg-muted/30 p-2">
           <div className="flex items-center justify-between">
-            <span className="text-[12px] text-muted-foreground">
+            <span className="text-[10px] text-muted-foreground">
               <strong className="text-foreground">{queue.length} shape{queue.length === 1 ? "" : "s"}</strong> queued
               {running && current ? ` · generating ${current}…` : ""}
             </span>
-            <button className="text-[12px] text-muted-foreground hover:text-destructive"
+            <button className="text-[10px] text-muted-foreground hover:text-destructive"
               onClick={() => { setTriadQueue([]); setDone([]); }} disabled={running}>
               clear
             </button>
           </div>
           <div className="mt-1.5 flex gap-1.5">
-            <Button size="sm" className="h-8 flex-1 text-[12px]" disabled={running} onClick={runQueue}>
+            <Button size="sm" className="h-7 flex-1 text-[10px]" disabled={running} onClick={runQueue}>
               Generate {queue.length} output{queue.length === 1 ? "" : "s"}
             </Button>
-            <Button size="sm" variant="destructive" className="h-8 text-[12px]" disabled={!running}
+            <Button size="sm" variant="destructive" className="h-7 text-[10px]" disabled={!running}
               onClick={() => { stopRef.current = true; }}>
-              <Square size={11} /> Stop
+              <Square size={9} /> Stop
             </Button>
           </div>
           {done.length > 0 && (
             <ul className="mt-1.5">
               {done.map((d) => (
                 <ListRow key={d.filename} actions={<span className="tabular text-muted-foreground">{d.bands} bands · {d.triads} triads</span>}>
-                  <span className="inline-flex items-center gap-1 text-[13px]">
-                    <Check size={13} className="text-primary" /> {d.shape}
+                  <span className="inline-flex items-center gap-1 text-[10px]">
+                    <Check size={11} className="text-primary" /> {d.shape}
                   </span>
                 </ListRow>
               ))}
             </ul>
           )}
-          <p className="mt-1 text-[11px] text-muted-foreground/60">
+          <p className="mt-1 text-[9px] text-muted-foreground/60">
             One output per shape, generated in turn. Stopping discards the block in
             progress — only finished blocks are listed. Find them in Saved outputs.
           </p>
@@ -203,7 +203,7 @@ export function TriadPanel() {
           </>
         )}
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground/60">
+      <p className="mt-2 text-[9px] text-muted-foreground/60">
         Hexagonal grid — 6 equilateral triads per hexagon, grouped into bands (the
         row-equivalent unit), clipped to the boundary (edge units are partial).
         Bands number from 1 within each block and triads from 1 within each band,

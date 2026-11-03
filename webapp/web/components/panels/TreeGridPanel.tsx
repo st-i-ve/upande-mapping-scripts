@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { generateTreeGrid, treeGridToGeoJSON } from "@/lib/geometry/treeGrid";
 
 const selectCls =
-  "mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-xs text-foreground outline-none focus-visible:border-ring";
+  "mt-1 h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs text-foreground outline-none focus-visible:border-ring";
 
 export function TreeGridPanel() {
   const hydrated = useHydrated();
@@ -63,20 +63,20 @@ export function TreeGridPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Grid3x3 size={14} /> Tree grid</span>}
-      meta={count > 0 ? <span className="tabular text-[12px] text-primary"><AnimatedNumber value={count} /> pts</span> : undefined}
+      title={<span className="inline-flex items-center gap-1.5"><Grid3x3 size={11} /> Tree grid</span>}
+      meta={count > 0 ? <span className="tabular text-[10px] text-primary"><AnimatedNumber value={count} /> pts</span> : undefined}
     >
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-[12px] text-muted-foreground">
+        <label className="text-[10px] text-muted-foreground">
           Tree spacing (m)
-          <Input type="number" step={0.1} min={0.1} value={treeSpacing} onChange={(e) => setTreeSpacing(+e.target.value)} className="mt-1 h-9 tabular" />
+          <Input type="number" step={0.1} min={0.1} value={treeSpacing} onChange={(e) => setTreeSpacing(+e.target.value)} className="mt-1 h-7 tabular" />
         </label>
-        <label className="text-[12px] text-muted-foreground">
+        <label className="text-[10px] text-muted-foreground">
           Row spacing (m)
-          <Input type="number" step={0.1} min={0.1} value={rowSpacing} onChange={(e) => setRowSpacing(+e.target.value)} className="mt-1 h-9 tabular" />
+          <Input type="number" step={0.1} min={0.1} value={rowSpacing} onChange={(e) => setRowSpacing(+e.target.value)} className="mt-1 h-7 tabular" />
         </label>
       </div>
-      <label className="mt-2 block text-[12px] text-muted-foreground">
+      <label className="mt-2 block text-[10px] text-muted-foreground">
         Rows run along
         <select className={selectCls} value={majorEdge} onChange={(e) => setMajorEdge(e.target.value as "EW" | "NS")}>
           <option value="EW">East–West</option>
@@ -84,7 +84,7 @@ export function TreeGridPanel() {
         </select>
       </label>
       <div className="mt-2">
-        <div className="mb-1 flex justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+        <div className="mb-1 flex justify-between text-[9px] uppercase tracking-wider text-muted-foreground">
           <span>Rotation</span>
           <span className="tabular text-primary">{rotationDeg}°</span>
         </div>
@@ -98,14 +98,14 @@ export function TreeGridPanel() {
       </div>
       {hydrated && savedShapes.length > 0 && (
         <div className="mt-2">
-          <div className="mb-1 text-[11px] uppercase tracking-wider text-muted-foreground">Masks (saved shapes)</div>
+          <div className="mb-1 text-[9px] uppercase tracking-wider text-muted-foreground">Masks (saved shapes)</div>
           <ul className="space-y-1">
             {savedShapes.map((s) => (
-              <li key={s.name} className="flex items-center justify-between gap-2 text-[12px]">
+              <li key={s.name} className="flex items-center justify-between gap-2 text-[10px]">
                 <span className="min-w-0 flex-1 truncate">{s.name}</span>
                 <button
                   onClick={() => cycleMask(s.name)}
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  className={`rounded-full px-2 py-0.5 text-[9px] font-medium transition-colors ${
                     masks[s.name] === "inc"
                       ? "bg-primary text-primary-foreground"
                       : masks[s.name] === "exc"
@@ -121,7 +121,7 @@ export function TreeGridPanel() {
         </div>
       )}
 
-      {err && <p className="mt-1.5 text-[12px] text-destructive">{err}</p>}
+      {err && <p className="mt-1.5 text-[10px] text-destructive">{err}</p>}
       <div className="mt-2 flex gap-1.5">
         <Button size="sm" className="flex-1" onClick={generate}>Generate grid</Button>
         {count > 0 && (
@@ -131,7 +131,7 @@ export function TreeGridPanel() {
           </>
         )}
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground/60">
+      <p className="mt-2 text-[9px] text-muted-foreground/60">
         Uses the drawn shape (or working polygon) as the boundary. Include/exclude masks come next.
       </p>
     </SectionCard>

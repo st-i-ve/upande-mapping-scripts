@@ -8,11 +8,11 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-sans);
   /* Type scale: readable at arm's length on a field laptop. */
-  --text-xs: 0.75rem;
-  --text-sm: 0.85rem;
-  --text-base: 0.95rem;
-  --text-lg: 1.05rem;
-  --text-xl: 1.2rem;
+  --text-xs: 0.62rem;
+  --text-sm: 0.7rem;
+  --text-base: 0.78rem;
+  --text-lg: 0.86rem;
+  --text-xl: 0.98rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -229,7 +229,7 @@
 /* Scale bar: a console chip with a primary-coloured ruler. */
 .leaflet-control-scale {
   margin: 0 0 12px 12px !important;
-  padding: 6px 10px 5px;
+  padding: 4px 8px 4px;
   background: color-mix(in oklch, var(--popover) 85%, transparent);
   border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
   border-radius: var(--radius-md);
@@ -241,7 +241,7 @@
   color: var(--muted-foreground) !important;
   border: 2px solid var(--primary) !important;
   border-top: 0 !important;
-  font-size: 12px !important;
+  font-size: 10px !important;
   font-variant-numeric: tabular-nums;
   line-height: 1.2 !important;
   padding: 0 4px 1px !important;
@@ -250,7 +250,7 @@
 
 /* Provider credit (required by the imagery licences), kept small and quiet. */
 .leaflet-control-attribution {
-  margin: 0 12px 44px 0 !important;
+  margin: 0 12px 38px 0 !important;
   padding: 2px 8px !important;
   border-radius: var(--radius-sm);
   background: color-mix(in oklch, var(--popover) 70%, transparent) !important;

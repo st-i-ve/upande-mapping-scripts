@@ -15,6 +15,9 @@ export class ApiError extends Error {
   }
 }
 
+/** application/json, application/geo+json, …+json (with or without a charset). */
+export const isJsonType = (ct: string) => /^application\/([\w.-]+\+)?json\b/i.test(ct.trim());
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init);
   if (!res.ok) {
@@ -28,7 +31,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, detail);
   }
   const ct = res.headers.get("content-type") ?? "";
-  return (ct.includes("application/json") ? res.json() : res.text()) as Promise<T>;
+  // Any JSON flavour — outputs come back as application/geo+json, and reading
+  // those as text handed the map a string instead of a FeatureCollection.
+  return (isJsonType(ct) ? res.json() : res.text()) as Promise<T>;
 }
 
 /** What a tile download needs: the service, the zooms and the area to cover. */

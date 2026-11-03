@@ -125,19 +125,19 @@ export function GeneratePanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Play size={14} /> Generate</span>}
+      title={<span className="inline-flex items-center gap-1.5"><Play size={11} /> Generate</span>}
       meta={<StatusBadge status={status}>{msg}</StatusBadge>}
     >
       <div className="flex gap-1.5">
         <Button className="flex-1" onClick={generate} disabled={busy}>
-          {busy ? <><Loader2 size={15} className="animate-spin" /> Generating…</> : "Generate beds & zones"}
+          {busy ? <><Loader2 size={12} className="animate-spin" /> Generating…</> : "Generate beds & zones"}
         </Button>
         {busy && (
           <Button variant="secondary" size="sm" onClick={() => abortRef.current?.abort()}>Cancel</Button>
         )}
       </div>
       {hydrated && !!terraceResult?.block_geojson?.length && (
-        <p className="mt-1.5 text-[11px] text-primary/80">
+        <p className="mt-1.5 text-[9px] text-primary/80">
           Terrace mode: using {terraceResult.block_geojson.length} block(s) from the stepped-edge split.
         </p>
       )}
@@ -154,21 +154,21 @@ export function GeneratePanel() {
             <div className="text-base font-semibold text-primary">
               {v ? <AnimatedNumber value={v as number} pad={pad as number} /> : "—"}
             </div>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{k}</div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{k}</div>
           </div>
         ))}
       </div>
 
       {hydrated && genResult && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
-          <Button variant="secondary" size="sm" className="h-8 flex-1 text-[12px]" onClick={copyFrappe}>Copy Frappe</Button>
+          <Button variant="secondary" size="sm" className="h-7 flex-1 text-[10px]" onClick={copyFrappe}>Copy Frappe</Button>
           {genFilename && (
             <a href={api.frappeUrl(genFilename)} download className="flex-1">
-              <Button variant="secondary" size="sm" className="h-8 w-full text-[12px]">Frappe .txt</Button>
+              <Button variant="secondary" size="sm" className="h-7 w-full text-[10px]">Frappe .txt</Button>
             </a>
           )}
-          <Button variant="secondary" size="sm" className="h-8 flex-1 text-[12px]" onClick={downloadGeoJson}>GeoJSON</Button>
-          <Button variant="secondary" size="sm" className="h-8 text-[12px]" onClick={() => { setGenResult(null, null); setStatus("idle"); setMsg("cleared"); }}>Clear</Button>
+          <Button variant="secondary" size="sm" className="h-7 flex-1 text-[10px]" onClick={downloadGeoJson}>GeoJSON</Button>
+          <Button variant="secondary" size="sm" className="h-7 text-[10px]" onClick={() => { setGenResult(null, null); setStatus("idle"); setMsg("cleared"); }}>Clear</Button>
         </div>
       )}
     </SectionCard>

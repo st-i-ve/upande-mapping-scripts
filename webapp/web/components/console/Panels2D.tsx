@@ -78,9 +78,9 @@ export function SideTabs() {
         const on = tab === t.id;
         return (
           <button key={t.id} role="tab" aria-selected={on} title={t.hint} onClick={() => setTab(t.id)}
-            className={`relative flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[12px] font-medium transition-colors ${
+            className={`relative flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium transition-colors ${
               on ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-            <t.icon size={16} />
+            <t.icon size={13} />
             {t.label}
             {pending[t.id] && !on && <span className="absolute right-2 top-1 h-1.5 w-1.5 rounded-full bg-primary" />}
           </button>

@@ -38,11 +38,11 @@ export function ThreeDToolset() {
 
   return (
     <div className={`space-y-3 ${dim}`}>
-      {!ready && <p className="text-[12px] text-muted-foreground/70">Loading 3D view…</p>}
+      {!ready && <p className="text-[10px] text-muted-foreground/70">Loading 3D view…</p>}
 
-      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Box size={14} /> View</span>} index="3D">
+      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Box size={11} /> View</span>} index="3D">
         <Button size="sm" variant="secondary" className="w-full" onClick={() => click("flyToLokitela")}>
-          <Plane size={15} /> Fly to Lokitela
+          <Plane size={12} /> Fly to Lokitela
         </Button>
         <div className="mt-3 space-y-2.5">
           <Labeled label="Camera pitch" value={`${pitch}°`}>
@@ -63,10 +63,10 @@ export function ThreeDToolset() {
         <StatusLine text={status.fps || status.status} />
       </SectionCard>
 
-      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Trees size={14} /> Trees</span>} index="3T">
-        <label className="block text-[12px] text-muted-foreground">
+      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Trees size={11} /> Trees</span>} index="3T">
+        <label className="block text-[10px] text-muted-foreground">
           Load tree GeoJSON
-          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-9 text-[12px]" onChange={(e) => readFiles(e.target.files, loadTrees)} />
+          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-7 text-[10px]" onChange={(e) => readFiles(e.target.files, loadTrees)} />
         </label>
         <div className="mt-2 grid grid-cols-3 gap-2">
           <NumField label="Trunk (m)" id="trunkH" def={1.5} set={set} />
@@ -82,7 +82,7 @@ export function ThreeDToolset() {
         <StatusLine text={status.treesStatus} />
       </SectionCard>
 
-      <SectionCard title={<span className="inline-flex items-center gap-1.5"><PencilLine size={14} /> Scouting path</span>} index="3P">
+      <SectionCard title={<span className="inline-flex items-center gap-1.5"><PencilLine size={11} /> Scouting path</span>} index="3P">
         <div className="grid grid-cols-3 gap-1.5">
           <Button size="sm" variant={pencil ? "default" : "secondary"} onClick={() => { setPencil((p) => !p); click("pencilToggle"); }}>Pencil</Button>
           <Button size="sm" variant="secondary" onClick={() => click("pathSnap")}>Snap</Button>
@@ -94,10 +94,10 @@ export function ThreeDToolset() {
         <StatusLine text={status.pathStatus} />
       </SectionCard>
 
-      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Droplets size={14} /> Valves</span>} index="3V">
-        <label className="block text-[12px] text-muted-foreground">
+      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Droplets size={11} /> Valves</span>} index="3V">
+        <label className="block text-[10px] text-muted-foreground">
           Load valve GeoJSON (points)
-          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-9 text-[12px]" onChange={(e) => readFiles(e.target.files, loadValves)} />
+          <Input type="file" multiple accept=".geojson,.json" className="mt-1 h-7 text-[10px]" onChange={(e) => readFiles(e.target.files, loadValves)} />
         </label>
         <div className="mt-2 grid grid-cols-3 gap-1.5">
           <Button size="sm" variant="secondary" onClick={() => click("previewValves")}>Preview</Button>
@@ -107,14 +107,14 @@ export function ThreeDToolset() {
         <StatusLine text={status.valvesStatus} />
       </SectionCard>
 
-      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Grid2x2 size={14} /> Blocks</span>} index="3B">
+      <SectionCard title={<span className="inline-flex items-center gap-1.5"><Grid2x2 size={11} /> Blocks</span>} index="3B">
         <div className="grid grid-cols-2 gap-2">
           <NumField label="Pad (m)" id="blockPad" def={2} set={set} />
           <NumField label="Max edge (m)" id="blockMaxEdge" def={8} set={set} />
         </div>
-        <label className="mt-2 block text-[12px] text-muted-foreground">
+        <label className="mt-2 block text-[10px] text-muted-foreground">
           Name suffix
-          <Input defaultValue=" - KL" className="mt-1 h-9 tabular" onChange={(e) => set("blockSuffix", e.target.value)} />
+          <Input defaultValue=" - KL" className="mt-1 h-7 tabular" onChange={(e) => set("blockSuffix", e.target.value)} />
         </label>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
           <Button size="sm" onClick={() => click("generateBlocks")}>Generate</Button>
@@ -130,13 +130,13 @@ export function ThreeDToolset() {
 
 function StatusLine({ text }: { text?: string }) {
   if (!text) return null;
-  return <p className="tabular mt-2 text-[12px] text-primary/80">{text}</p>;
+  return <p className="tabular mt-2 text-[10px] text-primary/80">{text}</p>;
 }
 
 function Labeled({ label, value, children }: { label: string; value: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1 flex justify-between text-[11px] uppercase tracking-wider text-muted-foreground">
+      <div className="mb-1 flex justify-between text-[9px] uppercase tracking-wider text-muted-foreground">
         <span>{label}</span>
         <span className="tabular text-primary">{value}</span>
       </div>
@@ -147,7 +147,7 @@ function Labeled({ label, value, children }: { label: string; value: string; chi
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (c: boolean) => void }) {
   return (
-    <label className="flex items-center justify-between text-[12px] text-muted-foreground">
+    <label className="flex items-center justify-between text-[10px] text-muted-foreground">
       {label}
       <Switch checked={checked} onCheckedChange={onChange} />
     </label>
@@ -156,9 +156,9 @@ function ToggleRow({ label, checked, onChange }: { label: string; checked: boole
 
 function NumField({ label, id, def, step = 0.1, set }: { label: string; id: string; def: number; step?: number; set: (id: string, v: number) => void }) {
   return (
-    <label className="block text-[12px] text-muted-foreground">
+    <label className="block text-[10px] text-muted-foreground">
       {label}
-      <Input type="number" step={step} defaultValue={def} className="mt-1 h-9 tabular" onChange={(e) => set(id, +e.target.value)} />
+      <Input type="number" step={step} defaultValue={def} className="mt-1 h-7 tabular" onChange={(e) => set(id, +e.target.value)} />
     </label>
   );
 }

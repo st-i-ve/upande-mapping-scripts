@@ -37,12 +37,12 @@ export function ShapeBuilderPanel() {
   };
 
   return (
-    <SectionCard title={<span className="inline-flex items-center gap-1.5"><PenTool size={14} /> Save drawing</span>}>
+    <SectionCard title={<span className="inline-flex items-center gap-1.5"><PenTool size={11} /> Save drawing</span>}>
       {hasDrawn ? (
         <>
           <Input placeholder={finalName} value={name} onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()} className="h-9" aria-label="Shape name" />
-          <p className="mt-1 text-[11px] text-muted-foreground/70">
+            onKeyDown={(e) => e.key === "Enter" && save()} className="h-7" aria-label="Shape name" />
+          <p className="mt-1 text-[9px] text-muted-foreground/70">
             Saves into <strong>{activeFolder || "the project root"}</strong>
             {replaces && <span className="text-amber-500"> — replaces the shape already called {finalName}</span>}
           </p>
@@ -54,7 +54,7 @@ export function ShapeBuilderPanel() {
           </div>
         </>
       ) : (
-        <p className="text-[12px] text-muted-foreground/70">
+        <p className="text-[10px] text-muted-foreground/70">
           Pick a draw tool on the left — pencil, polygon, rectangle — and draw on the map. Name and save it here.
           While drawing a polygon, <strong>Ctrl+Z</strong> takes back the last point.
         </p>

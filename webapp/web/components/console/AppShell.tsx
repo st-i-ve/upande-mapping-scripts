@@ -21,7 +21,7 @@ export function AppShell() {
   return (
     <SidebarProvider
       className="min-h-0 flex-1 bg-sidebar"
-      style={{ "--sidebar-width": "26rem" } as React.CSSProperties}
+      style={{ "--sidebar-width": "21rem" } as React.CSSProperties}
     >
       <LeftRail />
       <SidebarInset className="m-2 min-w-0 overflow-hidden rounded-xl border border-border shadow-xl">

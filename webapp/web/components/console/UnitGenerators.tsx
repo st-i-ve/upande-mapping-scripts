@@ -76,7 +76,7 @@ export function UnitGenerators() {
 
   return (
     <div className="space-y-2.5">
-      <p className="px-1 text-[12px] text-muted-foreground">
+      <p className="px-1 text-[10px] text-muted-foreground">
         Unit generators — pick a block (or draw one), then generate the units it&apos;s divided into.
       </p>
       {GROUPS.map((g) => {
@@ -89,19 +89,19 @@ export function UnitGenerators() {
             <button onClick={() => setUnitOpen(g.id, !isOpen)} aria-expanded={isOpen}
               className={`relative flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${isOpen ? "bg-primary/8" : "hover:bg-muted/40"}`}>
               {isOpen && <span aria-hidden className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-primary" />}
-              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isOpen ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                <g.icon size={18} />
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${isOpen ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                <g.icon size={15} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className={`block text-[14px] font-semibold ${isOpen ? "text-primary" : "text-foreground"}`}>{g.label}</span>
-                <span className="block truncate text-[12px] text-muted-foreground">{g.hint}</span>
+                <span className={`block text-[11px] font-semibold ${isOpen ? "text-primary" : "text-foreground"}`}>{g.label}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">{g.hint}</span>
               </span>
               {chip && (
-                <span className="tabular shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                <span className="tabular shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[9px] font-medium text-primary">
                   {chip}
                 </span>
               )}
-              <ChevronDown size={16} className={`shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+              <ChevronDown size={13} className={`shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
             </button>
             {isOpen && (
               <div className="border-t border-border/60">

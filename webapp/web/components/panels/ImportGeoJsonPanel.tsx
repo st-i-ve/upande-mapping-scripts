@@ -52,11 +52,11 @@ export function ImportGeoJsonPanel() {
   };
 
   return (
-    <SectionCard title={<span className="inline-flex items-center gap-1.5"><FileUp size={14} /> Import GeoJSON</span>}>
-      <Input placeholder="Name (e.g. Block A outline)" value={name} onChange={(e) => setName(e.target.value)} className="h-9" />
+    <SectionCard title={<span className="inline-flex items-center gap-1.5"><FileUp size={11} /> Import GeoJSON</span>}>
+      <Input placeholder="Name (e.g. Block A outline)" value={name} onChange={(e) => setName(e.target.value)} className="h-7" />
       <Textarea placeholder="Paste a Polygon / Feature / FeatureCollection" value={text}
-        onChange={(e) => setText(e.target.value)} className="mt-1.5 h-16 font-mono text-[12px]" />
-      {err && <p className="mt-1 text-[12px] text-destructive">{err}</p>}
+        onChange={(e) => setText(e.target.value)} className="mt-1.5 h-16 font-mono text-[10px]" />
+      {err && <p className="mt-1 text-[10px] text-destructive">{err}</p>}
       <Button variant="secondary" size="sm" className="mt-1.5 w-full" disabled={!text.trim()} onClick={add}>
         Add to {activeFolder ? activeFolder.split("/").pop() : "the project"}
       </Button>

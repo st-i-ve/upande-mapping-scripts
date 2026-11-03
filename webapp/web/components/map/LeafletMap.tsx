@@ -27,6 +27,8 @@ const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
 const DEFAULT_ZOOM = 16;
 const ACCENT = "#e5e5e5";
 
+const genRenderer = L.canvas({ padding: 0.5 });
+
 export default function LeafletMap() {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -62,7 +64,7 @@ export default function LeafletMap() {
 
   const basemapKeys = useAppStore((s) => s.basemapKeys);
   const tileLayers = useAppStore((s) => s.tileLayers);
-  const overlayTile = useAppStore((s) => s.overlayTile);
+  const overlayTiles = useAppStore((s) => s.overlayTiles);
   const overlayOpacity = useAppStore((s) => s.overlayOpacity);
 
   const sliceLayerRef = useRef<L.LayerGroup | null>(null);
@@ -76,11 +78,11 @@ export default function LeafletMap() {
   /** Standard base maps by name (Wayback joins once fetched). */
   const basesRef = useRef<Map<string, L.Layer>>(new Map());
   const overlaysRef = useRef<Record<string, L.Layer>>({});
-  /** Puts a base map on screen by id — "base:<name>" or "tile:<slug>". Set at bootstrap. */
+  /** Puts a standard base map on screen by id, "base:<name>". Set at bootstrap. */
   const switchBaseRef = useRef<(id: string) => void>(() => {});
   const keyedRef = useRef<Record<string, L.Layer>>({});
-  const tileLayersRef = useRef<Record<string, L.TileLayer>>({});
-  const overlayRef = useRef<L.TileLayer | null>(null);
+  /** Imported layers on screen, by slug, with the state they were built from. */
+  const overlayLayersRef = useRef<Record<string, { key: string; layer: L.TileLayer }>>({});
   const baseRef = useRef<L.Layer | null>(null);
   const defaultBaseRef = useRef<L.Layer | null>(null);
 
@@ -134,11 +136,8 @@ export default function LeafletMap() {
     });
     publishBases();
     switchBaseRef.current = (id) => {
-      const [kind, ...rest] = id.split(":");
-      const key = rest.join(":");
-      const lyr = kind === "tile"
-        ? tileLayersRef.current[key]
-        : basesRef.current.get(key) ?? keyedRef.current[key];
+      const key = id.replace(/^base:/, "");
+      const lyr = basesRef.current.get(key) ?? keyedRef.current[key];
       if (!lyr) return;
       if (baseRef.current !== lyr) {
         if (baseRef.current) map.removeLayer(baseRef.current);
@@ -568,7 +567,17 @@ export default function LeafletMap() {
         const [w, s2, e, n] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
         return { type: "Polygon", coordinates: [[[w, s2], [e, s2], [e, n], [w, n], [w, s2]]] };
       },
-      showTileLayer: (slug) => switchBaseRef.current(`tile:${slug}`),
+      showTileLayer: (slug) => {
+        // On top of the current base map, and go to it — it only covers its own patch.
+        useAppStore.getState().setOverlayTileOn(slug, true);
+        const t = useAppStore.getState().tileLayers.find((l) => l.slug === slug);
+        try {
+          const b = t && L.geoJSON(t.area.geometry as never).getBounds();
+          if (b && b.isValid()) map.fitBounds(b, { padding: [28, 28] });
+        } catch {
+          /* no area */
+        }
+      },
       setBase: (id) => switchBaseRef.current(id),
       toggleOverlay: (name) => {
         const lyr = overlaysRef.current[name];
@@ -778,7 +787,15 @@ export default function LeafletMap() {
     if (!grp) return;
     grp.clearLayers();
     if (!genResult) return;
+    // A bad file must never take the whole page down — skip it, say why.
+    if (!Array.isArray((genResult as { features?: unknown }).features)) {
+      console.warn("Not a FeatureCollection; not drawn", genResult);
+      return;
+    }
+    try {
     L.geoJSON(genResult as never, {
+      // Thousands of beds: canvas draws them far faster than one SVG path each.
+      renderer: genRenderer,
       style: (feature) => {
         const kind = (feature?.properties as { kind?: string })?.kind;
         if (kind === "zone") return { color: "#e5e5e5", weight: 1.5, opacity: 0.95 };
@@ -790,7 +807,10 @@ export default function LeafletMap() {
         const label = [p.block_id, p.bed_id].filter(Boolean).join(" · ");
         if (label) layer.bindTooltip(label, { sticky: true, className: "ref-tip" });
       },
-    }).addTo(grp);
+    } as L.GeoJSONOptions).addTo(grp);
+    } catch (e) {
+      console.warn("Couldn't draw this result", e);
+    }
   }, [genResult]);
 
   // ---- terrace sections / blocks / cuts ----
@@ -843,82 +863,52 @@ export default function LeafletMap() {
     }
   }, [basemapKeys]);
 
-  // ---- downloaded tile layers, offered as base maps in the layer menu ----
-  // Rebuilt only when a layer appears, goes or changes state — not on every
+  // ---- imported (downloaded) layers, drawn ON TOP of the standard base map ----
+  // Any number can be on at once; the last one switched on is uppermost. A layer
+  // is rebuilt only when it appears, goes or changes state — not on every
   // progress poll — so a finished download picks up the tiles that were 404s.
   const tileKey = tileLayers.map((l) => `${l.slug}:${l.state}`).join("|");
+  const overlayKey = overlayTiles.join("|");
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const shown = Object.entries(tileLayersRef.current).find(([, l]) => map.hasLayer(l))?.[0];
-    for (const lyr of Object.values(tileLayersRef.current)) {
-      if (map.hasLayer(lyr)) map.removeLayer(lyr);
-    }
-    const next: Record<string, L.TileLayer> = {};
-    for (const t of useAppStore.getState().tileLayers) {
-      let bounds: L.LatLngBounds | undefined;
-      try {
-        bounds = L.geoJSON(t.area.geometry as never).getBounds();
-      } catch {
-        /* no bounds: Leaflet just asks for tiles everywhere */
-      }
-      const lyr = L.tileLayer(t.tile_url, {
-        minZoom: t.min_zoom,
-        maxNativeZoom: t.max_zoom,
-        maxZoom: 22,
-        bounds,
-        attribution: `${t.name} (downloaded tiles)`,
-      });
-      next[t.slug] = lyr;
-    }
-    tileLayersRef.current = next;
-    if (shown) {
-      baseRef.current = null;
-      // Keep showing the layer that was on screen, now rebuilt.
-      if (next[shown]) switchBaseRef.current(`tile:${shown}`);
-      // It was deleted while on screen: fall back to the default imagery.
-      else if (defaultBaseRef.current) {
-        map.addLayer(defaultBaseRef.current);
-        baseRef.current = defaultBaseRef.current;
-        const def = [...basesRef.current].find(([, l]) => l === defaultBaseRef.current)?.[0];
-        useMapBridge.getState().setLayers({ activeBase: `base:${def}` });
+    const { tileLayers: infos, overlayTiles: want, overlayOpacity: opacity } = useAppStore.getState();
+    const cache = overlayLayersRef.current;
+    for (const [slug, e] of Object.entries(cache)) {
+      const t = infos.find((l) => l.slug === slug);
+      if (!want.includes(slug) || !t || `${t.slug}:${t.state}` !== e.key) {
+        map.removeLayer(e.layer);
+        delete cache[slug];
       }
     }
-  }, [tileKey]);
-
-  // ---- compare overlay: one downloaded layer over the base map, faded ----
-  const overlayInfo = tileLayers.find((l) => l.slug === overlayTile);
-  const overlayKey = overlayInfo ? `${overlayInfo.slug}:${overlayInfo.state}` : "";
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (overlayRef.current) map.removeLayer(overlayRef.current);
-    overlayRef.current = null;
-    const t = useAppStore.getState().tileLayers.find((l) => l.slug === useAppStore.getState().overlayTile);
-    if (!t) return;
-    let bounds: L.LatLngBounds | undefined;
-    try {
-      bounds = L.geoJSON(t.area.geometry as never).getBounds();
-    } catch {
-      /* no bounds */
-    }
-    const lyr = L.tileLayer(t.tile_url, {
-      pane: OVERLAY_PANE,
-      // Stretch its outermost zooms so it stays visible zoomed in or out past them.
-      minNativeZoom: t.min_zoom,
-      maxNativeZoom: t.max_zoom,
-      maxZoom: 22,
-      bounds,
-      opacity: useAppStore.getState().overlayOpacity,
-      attribution: `${t.name} (overlay)`,
-    }).addTo(map);
-    overlayRef.current = lyr;
-    // Laid over somewhere off screen: go to it so the comparison is visible.
-    if (bounds?.isValid() && !map.getBounds().intersects(bounds)) map.fitBounds(bounds);
-  }, [overlayKey]);
+    want.forEach((slug, i) => {
+      const t = infos.find((l) => l.slug === slug);
+      if (!t) return;
+      if (!cache[slug]) {
+        let bounds: L.LatLngBounds | undefined;
+        try {
+          bounds = L.geoJSON(t.area.geometry as never).getBounds();
+        } catch {
+          /* no bounds: Leaflet just asks for tiles everywhere */
+        }
+        const layer = L.tileLayer(t.tile_url, {
+          pane: OVERLAY_PANE,
+          // Stretch its outermost zooms so it stays visible zoomed in or out past them.
+          minNativeZoom: t.min_zoom,
+          maxNativeZoom: t.max_zoom,
+          maxZoom: 22,
+          bounds,
+          opacity,
+          attribution: `${t.name} (imported)`,
+        }).addTo(map);
+        cache[slug] = { key: `${t.slug}:${t.state}`, layer };
+      }
+      cache[slug].layer.setZIndex(i + 1);
+    });
+  }, [tileKey, overlayKey]);
 
   useEffect(() => {
-    overlayRef.current?.setOpacity(overlayOpacity);
+    for (const e of Object.values(overlayLayersRef.current)) e.layer.setOpacity(overlayOpacity);
   }, [overlayOpacity]);
 
   // ---- terrace block corner pickers (click to set a block's start corner) ----
@@ -1009,17 +999,17 @@ export default function LeafletMap() {
         onDoubleClick={(e) => e.stopPropagation()}>
         <button aria-label="Zoom in" title="Zoom in" disabled={zoom >= 22}
           onClick={() => mapRef.current?.zoomIn()}
-          className="flex h-10 w-10 items-center justify-center text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-35">
-          <Plus size={17} />
+          className="flex h-8 w-8 items-center justify-center text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-35">
+          <Plus size={14} />
         </button>
         <span aria-hidden className="h-px bg-border" />
         <button aria-label="Zoom out" title="Zoom out" disabled={zoom <= 1}
           onClick={() => mapRef.current?.zoomOut()}
-          className="flex h-10 w-10 items-center justify-center text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-35">
-          <Minus size={17} />
+          className="flex h-8 w-8 items-center justify-center text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-35">
+          <Minus size={14} />
         </button>
       </div>
-      <div className="pointer-events-none absolute bottom-3 right-3 z-[500] rounded-md border border-border/60 bg-popover/85 px-3 py-1.5 text-[12px] text-muted-foreground shadow-lg backdrop-blur tabular">
+      <div className="pointer-events-none absolute bottom-3 right-3 z-[500] rounded-md border border-border/60 bg-popover/85 px-3 py-1.5 text-[10px] text-muted-foreground shadow-lg backdrop-blur tabular">
         <span className="text-primary">◍</span> {coords}
         <span className="mx-1.5 opacity-40">·</span>z{zoom}
       </div>

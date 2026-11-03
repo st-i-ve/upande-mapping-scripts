@@ -14,9 +14,9 @@ export interface MapHandle {
   fitGeometry: (geom: GeoGeometry) => void;
   /** The current map view as a Polygon. */
   viewPolygon: () => GeoGeometry;
-  /** Switch the base map to a downloaded tile layer, by slug. */
+  /** Show an imported (downloaded) layer on top of the base map and zoom to it. */
   showTileLayer: (slug: string) => void;
-  /** Switch the base map: "base:<name>" for a standard map, "tile:<slug>" for an imported one. */
+  /** Switch the standard base map: "base:<name>". */
   setBase: (id: string) => void;
   /** Turn a reference overlay (e.g. "Place labels") on or off. */
   toggleOverlay: (name: string) => void;
@@ -66,7 +66,7 @@ interface MapBridge {
   handle: MapHandle | null;
   /** Standard base maps on offer, in menu order (imported ones come from the app store). */
   baseNames: string[];
-  /** The base map on screen: "base:<name>" or "tile:<slug>". */
+  /** The standard base map on screen: "base:<name>". */
   activeBase: string;
   overlayNames: string[];
   activeOverlays: string[];
