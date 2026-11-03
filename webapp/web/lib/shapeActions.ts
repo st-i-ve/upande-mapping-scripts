@@ -2,7 +2,7 @@
  * Actions on the saved-shape selection, shared by the left tool rail and the
  * browser so both do exactly the same thing.
  */
-import { useAppStore, type SideTab } from "@/lib/store/appStore";
+import { useAppStore, type SideTab, type UnitKind } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { booleanOp, type BooleanOp } from "@/lib/geometry/booleanOps";
 import { circleFit } from "@/lib/geometry/pivot";
@@ -62,6 +62,12 @@ export function makePivotFromSelected() {
 export function deleteSelected() {
   const st = useAppStore.getState();
   if (st.selectedShapes.length) st.removeSavedShapes(st.selectedShapes);
+}
+
+/** Open the Units tab at one generator, expanded. */
+export function goToUnits(kind: UnitKind) {
+  useAppStore.getState().setUnitOpen(kind, true);
+  goToSection("generate", `units-${kind}`);
 }
 
 /** Open a sidebar tab and bring one of its sections into view. */

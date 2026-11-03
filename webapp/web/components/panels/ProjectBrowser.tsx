@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState, type DragEvent, type MouseEvent, type Rea
 import {
   FolderOpen, FolderClosed, FolderPlus, Folder, ChevronRight, ChevronDown, Pencil, Trash2, X, Check,
   Cloud, CloudOff, RefreshCw, Eye, EyeOff, LocateFixed, Target, Scissors, Search, PieChart,
-  Triangle, FolderInput, Plus, ChevronsDownUp,
+  Triangle, FolderInput, Plus, ChevronsDownUp, Download, Layers, Files,
 } from "lucide-react";
+import { exportShapesEach, exportShapesTogether } from "@/lib/exportGeo";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -14,7 +15,7 @@ import {
   adoptProject, closeProject, flushProject, openProject, saveNow, useProjectSync,
 } from "@/lib/project/sync";
 import { allFolders, baseName, childFolders, folderOf, parentOf, within } from "@/lib/store/folders";
-import { deleteSelected, makePivotFromSelected, selectedCircle, sliceShape } from "@/lib/shapeActions";
+import { deleteSelected, goToUnits, selectedInOrder, makePivotFromSelected, selectedCircle, sliceShape } from "@/lib/shapeActions";
 import { SectionCard } from "@/components/console/SectionCard";
 import { CloudBackupButton, CloudBackupForm } from "@/components/panels/CloudBackup";
 import { Button } from "@/components/ui/button";
@@ -119,8 +120,8 @@ function ProjectBar() {
 
   const statusIcon = active ? (
     status === "error" || status === "conflict"
-      ? <CloudOff size={12} className="shrink-0 text-destructive" />
-      : <Cloud size={12} className={`shrink-0 ${status === "saving" ? "animate-pulse text-primary" : "text-primary"}`} />
+      ? <CloudOff size={14} className="shrink-0 text-destructive" />
+      : <Cloud size={14} className={`shrink-0 ${status === "saving" ? "animate-pulse text-primary" : "text-primary"}`} />
   ) : <CloudBackupButton onBackUp={() => setBackingUp(true)} />;
 
   const statusLine =
@@ -135,38 +136,38 @@ function ProjectBar() {
       <div className={`rounded-md border p-2 ${active ? "border-primary/30 bg-primary/5" : "border-dashed border-border"}`}>
         {renaming !== null && active ? (
           <form className="flex gap-1" onSubmit={(e) => { e.preventDefault(); void rename(); }}>
-            <Input aria-label="Project name" autoFocus value={renaming} className="h-7 text-[10px]"
+            <Input aria-label="Project name" autoFocus value={renaming} className="h-8 text-[13px]"
               onChange={(e) => setRenaming(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setRenaming(null)} />
-            <Button type="submit" size="sm" className="h-7 px-2 text-[9px]" disabled={busy || !renaming.trim()}>Save</Button>
+            <Button type="submit" size="sm" className="h-8 px-2 text-[12px]" disabled={busy || !renaming.trim()}>Save</Button>
           </form>
         ) : (
           <div className="flex items-center gap-2">
-            <FolderOpen size={14} className={active ? "shrink-0 text-primary" : "shrink-0 text-muted-foreground"} />
+            <FolderOpen size={16} className={active ? "shrink-0 text-primary" : "shrink-0 text-muted-foreground"} />
             <button className="min-w-0 flex-1 text-left" onClick={() => setListOpen((o) => !o)}
               title="Switch project" aria-expanded={listOpen}>
-              <span className="block truncate text-[11px] font-medium text-foreground">
+              <span className="block truncate text-[14px] font-medium text-foreground">
                 {active ? active.name : "No project open"}
               </span>
-              <span className="tabular block text-[8px] text-muted-foreground">
+              <span className="tabular block text-[11px] text-muted-foreground">
                 {active ? (statusLine ?? " ") : local ? `${plural(local, "shape")} only in this browser` : "Open or create one to keep your shapes"}
               </span>
             </button>
             <span className="flex shrink-0 items-center gap-1.5">
               {statusIcon}
-              {active && <button className={ICON} title="Rename the project" onClick={() => setRenaming(active.name)}><Pencil size={11} /></button>}
-              {active && <button className={ICON} title="Close the project (its shapes stay on this map)" onClick={closeProject}><X size={12} /></button>}
+              {active && <button className={ICON} title="Rename the project" onClick={() => setRenaming(active.name)}><Pencil size={13} /></button>}
+              {active && <button className={ICON} title="Close the project (its shapes stay on this map)" onClick={closeProject}><X size={14} /></button>}
             </span>
           </div>
         )}
 
         {active && status === "conflict" && (
           <div className="mt-1.5">
-            <p className="text-[9px] text-destructive">{syncError}. Which copy should the project keep?</p>
+            <p className="text-[12px] text-destructive">{syncError}. Which copy should the project keep?</p>
             <div className="mt-1.5 flex gap-1.5">
-              <Button size="sm" variant="secondary" className="h-7 flex-1 text-[9px]" disabled={busy}
+              <Button size="sm" variant="secondary" className="h-8 flex-1 text-[12px]" disabled={busy}
                 onClick={() => run(() => openProject(active.slug))}
                 title="Replace the shapes on this map with the project's latest saved copy">Load latest</Button>
-              <Button size="sm" className="h-7 flex-1 text-[9px]" disabled={busy}
+              <Button size="sm" className="h-8 flex-1 text-[12px]" disabled={busy}
                 onClick={() => window.confirm("Overwrite the project with the shapes on this map? The other changes will be lost.") && run(() => saveNow(true))}>
                 Keep mine
               </Button>
@@ -175,10 +176,10 @@ function ProjectBar() {
         )}
         {status === "error" && syncError && (
           <div className="mt-1.5 flex items-center justify-between gap-2">
-            <p className="text-[9px] text-destructive">{active ? `Not saved: ${syncError}` : syncError}</p>
+            <p className="text-[12px] text-destructive">{active ? `Not saved: ${syncError}` : syncError}</p>
             {active && (
-              <Button size="sm" variant="secondary" className="h-6 px-2 text-[9px]" onClick={() => run(() => saveNow())}>
-                <RefreshCw size={10} /> Retry
+              <Button size="sm" variant="secondary" className="h-7 px-2 text-[12px]" onClick={() => run(() => saveNow())}>
+                <RefreshCw size={12} /> Retry
               </Button>
             )}
           </div>
@@ -189,12 +190,12 @@ function ProjectBar() {
 
       {/* Switch / create */}
       <div className="mt-1.5 flex gap-1.5">
-        <Button size="sm" variant="secondary" className="h-7 flex-1 text-[9px]" onClick={() => { setListOpen((o) => !o); setCreating(false); }}
+        <Button size="sm" variant="secondary" className="h-8 flex-1 text-[12px]" onClick={() => { setListOpen((o) => !o); setCreating(false); }}
           aria-expanded={listOpen}>
-          {listOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />} All projects{projects.length ? ` (${projects.length})` : ""}
+          {listOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />} All projects{projects.length ? ` (${projects.length})` : ""}
         </Button>
-        <Button size="sm" className="h-7 flex-1 text-[9px]" onClick={() => (creating ? setCreating(false) : startCreate())}>
-          <Plus size={11} /> New project
+        <Button size="sm" className="h-8 flex-1 text-[12px]" onClick={() => (creating ? setCreating(false) : startCreate())}>
+          <Plus size={13} /> New project
         </Button>
       </div>
 
@@ -204,42 +205,42 @@ function ProjectBar() {
             <Input aria-label="New project name" placeholder="e.g. Kaitet North" value={name} autoFocus
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") create(); if (e.key === "Escape") setCreating(false); }}
-              className="h-8" />
-            <Button size="sm" className="h-8" disabled={busy || !name.trim()} onClick={create}>
-              <FolderPlus size={12} /> Create
+              className="h-9" />
+            <Button size="sm" className="h-9" disabled={busy || !name.trim()} onClick={create}>
+              <FolderPlus size={14} /> Create
             </Button>
           </div>
           {local > 0 && (
-            <label className="mt-1.5 flex items-center gap-1.5 text-[9px] text-muted-foreground">
+            <label className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
               <input type="checkbox" className="accent-primary" checked={bringShapes} onChange={(e) => setBringShapes(e.target.checked)} />
               {active ? `Copy the ${plural(local, "shape")} of ${active.name} into it` : `Start it with the ${plural(local, "shape")} on this map`}
             </label>
           )}
           {active && (
-            <p className="mt-1 text-[8px] text-muted-foreground/70">{active.name} is saved and closed; the new project opens in its place.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground/70">{active.name} is saved and closed; the new project opens in its place.</p>
           )}
         </div>
       )}
 
       {listOpen && (
         <ul className="mt-1.5 max-h-56 overflow-y-auto rounded-md border border-border">
-          {projects.length === 0 && <li className="p-2 text-[9px] text-muted-foreground">No projects on the server yet.</li>}
+          {projects.length === 0 && <li className="p-2 text-[12px] text-muted-foreground">No projects on the server yet.</li>}
           {projects.map((p) => {
             const isOpen = active?.slug === p.slug;
             return (
               <li key={p.slug} className={`group/row flex items-center gap-2 border-b border-border/50 px-2 py-1.5 last:border-0 ${isOpen ? "bg-primary/5" : "hover:bg-muted/40"}`}>
                 <button className="min-w-0 flex-1 text-left disabled:cursor-default" disabled={isOpen || busy}
                   onClick={() => open(p)} title={isOpen ? "Open now" : `Open ${p.name}`}>
-                  <span className={`block truncate text-[10px] ${isOpen ? "font-medium text-primary" : "text-foreground"}`}>
+                  <span className={`block truncate text-[13px] ${isOpen ? "font-medium text-primary" : "text-foreground"}`}>
                     {p.name}{isOpen && " · open"}
                   </span>
-                  <span className="tabular block text-[8px] text-muted-foreground/70">
+                  <span className="tabular block text-[11px] text-muted-foreground/70">
                     {plural(p.shape_count, "shape")} · {when(p.updated)}
                   </span>
                 </button>
                 <button title="Delete this project" className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/row:opacity-100 focus:opacity-100"
                   onClick={() => remove(p)}>
-                  <Trash2 size={11} />
+                  <Trash2 size={13} />
                 </button>
               </li>
             );
@@ -247,7 +248,7 @@ function ProjectBar() {
         </ul>
       )}
 
-      {error && <p className="mt-1.5 text-[9px] text-destructive">{error}</p>}
+      {error && <p className="mt-1.5 text-[12px] text-destructive">{error}</p>}
     </div>
   );
 }
@@ -295,13 +296,13 @@ function InlineName({ initial, issue, onSave, onCancel }: {
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-1">
-        <Input autoFocus aria-label="Name" value={v} className={`h-6 text-[10px] ${issue ? "border-destructive" : ""}`}
+        <Input autoFocus aria-label="Name" value={v} className={`h-7 text-[13px] ${issue ? "border-destructive" : ""}`}
           onChange={(e) => setV(e.target.value)} onFocus={(e) => e.target.select()}
           onKeyDown={(e) => { if (e.key === "Enter") onSave(v); if (e.key === "Escape") onCancel(); }} />
-        <button className={ICON} aria-label="Save name" onClick={() => onSave(v)}><Check size={12} /></button>
-        <button className="text-muted-foreground hover:text-destructive" aria-label="Cancel rename" onClick={onCancel}><X size={12} /></button>
+        <button className={ICON} aria-label="Save name" onClick={() => onSave(v)}><Check size={14} /></button>
+        <button className="text-muted-foreground hover:text-destructive" aria-label="Cancel rename" onClick={onCancel}><X size={14} /></button>
       </div>
-      {issue && <p className="mt-0.5 text-[8px] text-destructive">{issue}</p>}
+      {issue && <p className="mt-0.5 text-[11px] text-destructive">{issue}</p>}
     </div>
   );
 }
@@ -345,12 +346,12 @@ function ShapeRow({ s, ctx, depth }: { s: SavedShape; ctx: TreeCtx; depth: numbe
         e.dataTransfer.setData(DRAG_SHAPES, JSON.stringify(names));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group/row flex items-center gap-1.5 rounded py-[3px] pr-1 text-[10px] ${selected ? "bg-primary/12 ring-1 ring-primary/30" : "hover:bg-muted/50"}`}
+      className={`group/row flex items-center gap-1.5 rounded py-[3px] pr-1 text-[13px] ${selected ? "bg-primary/12 ring-1 ring-primary/30" : "hover:bg-muted/50"}`}
       style={{ paddingLeft: 6 + depth * 12 }}
     >
       <input type="checkbox" className="accent-primary" aria-label={`Select ${s.name}`}
         checked={selected} onChange={() => st().toggleSelectedShape(s.name, true)} />
-      <span className="tabular w-5 shrink-0 text-[9px] font-bold" style={{ color: s.color }} title="Label shown on the map">
+      <span className="tabular w-5 shrink-0 text-[12px] font-bold" style={{ color: s.color }} title="Label shown on the map">
         {shapeLetter(ctx.index.get(s.name) ?? 0)}
       </span>
       {renaming ? (
@@ -373,17 +374,18 @@ function ShapeRow({ s, ctx, depth }: { s: SavedShape; ctx: TreeCtx; depth: numbe
             {s.name}
           </button>
           <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
-            <button className={ICON} title="Zoom to it" aria-label={`Zoom to ${s.name}`} onClick={() => handle?.fitGeometry(s.geometry)}><LocateFixed size={11} /></button>
-            <button className={ICON} title="Use as the working polygon (Generate / knife)" aria-label={`Use ${s.name}`} onClick={() => st().setWorkingPolygon(s.geometry)}><Target size={11} /></button>
-            <button className={ICON} title="Slice it repeatedly with the knife (original kept)" aria-label={`Slice ${s.name}`} onClick={() => sliceShape(s.name)}><Scissors size={11} /></button>
-            <button className={ICON} title="Rename" aria-label={`Rename ${s.name}`} onClick={() => { setDraft(s.name); setRenaming(true); }}><Pencil size={11} /></button>
-            <button className="text-muted-foreground hover:text-destructive" title="Delete (Ctrl+Z brings it back)" aria-label={`Delete ${s.name}`} onClick={() => st().removeSavedShape(s.name)}><Trash2 size={11} /></button>
+            <button className={ICON} title="Zoom to it" aria-label={`Zoom to ${s.name}`} onClick={() => handle?.fitGeometry(s.geometry)}><LocateFixed size={13} /></button>
+            <button className={ICON} title="Use as the working polygon (Generate / knife)" aria-label={`Use ${s.name}`} onClick={() => st().setWorkingPolygon(s.geometry)}><Target size={13} /></button>
+            <button className={ICON} title="Slice it repeatedly with the knife (original kept)" aria-label={`Slice ${s.name}`} onClick={() => sliceShape(s.name)}><Scissors size={13} /></button>
+            <button className={ICON} title="Export as GeoJSON" aria-label={`Export ${s.name}`} onClick={() => exportShapesTogether([s], s.name)}><Download size={13} /></button>
+            <button className={ICON} title="Rename" aria-label={`Rename ${s.name}`} onClick={() => { setDraft(s.name); setRenaming(true); }}><Pencil size={13} /></button>
+            <button className="text-muted-foreground hover:text-destructive" title="Delete (Ctrl+Z brings it back)" aria-label={`Delete ${s.name}`} onClick={() => st().removeSavedShape(s.name)}><Trash2 size={13} /></button>
           </span>
         </>
       )}
       <button className={`shrink-0 ${ICON}`} title={s.visible ? "Hide on the map" : "Show on the map"}
         aria-label={s.visible ? `Hide ${s.name}` : `Show ${s.name}`} onClick={() => st().toggleShapeVisible(s.name)}>
-        {s.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+        {s.visible ? <Eye size={14} /> : <EyeOff size={14} />}
       </button>
     </li>
   );
@@ -420,14 +422,14 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
         draggable={!renaming}
         onDragStart={(e) => { e.dataTransfer.setData(DRAG_FOLDER, path); e.dataTransfer.effectAllowed = "move"; }}
         {...drop.props}
-        className={`group/row flex items-center gap-1 rounded py-[3px] pr-1 text-[10px] ${
+        className={`group/row flex items-center gap-1 rounded py-[3px] pr-1 text-[13px] ${
           drop.over ? "bg-primary/20 ring-1 ring-primary" : isActive ? "bg-primary/8" : "hover:bg-muted/50"}`}
         style={{ paddingLeft: 2 + depth * 12 }}
       >
         <button className="shrink-0 text-muted-foreground" aria-label={isOpen ? `Collapse ${path}` : `Expand ${path}`} onClick={() => ctx.toggle(path)}>
-          {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
-        {isOpen ? <FolderOpen size={12} className="shrink-0 text-primary/80" /> : <FolderClosed size={12} className="shrink-0 text-primary/80" />}
+        {isOpen ? <FolderOpen size={14} className="shrink-0 text-primary/80" /> : <FolderClosed size={14} className="shrink-0 text-primary/80" />}
         {renaming ? (
           <InlineName initial={baseName(path)} issue={issue}
             onCancel={() => { setRenaming(false); setIssue(null); }}
@@ -447,10 +449,12 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
             </button>
             <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
               <button className={ICON} title="Select every shape in it" aria-label={`Select all in ${path}`}
-                onClick={() => st().setSelectedShapes(inside.map((s) => s.name))}><Check size={11} /></button>
-              <button className={ICON} title="New sub-folder" aria-label={`New folder in ${path}`} onClick={addSub}><FolderPlus size={11} /></button>
-              <button className={ICON} title="Rename" aria-label={`Rename ${path}`} onClick={() => setRenaming(true)}><Pencil size={11} /></button>
-              <button className="text-muted-foreground hover:text-destructive" title="Delete the folder and its shapes" aria-label={`Delete ${path}`} onClick={remove}><Trash2 size={11} /></button>
+                onClick={() => st().setSelectedShapes(inside.map((s) => s.name))}><Check size={13} /></button>
+              <button className={ICON} title="Export everything in it as one GeoJSON" aria-label={`Export ${path}`} disabled={!inside.length}
+                onClick={() => exportShapesTogether(inside, baseName(path))}><Download size={13} /></button>
+              <button className={ICON} title="New sub-folder" aria-label={`New folder in ${path}`} onClick={addSub}><FolderPlus size={13} /></button>
+              <button className={ICON} title="Rename" aria-label={`Rename ${path}`} onClick={() => setRenaming(true)}><Pencil size={13} /></button>
+              <button className="text-muted-foreground hover:text-destructive" title="Delete the folder and its shapes" aria-label={`Delete ${path}`} onClick={remove}><Trash2 size={13} /></button>
             </span>
           </>
         )}
@@ -458,7 +462,7 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
           title={anyVisible ? "Hide everything in it" : "Show everything in it"}
           aria-label={anyVisible ? `Hide ${path}` : `Show ${path}`}
           onClick={() => st().setFolderVisible(path, !anyVisible)}>
-          {anyVisible || !inside.length ? <Eye size={12} /> : <EyeOff size={12} />}
+          {anyVisible || !inside.length ? <Eye size={14} /> : <EyeOff size={14} />}
         </button>
       </div>
       {isOpen && <TreeLevel parent={path} ctx={ctx} depth={depth + 1} />}
@@ -471,7 +475,7 @@ function TreeLevel({ parent, ctx, depth }: { parent: string; ctx: TreeCtx; depth
   const shapes = ctx.byFolder.get(parent) ?? [];
   if (!folders.length && !shapes.length) {
     return depth > 0 && !ctx.searching
-      ? <p className="py-0.5 text-[9px] italic text-muted-foreground/60" style={{ paddingLeft: 20 + depth * 12 }}>Empty — drag shapes here</p>
+      ? <p className="py-0.5 text-[12px] italic text-muted-foreground/60" style={{ paddingLeft: 20 + depth * 12 }}>Empty — drag shapes here</p>
       : null;
   }
   return (
@@ -493,12 +497,12 @@ function SelectionBar({ all }: { all: string[] }) {
   return (
     <div className="sticky bottom-0 z-10 mt-2 rounded-md border border-primary/30 bg-card/95 p-2 shadow-lg backdrop-blur">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[9px] font-medium text-foreground">{selected.length} selected</span>
-        <button className="text-[9px] text-muted-foreground hover:text-primary" onClick={() => st().clearSelectedShapes()}>Clear</button>
+        <span className="text-[12px] font-medium text-foreground">{selected.length} selected</span>
+        <button className="text-[12px] text-muted-foreground hover:text-primary" onClick={() => st().clearSelectedShapes()}>Clear</button>
       </div>
       <div className="mt-1.5 flex items-center gap-1.5">
-        <FolderInput size={12} className="shrink-0 text-muted-foreground" />
-        <select aria-label="Move the selected shapes to a folder" value="" className="h-7 min-w-0 flex-1 rounded-md border border-input bg-transparent px-1.5 text-[10px]"
+        <FolderInput size={14} className="shrink-0 text-muted-foreground" />
+        <select aria-label="Move the selected shapes to a folder" value="" className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-1.5 text-[13px]"
           onChange={(e) => { if (e.target.value !== "") st().moveShapesToFolder(selected, e.target.value === "/" ? "" : e.target.value); }}>
           <option value="" disabled>Move to folder…</option>
           <option value="/">Project root</option>
@@ -507,17 +511,25 @@ function SelectionBar({ all }: { all: string[] }) {
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {circle && (
-          <Button size="sm" variant="secondary" className="h-7 text-[9px]" onClick={makePivotFromSelected}
+          <Button size="sm" variant="secondary" className="h-8 text-[12px]" onClick={makePivotFromSelected}
             title={`Lay out ${circle.shape.name} as a pivot (${Math.round(circle.fit.radiusM)} m radius) and cut it into blocks`}>
-            <PieChart size={10} /> Make pivot
+            <PieChart size={12} /> Make pivot
           </Button>
         )}
-        <Button size="sm" variant="secondary" className="h-7 text-[9px]" title="Queue these shapes for band/triad generation (Generate tab)"
-          onClick={() => { st().setTriadQueue(selected); st().setSideTab("generate"); }}>
-          <Triangle size={10} /> Triads
+        <Button size="sm" variant="secondary" className="h-8 text-[12px]" title="Queue these shapes for band/triad generation (Units tab)"
+          onClick={() => { st().setTriadQueue(selected); goToUnits("triads"); }}>
+          <Triangle size={12} /> Triads
         </Button>
-        <Button variant="destructive" size="sm" className="ml-auto h-7 text-[9px]" title="Or press Delete — Ctrl+Z brings them back" onClick={deleteSelected}>
-          <Trash2 size={10} /> Delete
+        <Button size="sm" variant="secondary" className="h-8 text-[12px]" title="All the selected shapes in one GeoJSON file"
+          onClick={() => exportShapesTogether(selectedInOrder(), selected.length === 1 ? selected[0] : `${selected.length} shapes`)}>
+          <Layers size={12} /> Export as one
+        </Button>
+        <Button size="sm" variant="secondary" className="h-8 text-[12px]" title="One GeoJSON file per shape, zipped"
+          onClick={() => exportShapesEach(selectedInOrder(), `${selected.length} shapes`)}>
+          <Files size={12} /> Export each
+        </Button>
+        <Button variant="destructive" size="sm" className="ml-auto h-8 text-[12px]" title="Or press Delete — Ctrl+Z brings them back" onClick={deleteSelected}>
+          <Trash2 size={12} /> Delete
         </Button>
       </div>
     </div>
@@ -573,35 +585,39 @@ function ShapeTree() {
     <div className="mt-3">
       <div className="flex items-center gap-1.5">
         <div className="relative min-w-0 flex-1">
-          <Search size={11} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input aria-label="Search shapes and folders" placeholder={`Search ${plural(shapes.length, "shape")}…`} value={query}
             onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-            className="h-7 pl-6 text-[10px]" />
+            className="h-8 pl-6 text-[13px]" />
         </div>
         <button className={ICON} title={`New folder in ${activeFolder ? baseName(activeFolder) : rootName}`} aria-label="New folder" onClick={newFolder}>
-          <FolderPlus size={14} />
+          <FolderPlus size={16} />
+        </button>
+        <button className={ICON} title={`Export all ${plural(shapes.length, "shape")} (one file per shape, zipped, in their folders)`}
+          aria-label="Export all shapes" disabled={!shapes.length} onClick={() => exportShapesEach(shapes, rootName)}>
+          <Download size={16} />
         </button>
         <button className={ICON} title="Collapse all folders" aria-label="Collapse all folders" onClick={() => setOpenSet(new Set())}>
-          <ChevronsDownUp size={14} />
+          <ChevronsDownUp size={16} />
         </button>
         <Switch checked={shapesVisible} onCheckedChange={setShapesVisibleSafe} aria-label="Show shapes on the map" />
       </div>
       <div className="mt-1.5 flex items-center gap-2">
-        <span className="text-[8px] uppercase tracking-wider text-muted-foreground" title="Shapes are drawn as outline + letter; add fill only if you want it">Fill</span>
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground" title="Shapes are drawn as outline + letter; add fill only if you want it">Fill</span>
         <Slider value={[Math.round(shapeOpacity * 100)]} max={100} step={1}
           onValueChange={(v) => st().setShapeOpacity((Array.isArray(v) ? v[0] : v) / 100)} className="flex-1" />
-        <span className="tabular w-8 text-right text-[8px] text-muted-foreground">{Math.round(shapeOpacity * 100)}%</span>
+        <span className="tabular w-8 text-right text-[11px] text-muted-foreground">{Math.round(shapeOpacity * 100)}%</span>
       </div>
 
       {/* Where you are — new shapes are saved into this folder. */}
-      <nav aria-label="Open folder" className="mt-2 flex flex-wrap items-center gap-0.5 text-[9px] text-muted-foreground">
+      <nav aria-label="Open folder" className="mt-2 flex flex-wrap items-center gap-0.5 text-[12px] text-muted-foreground">
         <span className="mr-1">Saving into</span>
         <Crumb onClick={() => st().setActiveFolder("")} current={!crumbs.length}>{rootName}</Crumb>
         {crumbs.map((c, i) => {
           const p = crumbs.slice(0, i + 1).join("/");
           return (
             <span key={p} className="inline-flex items-center gap-0.5">
-              <ChevronRight size={9} />
+              <ChevronRight size={11} />
               <Crumb onClick={() => st().setActiveFolder(p)} current={i === crumbs.length - 1}>{c}</Crumb>
             </span>
           );
@@ -612,20 +628,27 @@ function ShapeTree() {
         {...rootDrop.props}
         className={`mt-1 min-h-10 rounded-md border p-1 ${rootDrop.over ? "border-primary bg-primary/5" : "border-border/60"}`}
       >
-        <div className="flex items-center gap-1 px-1 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <Folder size={11} /> {rootName}
+        <div className="flex items-center gap-1 px-1 pb-0.5 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <Folder size={13} /> {rootName}
           <span className="tabular ml-auto font-normal normal-case tracking-normal">
             {plural(shapes.length, "shape")} · {plural(all.length, "folder")}
           </span>
+          {shapes.length > 0 && (
+            <button className="ml-1.5 rounded px-1.5 py-0.5 font-normal normal-case tracking-normal text-primary hover:bg-primary/10"
+              title="Select every shape (then export, move or delete them together)"
+              onClick={() => st().setSelectedShapes(shapes.map((x) => x.name))}>
+              Select all
+            </button>
+          )}
         </div>
         <TreeLevel parent="" ctx={ctx} depth={0} />
         {hydrated && shapes.length === 0 && all.length === 0 && (
-          <p className="px-1 py-2 text-[9px] text-muted-foreground/70">
+          <p className="px-1 py-2 text-[12px] text-muted-foreground/70">
             No shapes yet. Draw one with the tools on the left, or import GeoJSON from the Tool tab.
           </p>
         )}
         {ctx.searching && ctx.nonEmpty.size === 0 && !(ctx.byFolder.get("")?.length) && (
-          <p className="px-1 py-2 text-[9px] text-muted-foreground/70">Nothing matches “{query}”.</p>
+          <p className="px-1 py-2 text-[12px] text-muted-foreground/70">Nothing matches “{query}”.</p>
         )}
       </div>
 
@@ -651,7 +674,7 @@ function Crumb({ children, onClick, current }: { children: ReactNode; onClick: (
  */
 export function ProjectBrowser() {
   return (
-    <SectionCard title={<span className="inline-flex items-center gap-1.5"><FolderOpen size={12} /> Projects &amp; shapes</span>}>
+    <SectionCard title={<span className="inline-flex items-center gap-1.5"><FolderOpen size={14} /> Projects &amp; shapes</span>}>
       <ProjectBar />
       <ShapeTree />
     </SectionCard>

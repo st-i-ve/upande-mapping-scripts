@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SideTab } from "@/lib/store/appStore";
-import { goToSection } from "@/lib/shapeActions";
+import { goToSection, goToUnits } from "@/lib/shapeActions";
 import {
   MapPin,
   Shapes,
@@ -55,12 +55,12 @@ export function CommandMenu({ hideTrigger = false }: { hideTrigger?: boolean }) 
       {!hideTrigger && (
       <button
         onClick={() => setOpen(true)}
-        className="tabular inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-2 py-1 text-[9px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+        className="tabular inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/60 px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
         aria-label="Open command menu"
       >
-        <Search size={12} />
+        <Search size={14} />
         <span className="hidden sm:inline">Search</span>
-        <kbd className="rounded bg-background/60 px-1 text-[8px]">⌘K</kbd>
+        <kbd className="rounded bg-background/60 px-1 text-[11px]">⌘K</kbd>
       </button>
       )}
 
@@ -75,13 +75,13 @@ export function CommandMenu({ hideTrigger = false }: { hideTrigger?: boolean }) 
             <CommandItem onSelect={run(jump("browser", "sec-shapes"))}>
               <Shapes /> Saved shapes
             </CommandItem>
-            <CommandItem onSelect={run(jump("generate", "sec-grid"))}>
+            <CommandItem onSelect={run(() => goToUnits("trees"))}>
               <Grid3x3 /> Tree grid
             </CommandItem>
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Actions">
-            <CommandItem onSelect={run(jump("generate", "sec-generate"))}>
+            <CommandItem onSelect={run(() => goToUnits("zones"))}>
               <Play /> Generate beds &amp; zones
             </CommandItem>
             <CommandItem onSelect={run(jump("browser", "sec-shapes"))}>

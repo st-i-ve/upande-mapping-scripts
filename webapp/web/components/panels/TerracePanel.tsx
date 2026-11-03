@@ -71,9 +71,9 @@ export function TerracePanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Layers size={12} /> Terrace mode</span>}
+      title={<span className="inline-flex items-center gap-1.5"><Layers size={14} /> Terrace mode</span>}
     >
-      <p className="mb-2 text-[9px] text-muted-foreground/70">
+      <p className="mb-2 text-[12px] text-muted-foreground/70">
         For staircase greenhouses: pick a stepped edge, then group sections into blocks.
       </p>
       <Button
@@ -83,16 +83,16 @@ export function TerracePanel() {
         disabled={!handle || !workingPolygon}
         onClick={() => (picking ? handle?.cancelPick() : pickEdge())}
       >
-        <Crosshair size={13} /> {picking ? "Click a stepped edge…" : "Pick stepped edge"}
+        <Crosshair size={15} /> {picking ? "Click a stepped edge…" : "Pick stepped edge"}
       </Button>
 
-      <label className="mt-2 block text-[9px] text-muted-foreground">
+      <label className="mt-2 block text-[12px] text-muted-foreground">
         Block grouping (e.g. 1-3, 4, 5-7)
         <Input
           value={grouping}
           onChange={(e) => setGrouping(e.target.value)}
           placeholder="optional — leave blank for one block per section"
-          className="mt-1 h-8 tabular"
+          className="mt-1 h-9 tabular"
         />
       </label>
 
@@ -111,16 +111,16 @@ export function TerracePanel() {
         )}
       </div>
 
-      {err && <p className="mt-1.5 text-[9px] text-destructive">{err}</p>}
+      {err && <p className="mt-1.5 text-[12px] text-destructive">{err}</p>}
       {meta && (
         <>
-          <div className="tabular mt-2 rounded-md border border-border bg-secondary/40 px-2 py-1.5 text-[9px] text-muted-foreground">
+          <div className="tabular mt-2 rounded-md border border-border bg-secondary/40 px-2 py-1.5 text-[12px] text-muted-foreground">
             edge <span className="text-primary">{startEdge}</span> · {meta.section_count} sections ·{" "}
             <span className="text-primary">{meta.block_count}</span> blocks
             {meta.block_count > 0 && <span className="ml-1 text-primary/80">→ feeds Generate</span>}
           </div>
           {meta.block_count > 0 && (
-            <p className="mt-1.5 text-[9px] text-muted-foreground/70">
+            <p className="mt-1.5 text-[12px] text-muted-foreground/70">
               Tip: click a block corner (◍) on the map to set that block&apos;s start corner.
             </p>
           )}

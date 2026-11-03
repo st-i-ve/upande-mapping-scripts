@@ -87,106 +87,106 @@ export function PivotPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><PieChart size={12} /> Pivot</span>}
-      meta={draft ? <span className="text-[8px] uppercase tracking-wider text-primary">preview</span> : undefined}
+      title={<span className="inline-flex items-center gap-1.5"><PieChart size={14} /> Pivot</span>}
+      meta={draft ? <span className="text-[11px] uppercase tracking-wider text-primary">preview</span> : undefined}
     >
       {!draft ? (
         <>
-          <p className="mb-2 text-[9px] text-muted-foreground/70">
+          <p className="mb-2 text-[12px] text-muted-foreground/70">
             Lay out a centre pivot and cut it into blocks like a pizza. Click the pivot&apos;s
             centre on the map, move out to its edge, and click again to fix the circle.
           </p>
           <Button size="sm" className="w-full" disabled={!handle} onClick={draw}>
-            <CircleDashed size={12} /> {armed ? "Click the centre, then the edge…" : "Draw pivot circle"}
+            <CircleDashed size={14} /> {armed ? "Click the centre, then the edge…" : "Draw pivot circle"}
           </Button>
-          <p className="mt-1.5 text-[8px] text-muted-foreground/60">
+          <p className="mt-1.5 text-[11px] text-muted-foreground/60">
             <strong>Esc</strong> puts the tool away. Already have the circle? Select it in the
             <strong> Browser</strong> and press <strong>Make pivot</strong>.
           </p>
-          {saved && <p className="mt-1.5 text-[9px] text-primary">{saved}</p>}
+          {saved && <p className="mt-1.5 text-[12px] text-primary">{saved}</p>}
         </>
       ) : (
         <>
-          <p className="mb-2 text-[9px] text-muted-foreground/70">
+          <p className="mb-2 text-[12px] text-muted-foreground/70">
             The map shows the cut as it will be made. Turn it until the paths line up with
             the ones on the ground, then confirm.
           </p>
 
           <div className="grid grid-cols-2 gap-1.5">
-            <label className="block text-[9px] text-muted-foreground">
+            <label className="block text-[12px] text-muted-foreground">
               Slices
-              <Input aria-label="Number of slices" type="number" min={1} step={1} value={count} onChange={num("count")} className="mt-1 h-8 tabular" />
+              <Input aria-label="Number of slices" type="number" min={1} step={1} value={count} onChange={num("count")} className="mt-1 h-9 tabular" />
             </label>
-            <label className="block text-[9px] text-muted-foreground">
+            <label className="block text-[12px] text-muted-foreground">
               Path size (m)
-              <Input aria-label="Path size in metres" type="number" min={0} step={0.5} value={pathM} onChange={num("pathM")} className="mt-1 h-8 tabular" />
+              <Input aria-label="Path size in metres" type="number" min={0} step={0.5} value={pathM} onChange={num("pathM")} className="mt-1 h-9 tabular" />
             </label>
-            <label className="block text-[9px] text-muted-foreground">
+            <label className="block text-[12px] text-muted-foreground">
               Centre radius (m)
-              <Input aria-label="Centre radius in metres" type="number" min={0} step={1} value={centerRadiusM} onChange={num("centerRadiusM")} className="mt-1 h-8 tabular" />
+              <Input aria-label="Centre radius in metres" type="number" min={0} step={1} value={centerRadiusM} onChange={num("centerRadiusM")} className="mt-1 h-9 tabular" />
             </label>
-            <label className="block text-[9px] text-muted-foreground">
+            <label className="block text-[12px] text-muted-foreground">
               Pivot radius (m)
               <Input aria-label="Pivot radius in metres" type="number" min={1} step={1}
                 value={Math.round(draft.radiusM * 10) / 10}
                 onChange={(e) => +e.target.value > 0 && setPivot({ ...draft, radiusM: +e.target.value })}
-                className="mt-1 h-8 tabular" />
+                className="mt-1 h-9 tabular" />
             </label>
           </div>
 
           <div className="mt-2.5">
-            <div className="flex items-center justify-between text-[9px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1"><RotateCw size={10} /> Rotation</span>
+            <div className="flex items-center justify-between text-[12px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><RotateCw size={12} /> Rotation</span>
               <Input aria-label="Rotation in degrees" type="number" step={1} value={rotation}
                 onChange={(e) => setSettings({ rotation: ((+e.target.value % 360) + 360) % 360 })}
-                className="h-6 w-16 text-right tabular" />
+                className="h-7 w-16 text-right tabular" />
             </div>
             <Slider value={[rotation]} min={0} max={359} step={1} className="mt-1.5"
               onValueChange={(v) => setSettings({ rotation: Array.isArray(v) ? v[0] : v })} />
           </div>
 
-          <label className="mt-2.5 flex items-center justify-between text-[9px] text-muted-foreground">
+          <label className="mt-2.5 flex items-center justify-between text-[12px] text-muted-foreground">
             Number clockwise
             <Switch checked={clockwise} onCheckedChange={(c) => setSettings({ clockwise: c })} aria-label="Number slices clockwise" />
           </label>
 
           {source ? (
-            <p className="mt-2 text-[9px] text-muted-foreground">
+            <p className="mt-2 text-[12px] text-muted-foreground">
               From saved circle <strong className="text-foreground">{source}</strong> — its blocks
               will be {source} 1, {source} 2, …
             </p>
           ) : (
-            <label className="mt-2 block text-[9px] text-muted-foreground">
+            <label className="mt-2 block text-[12px] text-muted-foreground">
               Name
               <Input aria-label="Pivot name" placeholder={nextName} value={name}
                 onChange={(e) => setName(e.target.value)}
-                className={`mt-1 h-8 ${clash ? "border-destructive" : ""}`} />
+                className={`mt-1 h-9 ${clash ? "border-destructive" : ""}`} />
             </label>
           )}
-          {clash && <p className="mt-0.5 text-[9px] text-destructive">A saved shape is already called {finalName}.</p>}
+          {clash && <p className="mt-0.5 text-[12px] text-destructive">A saved shape is already called {finalName}.</p>}
 
-          <p className="tabular mt-2 text-[8px] text-muted-foreground/60">
+          <p className="tabular mt-2 text-[11px] text-muted-foreground/60">
             {draft.radiusM.toFixed(1)} m radius · {ha.toFixed(2)} ha · {count} slice{count === 1 ? "" : "s"}
           </p>
 
           <div className="mt-2 flex gap-1.5">
             <Button size="sm" className="flex-1" disabled={clash} onClick={() => confirm("save")}
               title={`Save the circle and its blocks (${finalName} 1, ${finalName} 2, …) to the open folder`}>
-              <Check size={12} /> Save {finalName} blocks
+              <Check size={14} /> Save {finalName} blocks
             </Button>
-            <Button size="sm" variant="secondary" className="h-8" onClick={draw} title="Draw the circle again">
-              <CircleDashed size={12} />
+            <Button size="sm" variant="secondary" className="h-9" onClick={draw} title="Draw the circle again">
+              <CircleDashed size={14} />
             </Button>
-            <Button size="sm" variant="ghost" className="h-8" onClick={() => setPivot(null)} title="Discard this pivot">
-              <X size={12} />
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setPivot(null)} title="Discard this pivot">
+              <X size={14} />
             </Button>
           </div>
-          <Button size="sm" variant="secondary" className="mt-1.5 w-full text-[9px]" disabled={clash} onClick={() => confirm("segments")}
+          <Button size="sm" variant="secondary" className="mt-1.5 w-full text-[12px]" disabled={clash} onClick={() => confirm("segments")}
             title="Open the cut in Segments to adjust or rename blocks before saving">
-            <Scissors size={11} /> Fine-tune in Segments first
+            <Scissors size={13} /> Fine-tune in Segments first
           </Button>
-          {error && <p className="mt-1.5 text-[9px] text-destructive">{error}</p>}
-          <p className="mt-1.5 text-[8px] text-muted-foreground/60">
+          {error && <p className="mt-1.5 text-[12px] text-destructive">{error}</p>}
+          <p className="mt-1.5 text-[11px] text-muted-foreground/60">
             The blocks are filed into the folder open in the Browser. Ctrl+Z takes the whole pivot back.
           </p>
         </>

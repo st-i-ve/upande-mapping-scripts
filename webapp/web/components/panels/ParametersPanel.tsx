@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { GeoGeometry } from "@/lib/types";
 
 const selectCls =
-  "mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs text-foreground outline-none focus-visible:border-ring";
+  "mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-xs text-foreground outline-none focus-visible:border-ring";
 
 function parsePolygon(raw: string): GeoGeometry | null {
   let j: unknown;
@@ -31,7 +31,7 @@ function parsePolygon(raw: string): GeoGeometry | null {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block text-[9px] text-muted-foreground">
+    <label className="block text-[12px] text-muted-foreground">
       {label}
       {children}
     </label>
@@ -61,14 +61,14 @@ export function ParametersPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><SlidersHorizontal size={12} /> Parameters</span>}
+      title={<span className="inline-flex items-center gap-1.5"><SlidersHorizontal size={14} /> Parameters</span>}
     >
       {/* Working polygon source */}
       <div className="mb-3 rounded-md border border-border bg-secondary/30 p-2">
-        <div className="flex items-center justify-between text-[9px]">
+        <div className="flex items-center justify-between text-[12px]">
           <span className="text-muted-foreground">Working polygon</span>
           {hasPoly ? (
-            <span className="inline-flex items-center gap-1 text-primary"><Check size={12} /> set</span>
+            <span className="inline-flex items-center gap-1 text-primary"><Check size={14} /> set</span>
           ) : (
             <span className="text-muted-foreground/60">none</span>
           )}
@@ -77,24 +77,24 @@ export function ParametersPanel() {
           placeholder='Paste a Polygon, or click "use" on a saved shape'
           value={paste}
           onChange={(e) => setPaste(e.target.value)}
-          className="mt-1.5 h-14 font-mono text-[9px]"
+          className="mt-1.5 h-14 font-mono text-[12px]"
         />
-        {err && <p className="mt-1 text-[9px] text-destructive">{err}</p>}
+        {err && <p className="mt-1 text-[12px] text-destructive">{err}</p>}
         <div className="mt-1.5 flex gap-1.5">
           <Button size="sm" variant="secondary" className="flex-1" onClick={usePasted}>Use pasted</Button>
           {hasPoly && (
-            <Button size="sm" variant="secondary" onClick={() => setWorkingPolygon(null)} aria-label="Clear polygon"><X size={13} /></Button>
+            <Button size="sm" variant="secondary" onClick={() => setWorkingPolygon(null)} aria-label="Clear polygon"><X size={15} /></Button>
           )}
         </div>
       </div>
 
       <Field label="Plot name">
-        <Input value={p.name} onChange={(e) => setGenParams({ name: e.target.value })} placeholder="e.g. Kapkolia GH 18" className="mt-1 h-8" />
+        <Input value={p.name} onChange={(e) => setGenParams({ name: e.target.value })} placeholder="e.g. Kapkolia GH 18" className="mt-1 h-9" />
       </Field>
 
       <div className="mt-2 grid grid-cols-2 gap-2">
         <Field label="Blocks">
-          <Input type="number" min={1} max={20} value={p.n_blocks} onChange={(e) => setGenParams({ n_blocks: Math.max(1, +e.target.value || 1) })} className="mt-1 h-8 tabular" />
+          <Input type="number" min={1} max={20} value={p.n_blocks} onChange={(e) => setGenParams({ n_blocks: Math.max(1, +e.target.value || 1) })} className="mt-1 h-9 tabular" />
         </Field>
         <Field label="Cut across">
           <select className={selectCls} value={p.split_axis} onChange={(e) => setGenParams({ split_axis: e.target.value as never })}>
@@ -121,18 +121,18 @@ export function ParametersPanel() {
       </div>
 
       <Field label="Per-block bed numbering (e.g. 50, 95 or 1-50, 200-244)">
-        <Input value={p.block_end_beds_text} onChange={(e) => setGenParams({ block_end_beds_text: e.target.value })} placeholder="optional" className="mt-1 h-8 tabular" />
+        <Input value={p.block_end_beds_text} onChange={(e) => setGenParams({ block_end_beds_text: e.target.value })} placeholder="optional" className="mt-1 h-9 tabular" />
       </Field>
 
       <div className="mt-2 grid grid-cols-3 gap-2">
         <Field label="Buffer (m)">
-          <Input type="number" step={0.05} min={0} value={p.buffer_m} onChange={(e) => setGenParams({ buffer_m: +e.target.value })} className="mt-1 h-8 tabular" />
+          <Input type="number" step={0.05} min={0} value={p.buffer_m} onChange={(e) => setGenParams({ buffer_m: +e.target.value })} className="mt-1 h-9 tabular" />
         </Field>
         <Field label="Zone len (m)">
-          <Input type="number" step={0.5} min={0.5} value={p.zone_length} onChange={(e) => setGenParams({ zone_length: +e.target.value })} className="mt-1 h-8 tabular" />
+          <Input type="number" step={0.5} min={0.5} value={p.zone_length} onChange={(e) => setGenParams({ zone_length: +e.target.value })} className="mt-1 h-9 tabular" />
         </Field>
         <Field label="Bed sp. (m)">
-          <Input type="number" step={0.1} min={0.1} value={p.bed_spacing} onChange={(e) => setGenParams({ bed_spacing: +e.target.value })} className="mt-1 h-8 tabular" />
+          <Input type="number" step={0.1} min={0.1} value={p.bed_spacing} onChange={(e) => setGenParams({ bed_spacing: +e.target.value })} className="mt-1 h-9 tabular" />
         </Field>
       </div>
     </SectionCard>

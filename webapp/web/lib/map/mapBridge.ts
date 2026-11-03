@@ -16,6 +16,10 @@ export interface MapHandle {
   viewPolygon: () => GeoGeometry;
   /** Switch the base map to a downloaded tile layer, by slug. */
   showTileLayer: (slug: string) => void;
+  /** Switch the base map: "base:<name>" for a standard map, "tile:<slug>" for an imported one. */
+  setBase: (id: string) => void;
+  /** Turn a reference overlay (e.g. "Place labels") on or off. */
+  toggleOverlay: (name: string) => void;
   /** Arm a one-shot map click that returns the clicked coordinate. */
   pickPoint: (cb: (lat: number, lon: number) => void) => void;
   cancelPick: () => void;
@@ -60,6 +64,13 @@ export interface MapHandle {
 
 interface MapBridge {
   handle: MapHandle | null;
+  /** Standard base maps on offer, in menu order (imported ones come from the app store). */
+  baseNames: string[];
+  /** The base map on screen: "base:<name>" or "tile:<slug>". */
+  activeBase: string;
+  overlayNames: string[];
+  activeOverlays: string[];
+  setLayers: (p: Partial<Pick<MapBridge, "baseNames" | "activeBase" | "overlayNames" | "activeOverlays">>) => void;
   picking: boolean;
   /** True while a knife mode is armed. Mirrors handle.knifeArmed() for readers. */
   knifeArmed: boolean;
@@ -70,6 +81,11 @@ interface MapBridge {
 
 export const useMapBridge = create<MapBridge>((set) => ({
   handle: null,
+  baseNames: [],
+  activeBase: "",
+  overlayNames: [],
+  activeOverlays: [],
+  setLayers: (p) => set(p),
   picking: false,
   knifeArmed: false,
   setHandle: (handle) => set({ handle }),

@@ -19,6 +19,8 @@ import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
 import { pivotCircle, pivotSlices, pivotSpokes } from "@/lib/geometry/pivot";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import { shapeLetter } from "@/lib/shapeLabels";
+import { LayerPicker } from "./LayerPicker";
+import { Plus, Minus } from "lucide-react";
 import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
@@ -71,7 +73,11 @@ export default function LeafletMap() {
   const triadLayerRef = useRef<L.LayerGroup | null>(null);
   const terraceLayerRef = useRef<L.LayerGroup | null>(null);
   const cornerLayerRef = useRef<L.LayerGroup | null>(null);
-  const layerControlRef = useRef<L.Control.Layers | null>(null);
+  /** Standard base maps by name (Wayback joins once fetched). */
+  const basesRef = useRef<Map<string, L.Layer>>(new Map());
+  const overlaysRef = useRef<Record<string, L.Layer>>({});
+  /** Puts a base map on screen by id — "base:<name>" or "tile:<slug>". Set at bootstrap. */
+  const switchBaseRef = useRef<(id: string) => void>(() => {});
   const keyedRef = useRef<Record<string, L.Layer>>({});
   const tileLayersRef = useRef<Record<string, L.TileLayer>>({});
   const overlayRef = useRef<L.TileLayer | null>(null);
@@ -85,6 +91,7 @@ export default function LeafletMap() {
     const map = L.map(hostRef.current, {
       center: DEFAULT_CENTER,
       zoom: DEFAULT_ZOOM,
+      zoomControl: false, // ours (themed) sits in the corner instead
     });
     mapRef.current = map;
 
@@ -107,17 +114,46 @@ export default function LeafletMap() {
     }
 
     // Full base-layer set (ported from the vanilla app), default Google Satellite.
+    // The layer menu is our own (LayerPicker); this is the registry behind it.
     const { baseLayers, defaultLayer } = buildBaseLayers();
+    const bridge = useMapBridge.getState();
+    basesRef.current = new Map(Object.entries(baseLayers));
+    overlaysRef.current = buildOverlays();
+    const defaultName = Object.entries(baseLayers).find(([, l]) => l === defaultLayer)?.[0] ?? "";
     defaultLayer.addTo(map);
     baseRef.current = defaultLayer;
     defaultBaseRef.current = defaultLayer;
-    map.on("baselayerchange", (e: L.LayersControlEvent) => { baseRef.current = e.layer; });
-    const layerControl = L.control
-      .layers(baseLayers, buildOverlays(), { position: "topright", collapsed: true })
-      .addTo(map);
-    layerControlRef.current = layerControl;
-    addWayback(layerControl);
-    L.control.scale({ position: "bottomleft", imperial: false }).addTo(map);
+    const publishBases = () =>
+      useMapBridge.getState().setLayers({
+        baseNames: [...basesRef.current.keys(), ...Object.keys(keyedRef.current)],
+      });
+    bridge.setLayers({
+      activeBase: `base:${defaultName}`,
+      overlayNames: Object.keys(overlaysRef.current),
+      activeOverlays: [],
+    });
+    publishBases();
+    switchBaseRef.current = (id) => {
+      const [kind, ...rest] = id.split(":");
+      const key = rest.join(":");
+      const lyr = kind === "tile"
+        ? tileLayersRef.current[key]
+        : basesRef.current.get(key) ?? keyedRef.current[key];
+      if (!lyr) return;
+      if (baseRef.current !== lyr) {
+        if (baseRef.current) map.removeLayer(baseRef.current);
+        map.addLayer(lyr);
+        baseRef.current = lyr;
+      }
+      useMapBridge.getState().setLayers({ activeBase: id });
+    };
+    addWayback((name, lyr) => {
+      basesRef.current.set(name, lyr);
+      publishBases();
+    });
+    // Leaflet's own credit goes; the providers' attributions stay.
+    map.attributionControl.setPrefix(false);
+    L.control.scale({ position: "bottomleft", imperial: false, maxWidth: 140 }).addTo(map);
 
     shapeLayerRef.current = L.layerGroup().addTo(map);
     sliceLayerRef.current = L.layerGroup().addTo(map);
@@ -532,13 +568,16 @@ export default function LeafletMap() {
         const [w, s2, e, n] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
         return { type: "Polygon", coordinates: [[[w, s2], [e, s2], [e, n], [w, n], [w, s2]]] };
       },
-      showTileLayer: (slug) => {
-        const lyr = tileLayersRef.current[slug];
-        if (!lyr || map.hasLayer(lyr)) return;
-        // Removing the old base and adding this one moves the layer menu's radio
-        // with it, and fires baselayerchange, which keeps baseRef current.
-        if (baseRef.current) map.removeLayer(baseRef.current);
-        map.addLayer(lyr);
+      showTileLayer: (slug) => switchBaseRef.current(`tile:${slug}`),
+      setBase: (id) => switchBaseRef.current(id),
+      toggleOverlay: (name) => {
+        const lyr = overlaysRef.current[name];
+        if (!lyr) return;
+        const on = !map.hasLayer(lyr);
+        if (on) map.addLayer(lyr);
+        else map.removeLayer(lyr);
+        const cur = useMapBridge.getState().activeOverlays.filter((n) => n !== name);
+        useMapBridge.getState().setLayers({ activeOverlays: on ? [...cur, name] : cur });
       },
       pickPoint: (cb) => {
         pickCbRef.current = cb;
@@ -784,15 +823,24 @@ export default function LeafletMap() {
   // ---- key-gated provider layers (Mapbox / MapTiler / Stadia) ----
   useEffect(() => {
     const map = mapRef.current;
-    const control = layerControlRef.current;
-    if (!map || !control) return;
-    for (const lyr of Object.values(keyedRef.current)) {
-      control.removeLayer(lyr);
-      if (map.hasLayer(lyr)) map.removeLayer(lyr);
-    }
+    if (!map) return;
+    const bridge = useMapBridge.getState();
+    const shownName = Object.entries(keyedRef.current).find(([, l]) => map.hasLayer(l))?.[0];
+    for (const lyr of Object.values(keyedRef.current)) if (map.hasLayer(lyr)) map.removeLayer(lyr);
     const keyed = buildKeyedLayers(basemapKeys);
-    for (const [name, lyr] of Object.entries(keyed)) control.addBaseLayer(lyr, name);
     keyedRef.current = keyed;
+    bridge.setLayers({ baseNames: [...basesRef.current.keys(), ...Object.keys(keyed)] });
+    if (shownName) {
+      // The keyed map on screen was rebuilt (or its key removed): show it again, or fall back.
+      baseRef.current = null;
+      if (keyed[shownName]) switchBaseRef.current(`base:${shownName}`);
+      else if (defaultBaseRef.current) {
+        map.addLayer(defaultBaseRef.current);
+        baseRef.current = defaultBaseRef.current;
+        const def = [...basesRef.current].find(([, l]) => l === defaultBaseRef.current)?.[0];
+        bridge.setLayers({ activeBase: `base:${def}` });
+      }
+    }
   }, [basemapKeys]);
 
   // ---- downloaded tile layers, offered as base maps in the layer menu ----
@@ -801,11 +849,9 @@ export default function LeafletMap() {
   const tileKey = tileLayers.map((l) => `${l.slug}:${l.state}`).join("|");
   useEffect(() => {
     const map = mapRef.current;
-    const control = layerControlRef.current;
-    if (!map || !control) return;
+    if (!map) return;
     const shown = Object.entries(tileLayersRef.current).find(([, l]) => map.hasLayer(l))?.[0];
     for (const lyr of Object.values(tileLayersRef.current)) {
-      control.removeLayer(lyr);
       if (map.hasLayer(lyr)) map.removeLayer(lyr);
     }
     const next: Record<string, L.TileLayer> = {};
@@ -823,14 +869,21 @@ export default function LeafletMap() {
         bounds,
         attribution: `${t.name} (downloaded tiles)`,
       });
-      control.addBaseLayer(lyr, `⬇ ${t.name}`);
       next[t.slug] = lyr;
     }
     tileLayersRef.current = next;
-    // Keep showing the layer that was on screen, now rebuilt.
-    if (shown && next[shown]) map.addLayer(next[shown]);
-    // It was deleted while on screen: fall back to the default imagery.
-    else if (shown && defaultBaseRef.current) map.addLayer(defaultBaseRef.current);
+    if (shown) {
+      baseRef.current = null;
+      // Keep showing the layer that was on screen, now rebuilt.
+      if (next[shown]) switchBaseRef.current(`tile:${shown}`);
+      // It was deleted while on screen: fall back to the default imagery.
+      else if (defaultBaseRef.current) {
+        map.addLayer(defaultBaseRef.current);
+        baseRef.current = defaultBaseRef.current;
+        const def = [...basesRef.current].find(([, l]) => l === defaultBaseRef.current)?.[0];
+        useMapBridge.getState().setLayers({ activeBase: `base:${def}` });
+      }
+    }
   }, [tileKey]);
 
   // ---- compare overlay: one downloaded layer over the base map, faded ----
@@ -951,7 +1004,22 @@ export default function LeafletMap() {
     // portalled dialogs at z-50 still draw above it.
     <div className="relative isolate h-full w-full">
       <div ref={hostRef} className="h-full w-full" />
-      <div className="pointer-events-none absolute bottom-3 right-3 z-[500] rounded-md border border-border/60 bg-popover/85 px-2.5 py-1 text-[9px] text-muted-foreground shadow-lg backdrop-blur tabular">
+      <LayerPicker />
+      <div className="absolute left-3 top-3 z-[600] flex flex-col overflow-hidden rounded-lg border border-border bg-popover/90 shadow-lg backdrop-blur"
+        onDoubleClick={(e) => e.stopPropagation()}>
+        <button aria-label="Zoom in" title="Zoom in" disabled={zoom >= 22}
+          onClick={() => mapRef.current?.zoomIn()}
+          className="flex h-10 w-10 items-center justify-center text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-35">
+          <Plus size={17} />
+        </button>
+        <span aria-hidden className="h-px bg-border" />
+        <button aria-label="Zoom out" title="Zoom out" disabled={zoom <= 1}
+          onClick={() => mapRef.current?.zoomOut()}
+          className="flex h-10 w-10 items-center justify-center text-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-35">
+          <Minus size={17} />
+        </button>
+      </div>
+      <div className="pointer-events-none absolute bottom-3 right-3 z-[500] rounded-md border border-border/60 bg-popover/85 px-3 py-1.5 text-[12px] text-muted-foreground shadow-lg backdrop-blur tabular">
         <span className="text-primary">◍</span> {coords}
         <span className="mx-1.5 opacity-40">·</span>z{zoom}
       </div>

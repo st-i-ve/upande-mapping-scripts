@@ -169,22 +169,22 @@ export function TileDownloadPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><Download size={12} /> Tile layers</span>}
-      meta={active ? <span className="text-[8px] uppercase tracking-wider text-primary">downloading</span> : undefined}
+      title={<span className="inline-flex items-center gap-1.5"><Download size={14} /> Tile layers</span>}
+      meta={active ? <span className="text-[11px] uppercase tracking-wider text-primary">downloading</span> : undefined}
     >
-      <p className="mb-2 text-[9px] text-muted-foreground/70">
+      <p className="mb-2 text-[12px] text-muted-foreground/70">
         Paste a tile service URL with <strong>{"{z}"}</strong>, <strong>{"{x}"}</strong> and{" "}
         <strong>{"{y}"}</strong> in it. The server downloads its tiles for an area into a layer
-        of its own, listed in the map&apos;s layer menu with a ⬇.
+        of its own, listed under <strong>Imported layers</strong> in the maplisted in the map&apos;s layer menu with a ⬇.apos;s layer menu (top right), where you can rename it and zoom to it.
       </p>
 
-      <label className="block text-[9px] text-muted-foreground">
+      <label className="block text-[12px] text-muted-foreground">
         Tile URL
         <Input aria-label="Tile URL" placeholder="https://…/{z}/{x}/{y}.png" value={url}
-          onChange={(e) => onUrl(e.target.value)} className="mt-1 h-8 text-[10px]" />
+          onChange={(e) => onUrl(e.target.value)} className="mt-1 h-9 text-[13px]" />
       </label>
       {templated && (
-        <p className="mt-1 text-[8px] text-primary">
+        <p className="mt-1 text-[11px] text-primary">
           That was one tile — turned its numbers into {"{z}/{x}/{y}"} so the whole area downloads.
           {!formatOf(url) && " Set the format: the link doesn't say."}
         </p>
@@ -192,42 +192,42 @@ export function TileDownloadPanel() {
 
       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
         {url.includes("{s}") && (
-          <label className="col-span-2 block text-[9px] text-muted-foreground">
+          <label className="col-span-2 block text-[12px] text-muted-foreground">
             Subdomains for {"{s}"}
-            <Input aria-label="Subdomains" value={subdomains} onChange={(e) => setSubdomains(e.target.value)} className="mt-1 h-8" />
+            <Input aria-label="Subdomains" value={subdomains} onChange={(e) => setSubdomains(e.target.value)} className="mt-1 h-9" />
           </label>
         )}
-        <label className="block text-[9px] text-muted-foreground">
+        <label className="block text-[12px] text-muted-foreground">
           Zoom from
           <Input aria-label="Minimum zoom" type="number" min={0} max={22} value={minZoom}
-            onChange={(e) => { setMinZoom(+e.target.value); setCount(null); }} className="mt-1 h-8 tabular" />
+            onChange={(e) => { setMinZoom(+e.target.value); setCount(null); }} className="mt-1 h-9 tabular" />
         </label>
-        <label className="block text-[9px] text-muted-foreground">
+        <label className="block text-[12px] text-muted-foreground">
           to
           <Input aria-label="Maximum zoom" type="number" min={0} max={22} value={maxZoom}
-            onChange={(e) => { setMaxZoom(+e.target.value); setCount(null); }} className="mt-1 h-8 tabular" />
+            onChange={(e) => { setMaxZoom(+e.target.value); setCount(null); }} className="mt-1 h-9 tabular" />
         </label>
-        <label className="block text-[9px] text-muted-foreground">
+        <label className="block text-[12px] text-muted-foreground">
           Format
           <select aria-label="Tile format" value={format} onChange={(e) => setFormat(e.target.value)}
-            className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-xs">
+            className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-xs">
             {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
         </label>
-        <label className="block text-[9px] text-muted-foreground">
+        <label className="block text-[12px] text-muted-foreground">
           Layer name
           <Input aria-label="Layer name" placeholder="e.g. Mutara 2024" value={name}
-            onChange={(e) => setName(e.target.value)} className="mt-1 h-8" />
+            onChange={(e) => setName(e.target.value)} className="mt-1 h-9" />
         </label>
       </div>
 
-      <div className="mt-2 flex gap-1 text-[9px]">
-        <Button size="sm" variant={useShape && shape ? "default" : "secondary"} className="h-7 flex-1 text-[9px]"
+      <div className="mt-2 flex gap-1 text-[12px]">
+        <Button size="sm" variant={useShape && shape ? "default" : "secondary"} className="h-8 flex-1 text-[12px]"
           disabled={!shape} onClick={() => { setUseShape(true); setCount(null); }}
           title={shape ? undefined : "Select one saved shape to use it"}>
           {shape ? `Shape: ${shape.name}` : "Selected shape"}
         </Button>
-        <Button size="sm" variant={useShape && shape ? "secondary" : "default"} className="h-7 flex-1 text-[9px]"
+        <Button size="sm" variant={useShape && shape ? "secondary" : "default"} className="h-8 flex-1 text-[12px]"
           onClick={() => { setUseShape(false); setCount(null); }}>
           Map view
         </Button>
@@ -239,18 +239,18 @@ export function TileDownloadPanel() {
         </Button>
         <Button size="sm" className="flex-1" disabled={!ready || busy || !name.trim() || !count || tooMany} onClick={doDownload}
           title={!count ? "Count first, so you see the size" : undefined}>
-          <Download size={12} /> Download
+          <Download size={14} /> Download
         </Button>
       </div>
       {count && (
-        <p className={`tabular mt-1.5 text-[9px] ${tooMany ? "text-destructive" : "text-muted-foreground"}`}>
+        <p className={`tabular mt-1.5 text-[12px] ${tooMany ? "text-destructive" : "text-muted-foreground"}`}>
           {count.count.toLocaleString()} tiles over {areaLabel}, about {mb(count.est_bytes)}
           {tooMany && ` — over the ${count.max.toLocaleString()} limit; narrow the area or zooms`}
         </p>
       )}
 
       <div className="mt-2.5 border-t border-border pt-2">
-        <p className="mb-1.5 text-[9px] text-muted-foreground/70">
+        <p className="mb-1.5 text-[12px] text-muted-foreground/70">
           Or save a tile zip from the <strong>Tile Cache Inspector</strong> extension (the puzzle
           piece at the foot of the tool rail) as a layer of your own, to lay over the map and compare.
         </p>
@@ -258,17 +258,17 @@ export function TileDownloadPanel() {
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pickZip(f); }} />
         {!zip ? (
           <Button size="sm" variant="secondary" className="w-full" disabled={busy} onClick={() => zipInput.current?.click()}>
-            <Upload size={12} /> Choose tiles zip
+            <Upload size={14} /> Choose tiles zip
           </Button>
         ) : (
           <div className="rounded-md border border-border p-2">
-            <p className="truncate text-[9px] text-muted-foreground" title={zip.name}>
+            <p className="truncate text-[12px] text-muted-foreground" title={zip.name}>
               {zip.name} · {mb(zip.size)}
             </p>
-            <label className="mt-1.5 block text-[9px] text-muted-foreground">
+            <label className="mt-1.5 block text-[12px] text-muted-foreground">
               Save as layer named
               <Input aria-label="Uploaded layer name" placeholder="e.g. Farm 2024 imagery" value={zipName}
-                disabled={!!progress} onChange={(e) => setZipName(e.target.value)} className="mt-1 h-8" />
+                disabled={!!progress} onChange={(e) => setZipName(e.target.value)} className="mt-1 h-9" />
             </label>
             {progress ? (
               <div className="mt-2">
@@ -276,7 +276,7 @@ export function TileDownloadPanel() {
                   <span className={`block h-full bg-primary transition-all ${progress.sent >= progress.total ? "animate-pulse" : ""}`}
                     style={{ width: `${progress.total ? Math.round((progress.sent / progress.total) * 100) : 0}%` }} />
                 </span>
-                <div className="mt-1 flex items-center justify-between text-[8px] text-muted-foreground">
+                <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                   <span className="tabular">
                     {progress.sent >= progress.total
                       ? "Uploaded — unpacking tiles on the server…"
@@ -291,15 +291,15 @@ export function TileDownloadPanel() {
               <div className="mt-2 flex gap-1.5">
                 <Button size="sm" variant="secondary" className="flex-1" onClick={() => setZip(null)}>Cancel</Button>
                 <Button size="sm" className="flex-1" disabled={busy || !zipName.trim()} onClick={doUpload}>
-                  <Upload size={12} /> Save as layer
+                  <Upload size={14} /> Save as layer
                 </Button>
               </div>
             )}
           </div>
         )}
-        {uploaded && <p className="mt-1.5 text-[9px] text-primary">{uploaded}</p>}
+        {uploaded && <p className="mt-1.5 text-[12px] text-primary">{uploaded}</p>}
       </div>
-      {error && <p className="mt-1.5 text-[9px] text-destructive">{error}</p>}
+      {error && <p className="mt-1.5 text-[12px] text-destructive">{error}</p>}
 
       {layers.length > 0 && (
         <ul className="mt-2.5">
@@ -309,32 +309,32 @@ export function TileDownloadPanel() {
             return (
               <ListRow key={l.slug} actions={
                 <>
-                  <button title="Show this layer" onClick={() => handle?.showTileLayer(l.slug)}><Eye size={11} /></button>
+                  <button title="Show this layer" onClick={() => handle?.showTileLayer(l.slug)}><Eye size={13} /></button>
                   <button title={overlayTile === l.slug ? "Remove the overlay" : "Lay over the current map, to compare"}
                     className={overlayTile === l.slug ? "text-primary" : undefined}
                     onClick={() => setOverlayTile(overlayTile === l.slug ? null : l.slug)}>
-                    <Layers size={11} />
+                    <Layers size={13} />
                   </button>
-                  <button title="Zoom to its area" onClick={() => handle?.fitGeometry(l.area.geometry)}><LocateFixed size={11} /></button>
-                  <button title="Rename" onClick={() => setRenaming({ slug: l.slug, name: l.name })}><Pencil size={11} /></button>
+                  <button title="Zoom to its area" onClick={() => handle?.fitGeometry(l.area.geometry)}><LocateFixed size={13} /></button>
+                  <button title="Rename" onClick={() => setRenaming({ slug: l.slug, name: l.name })}><Pencil size={13} /></button>
                   <button title={running ? "Stop and delete" : "Delete these tiles"} className="hover:text-destructive"
                     onClick={() => window.confirm(`Delete the ${l.name} tiles from the server?`) && remove(l.slug)}>
-                    <Trash2 size={11} />
+                    <Trash2 size={13} />
                   </button>
                 </>
               }>
                 {renaming?.slug === l.slug ? (
                   <form className="flex gap-1" onSubmit={(e) => { e.preventDefault(); doRename(); }}>
-                    <Input aria-label="New layer name" autoFocus value={renaming.name} className="h-6 text-[10px]"
+                    <Input aria-label="New layer name" autoFocus value={renaming.name} className="h-7 text-[13px]"
                       onChange={(e) => setRenaming({ slug: l.slug, name: e.target.value })}
                       onKeyDown={(e) => e.key === "Escape" && setRenaming(null)} />
-                    <Button type="submit" size="sm" className="h-6 px-2 text-[9px]" disabled={busy || !renaming.name.trim()}>Save</Button>
+                    <Button type="submit" size="sm" className="h-7 px-2 text-[12px]" disabled={busy || !renaming.name.trim()}>Save</Button>
                   </form>
                 ) : (
-                  <span className="text-[10px] text-foreground">{l.name}</span>
+                  <span className="text-[13px] text-foreground">{l.name}</span>
                 )}{" "}
-                <span className="tabular text-[8px] text-muted-foreground/70">z{l.min_zoom}–{l.max_zoom}</span>
-                <span className="tabular block text-[8px] text-muted-foreground/70">
+                <span className="tabular text-[11px] text-muted-foreground/70">z{l.min_zoom}–{l.max_zoom}</span>
+                <span className="tabular block text-[11px] text-muted-foreground/70">
                   {running ? `${l.current.toLocaleString()} / ${l.total.toLocaleString()} tiles · ${pct}%`
                     : l.state === "done" ? `${l.total.toLocaleString()} tiles`
                     : l.state === "stopped" ? `stopped at ${l.current.toLocaleString()} / ${l.total.toLocaleString()}`
@@ -354,23 +354,23 @@ export function TileDownloadPanel() {
 
       {overlay && (
         <div className="mt-2 rounded-md border border-primary/30 bg-primary/5 p-2">
-          <div className="flex items-center justify-between text-[9px]">
+          <div className="flex items-center justify-between text-[12px]">
             <span className="text-foreground">
-              <Layers size={10} className="mr-1 inline" />
+              <Layers size={12} className="mr-1 inline" />
               Overlay: <strong>{overlay.name}</strong>
             </span>
             <button title="Remove the overlay" className="text-muted-foreground hover:text-destructive"
               onClick={() => setOverlayTile(null)}>
-              <X size={11} />
+              <X size={13} />
             </button>
           </div>
-          <label className="mt-1.5 flex items-center gap-2 text-[9px] text-muted-foreground">
+          <label className="mt-1.5 flex items-center gap-2 text-[12px] text-muted-foreground">
             Opacity
             <input aria-label="Overlay opacity" type="range" min={0} max={100} value={Math.round(overlayOpacity * 100)}
               onChange={(e) => setOverlayOpacity(+e.target.value / 100)} className="flex-1 accent-primary" />
             <span className="tabular w-7 text-right">{Math.round(overlayOpacity * 100)}%</span>
           </label>
-          <p className="mt-1 text-[8px] text-muted-foreground/70">
+          <p className="mt-1 text-[11px] text-muted-foreground/70">
             Pick the layer underneath from the map&apos;s layer menu (top right).
           </p>
         </div>

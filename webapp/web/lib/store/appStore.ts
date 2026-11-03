@@ -22,6 +22,8 @@ import {
 
 /** The right-hand sidebar's tabs, one per flow. */
 export type SideTab = "browser" | "tool" | "generate" | "export";
+/** The unit generators: beds & zones, triads, hexagons, trees. */
+export type UnitKind = "zones" | "triads" | "hexagons" | "trees";
 
 /**
  * A pivot being laid out: the circle drawn on the map plus the slicing settings,
@@ -182,6 +184,9 @@ export interface AppState {
   // ---- sidebar tab ----
   sideTab: SideTab;
   setSideTab: (t: SideTab) => void;
+  /** Which unit-generator groups are expanded on the Units tab. */
+  openUnits: UnitKind[];
+  setUnitOpen: (u: UnitKind, open: boolean) => void;
 
   // ---- folders inside the project (paths, "Greenhouses/GH-A"; empty ones included) ----
   folders: string[];
@@ -337,6 +342,9 @@ export const useAppStore = create<AppState>()(
 
       sideTab: "browser",
       setSideTab: (sideTab) => set({ sideTab }),
+      openUnits: ["zones"],
+      setUnitOpen: (u, open) =>
+        set((s) => ({ openUnits: open ? [...s.openUnits.filter((x) => x !== u), u] : s.openUnits.filter((x) => x !== u) })),
 
       folders: [],
       activeFolder: "",
@@ -700,6 +708,7 @@ export const useAppStore = create<AppState>()(
         activeProject: s.activeProject,
         folders: s.folders,
         sideTab: s.sideTab,
+        openUnits: s.openUnits,
       }),
     },
   ),

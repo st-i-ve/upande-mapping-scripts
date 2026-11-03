@@ -247,7 +247,7 @@ export function pickWaybackRelease(
 }
 
 /** Esri Wayback — freshest imagery release, fetched async and added as a base layer. */
-export function addWayback(control: L.Control.Layers) {
+export function addWayback(add: (name: string, layer: L.Layer) => void) {
   fetch("https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json")
     .then((r) => r.json())
     .then((cfg: Record<string, WaybackEntry>) => {
@@ -258,7 +258,7 @@ export function addWayback(control: L.Control.Layers) {
         maxNativeZoom: ESRI_IMAGERY_NATIVE_ZOOM,
         attribution: release.label,
       });
-      control.addBaseLayer(wb, release.label);
+      add(release.label, wb);
     })
     .catch(() => {
       /* offline / blocked — skip the wayback layer */

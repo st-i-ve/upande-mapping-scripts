@@ -1,8 +1,8 @@
 "use client";
 
 import { motion } from "motion/react";
-import type { ReactNode } from "react";
-import { FolderTree, Wrench, Play, Download, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { FolderTree, Wrench, Boxes, Download, type LucideIcon } from "lucide-react";
 import { useAppStore, type SideTab } from "@/lib/store/appStore";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { ProjectBrowser } from "@/components/panels/ProjectBrowser";
@@ -10,22 +10,18 @@ import { ReferencePointsPanel } from "@/components/panels/ReferencePointsPanel";
 import { SegmentsPanel } from "@/components/panels/SegmentsPanel";
 import { ShapeBuilderPanel } from "@/components/panels/ShapeBuilderPanel";
 import { ImportGeoJsonPanel } from "@/components/panels/ImportGeoJsonPanel";
-import { ParametersPanel } from "@/components/panels/ParametersPanel";
-import { TerracePanel } from "@/components/panels/TerracePanel";
-import { GeneratePanel } from "@/components/panels/GeneratePanel";
-import { TreeGridPanel } from "@/components/panels/TreeGridPanel";
-import { TriadPanel } from "@/components/panels/TriadPanel";
 import { KnifePanel } from "@/components/panels/KnifePanel";
 import { PivotPanel } from "@/components/panels/PivotPanel";
 import { TileDownloadPanel } from "@/components/panels/TileDownloadPanel";
 import { OutputsPanel } from "@/components/panels/OutputsPanel";
 import { BasemapKeysPanel } from "@/components/panels/BasemapKeysPanel";
+import { UnitGenerators } from "./UnitGenerators";
 
 /** One tab per flow, in the order work moves through them. */
 export const TABS: { id: SideTab; label: string; hint: string; icon: LucideIcon }[] = [
   { id: "browser", label: "Browser", hint: "Projects, folders, shapes and reference points", icon: FolderTree },
   { id: "tool", label: "Tool", hint: "Settings for the tool picked on the left: save a drawing, knife, segments, pivot, import", icon: Wrench },
-  { id: "generate", label: "Generate", hint: "Beds & zones, terraces, tree grid, triads", icon: Play },
+  { id: "generate", label: "Units", hint: "Unit generators: beds & zones, triads, hexagons, trees", icon: Boxes },
   { id: "export", label: "Export", hint: "Saved outputs, tile layers, basemap keys", icon: Download },
 ];
 
@@ -42,13 +38,7 @@ const PANELS: Record<SideTab, [string, ReactNode][]> = {
     ["sec-pivot", <PivotPanel key="pivot" />],
     ["sec-import", <ImportGeoJsonPanel key="import" />],
   ],
-  generate: [
-    ["sec-params", <ParametersPanel key="params" />],
-    ["sec-terrace", <TerracePanel key="terrace" />],
-    ["sec-generate", <GeneratePanel key="gen" />],
-    ["sec-grid", <TreeGridPanel key="grid" />],
-    ["sec-triad", <TriadPanel key="triad" />],
-  ],
+  generate: [["sec-units", <UnitGenerators key="units" />]],
   export: [
     ["sec-outputs", <OutputsPanel key="out" />],
     ["sec-tiles", <TileDownloadPanel key="tiles" />],
@@ -88,9 +78,9 @@ export function SideTabs() {
         const on = tab === t.id;
         return (
           <button key={t.id} role="tab" aria-selected={on} title={t.hint} onClick={() => setTab(t.id)}
-            className={`relative flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[9px] font-medium transition-colors ${
+            className={`relative flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[12px] font-medium transition-colors ${
               on ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-            <t.icon size={14} />
+            <t.icon size={16} />
             {t.label}
             {pending[t.id] && !on && <span className="absolute right-2 top-1 h-1.5 w-1.5 rounded-full bg-primary" />}
           </button>
@@ -104,8 +94,13 @@ export function SideTabs() {
 export function Panels2D() {
   const hydrated = useHydrated();
   const tab = useAppStore((s) => (hydrated ? s.sideTab : "browser"));
+  const ref = useRef<HTMLDivElement>(null);
+  // A new tab starts at its top, not wherever the last one was scrolled to.
+  useEffect(() => {
+    ref.current?.closest<HTMLElement>("[data-sidebar='content']")?.scrollTo({ top: 0 });
+  }, [tab]);
   return (
-    <div key={tab} role="tabpanel" className="space-y-3">
+    <div key={tab} ref={ref} role="tabpanel" className="space-y-3">
       {PANELS[tab].map(([id, node], i) => (
         <Reveal key={id} i={i} id={id}>
           {node}

@@ -9,7 +9,7 @@ export function ViewSwitcher() {
   const setView = useAppStore((s) => s.setView);
 
   return (
-    <div className="flex rounded-full bg-muted p-1 text-[9px] font-medium">
+    <div className="flex rounded-full bg-muted p-1 text-[12px] font-medium">
       {([["2d", "2D", MapIcon], ["3d", "3D", Box]] as const).map(([v, label, Icon]) => (
         <button
           key={v}
@@ -20,7 +20,7 @@ export function ViewSwitcher() {
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Icon size={13} /> {label}
+          <Icon size={15} /> {label}
         </button>
       ))}
     </div>

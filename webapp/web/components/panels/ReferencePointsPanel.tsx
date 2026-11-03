@@ -56,7 +56,7 @@ export function ReferencePointsPanel() {
 
   return (
     <SectionCard
-      title={<span className="inline-flex items-center gap-1.5"><MapPin size={12} /> Reference points</span>}
+      title={<span className="inline-flex items-center gap-1.5"><MapPin size={14} /> Reference points</span>}
       meta={
         <Switch
           checked={refVisible}
@@ -71,11 +71,11 @@ export function ReferencePointsPanel() {
           value={color}
           onChange={(e) => setColor(e.target.value)}
           aria-label="Point color"
-          className="h-8 w-8 cursor-pointer rounded-full border border-border bg-transparent p-0.5"
+          className="h-9 w-8 cursor-pointer rounded-full border border-border bg-transparent p-0.5"
         />
-        <Input placeholder="A" value={name} onChange={(e) => setName(e.target.value)} className="h-8 tabular" />
-        <Input placeholder="lat" value={lat} onChange={(e) => setLat(e.target.value)} className="h-8 tabular" inputMode="decimal" />
-        <Input placeholder="lon" value={lon} onChange={(e) => setLon(e.target.value)} className="h-8 tabular" inputMode="decimal" />
+        <Input placeholder="A" value={name} onChange={(e) => setName(e.target.value)} className="h-9 tabular" />
+        <Input placeholder="lat" value={lat} onChange={(e) => setLat(e.target.value)} className="h-9 tabular" inputMode="decimal" />
+        <Input placeholder="lon" value={lon} onChange={(e) => setLon(e.target.value)} className="h-9 tabular" inputMode="decimal" />
       </div>
       <div className="mt-1.5 flex gap-1.5">
         <Button className="flex-1" size="sm" onClick={() => add(parseFloat(lat), parseFloat(lon))}>
@@ -90,12 +90,12 @@ export function ReferencePointsPanel() {
             picking ? handle?.cancelPick() : handle?.pickPoint((la, lo) => add(la, lo))
           }
         >
-          <Crosshair size={13} /> {picking ? "Click map…" : "Pick on map"}
+          <Crosshair size={15} /> {picking ? "Click map…" : "Pick on map"}
         </Button>
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <span className="text-[8px] uppercase tracking-wider text-muted-foreground">Opacity</span>
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Opacity</span>
         <Slider
           value={[Math.round(refOpacity * 100)]}
           max={100}
@@ -103,7 +103,7 @@ export function ReferencePointsPanel() {
           onValueChange={(v) => setRefOpacity((Array.isArray(v) ? v[0] : v) / 100)}
           className="flex-1"
         />
-        <span className="tabular w-8 text-right text-[8px] text-muted-foreground">
+        <span className="tabular w-8 text-right text-[11px] text-muted-foreground">
           {Math.round(refOpacity * 100)}%
         </span>
       </div>
@@ -136,7 +136,7 @@ export function ReferencePointsPanel() {
         </ul>
       )}
       {hydrated && points.length === 0 && (
-        <p className="mt-2 text-[9px] text-muted-foreground/70">No points yet — add one or pick on the map.</p>
+        <p className="mt-2 text-[12px] text-muted-foreground/70">No points yet — add one or pick on the map.</p>
       )}
     </SectionCard>
   );
