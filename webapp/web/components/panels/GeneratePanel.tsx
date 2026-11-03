@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { SectionCard } from "@/components/console/SectionCard";
+import { fileUnit, sourceNameOf } from "@/lib/units";
 import { AnimatedNumber } from "@/components/console/AnimatedNumber";
 import { StatusBadge, type Status } from "@/components/console/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,8 @@ export function GeneratePanel() {
       }
       const { result, filename } = await api.generate(body, controller.signal);
       setGenResult(result, filename);
+      // File it in the project's Zones folder (the server has already saved it).
+      fileUnit("zones", filename, result, sourceNameOf(workingPolygon) ?? (genParams.name.trim() || undefined));
       fitGeometry?.(workingPolygon);
       const s = summarize(result);
       setStatus("ok");

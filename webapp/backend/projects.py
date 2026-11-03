@@ -14,7 +14,7 @@ import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -39,6 +39,18 @@ class Shape(BaseModel):
 
 
 MAX_FOLDERS = 2000
+MAX_UNITS = 2000
+
+
+class Unit(BaseModel):
+    """A generated result filed in the project: a pointer to a saved output."""
+    filename: str = Field(..., max_length=200)
+    name: str = Field(..., max_length=200)
+    kind: Literal["zones", "triads", "hexagons", "trees"]
+    folder: Optional[str] = Field(None, max_length=400)
+    count: int = 0
+    source: Optional[str] = Field(None, max_length=200)
+    created: str = Field("", max_length=40)
 
 
 
@@ -46,12 +58,15 @@ class CreateRequest(BaseModel):
     name: str = Field(..., max_length=80)
     shapes: list[Shape] = Field(default_factory=list, max_length=MAX_SHAPES)
     folders: Optional[list[str]] = Field(None, max_length=MAX_FOLDERS)
+    units: Optional[list[Unit]] = Field(None, max_length=MAX_UNITS)
 
 
 class SaveRequest(BaseModel):
     shapes: list[Shape] = Field(..., max_length=MAX_SHAPES)
     # Every folder path, including empty ones. Omit to leave the folders as they are.
     folders: Optional[list[str]] = Field(None, max_length=MAX_FOLDERS)
+    # Generated results filed in the project. Omit to leave them as they are.
+    units: Optional[list[Unit]] = Field(None, max_length=MAX_UNITS)
     # The version this save was made from; omit (or force) to overwrite regardless.
     base_version: Optional[int] = None
     force: bool = False
@@ -142,6 +157,7 @@ def create_project(req: CreateRequest) -> dict:
         "name": name, "slug": slug, "created": now, "updated": now, "version": 1,
         "shapes": [s.model_dump() for s in req.shapes],
         "folders": _clean_folders(req.folders),
+        "units": [u.model_dump() for u in req.units or []],
     }
     _write(project)
     return project
@@ -151,6 +167,7 @@ def create_project(req: CreateRequest) -> dict:
 def get_project(slug: str) -> dict:
     project = _read(slug)
     project.setdefault("folders", [])  # projects saved before folders existed
+    project.setdefault("units", [])
     return project
 
 
@@ -162,6 +179,8 @@ def save_shapes(slug: str, req: SaveRequest) -> dict:
     project["shapes"] = [s.model_dump() for s in req.shapes]
     if req.folders is not None:
         project["folders"] = _clean_folders(req.folders)
+    if req.units is not None:
+        project["units"] = [u.model_dump() for u in req.units]
     project["version"] += 1
     project["updated"] = _now()
     _write(project)

@@ -796,6 +796,9 @@ export default function LeafletMap() {
     L.geoJSON(genResult as never, {
       // Thousands of beds: canvas draws them far faster than one SVG path each.
       renderer: genRenderer,
+      // Points (tree grids) as small canvas dots — thousands of markers would crawl.
+      pointToLayer: (_f: unknown, latlng: L.LatLng) =>
+        L.circleMarker(latlng, { renderer: genRenderer, radius: 2.5, color: "#b8b8b8", weight: 1, fillOpacity: 0.9 }),
       style: (feature) => {
         const kind = (feature?.properties as { kind?: string })?.kind;
         if (kind === "zone") return { color: "#e5e5e5", weight: 1.5, opacity: 0.95 };

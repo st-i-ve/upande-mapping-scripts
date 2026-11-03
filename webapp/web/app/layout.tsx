@@ -17,7 +17,7 @@ const poppins = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Upande · Bed & Zone Mapper",
+  title: "Upande GIS",
   description: "Precision bed, zone, and tree-grid mapping for Upande greenhouses.",
 };
 

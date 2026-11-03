@@ -26,16 +26,15 @@ describe("folder helpers", () => {
 });
 
 describe("folders in the store", () => {
-  beforeEach(() => useAppStore.setState({ savedShapes: [], folders: [], activeFolder: "", selectedShapes: [], slice: null }));
+  beforeEach(() => useAppStore.setState({ savedShapes: [], folders: [], units: [], activeFolder: "", selectedShapes: [], slice: null }));
 
-  it("new shapes go into the open folder; replacing a shape keeps its folder", () => {
+  it("files new shapes by type; replacing a shape keeps its folder", () => {
     const st = useAppStore.getState();
-    const f = st.createFolder("", "Pivots");
-    st.setActiveFolder(f);
-    st.addSavedShape("P1", g);
-    st.setActiveFolder("");
+    st.addSavedShape("P1", g); // a point: not a circle, so a polygon-type shape
+    expect(useAppStore.getState().savedShapes[0].folder).toBe("Polygons");
+    useAppStore.setState({ savedShapes: [{ ...useAppStore.getState().savedShapes[0], folder: "Mine" }] });
     st.addSavedShape("P1", g); // replace
-    expect(useAppStore.getState().savedShapes[0].folder).toBe("Pivots");
+    expect(useAppStore.getState().savedShapes[0].folder).toBe("Mine");
   });
 
   it("never makes two folders with the same name side by side", () => {

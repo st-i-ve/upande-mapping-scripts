@@ -13,7 +13,7 @@ export default function ThreeDPage() {
     <>
       <header className="flex items-center gap-3 border-b border-border bg-background/80 px-4 py-2 backdrop-blur">
         <Link href="/" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-          <ArrowLeft size={14} /> Mapper
+          <ArrowLeft size={14} /> Upande GIS
         </Link>
         <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest text-primary">
           <Box size={13} /> 3D VIEW

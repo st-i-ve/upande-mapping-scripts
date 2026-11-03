@@ -6,6 +6,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  UnitItem,
+  UnitKind,
   BasemapKeys,
   FeatureCollection,
   GeoGeometry,
@@ -19,11 +21,12 @@ import {
   allFolders, cleanFolderName, deleteFolder as dropFolder, folderOf, freeFolderName, join,
   moveFolder as relocateFolder, parentOf, within,
 } from "./folders";
+import { arrangeByType as arrange, defaultFolder, KIND_FOLDER, shapeKind } from "./kinds";
 
 /** The right-hand sidebar's tabs, one per flow. */
 export type SideTab = "browser" | "tool" | "generate" | "export";
 /** The unit generators: beds & zones, triads, hexagons, trees. */
-export type UnitKind = "zones" | "triads" | "hexagons" | "trees";
+export type { UnitKind } from "@/lib/types";
 
 /**
  * A pivot being laid out: the circle drawn on the map plus the slicing settings,
@@ -205,12 +208,22 @@ export interface AppState {
   moveShapesToFolder: (names: string[], folder: string) => void;
   /** Show or hide every shape in a folder and its sub-folders. */
   setFolderVisible: (path: string, visible: boolean) => void;
+  /** File everything not yet in a type folder (Pivots, Polygons, …) into one. */
+  arrangeByType: () => void;
+
+  // ---- generated results filed in the project (pointers to saved outputs) ----
+  units: UnitItem[];
+  /** File a generated result; replaces one with the same filename. */
+  addUnit: (u: Omit<UnitItem, "folder" | "created"> & Partial<Pick<UnitItem, "folder" | "created">>) => void;
+  removeUnit: (filename: string) => void;
+  renameUnit: (filename: string, name: string) => void;
+  moveUnitsToFolder: (filenames: string[], folder: string) => void;
 
   // ---- project: the server-side home of savedShapes (persisted, so a reload reopens it) ----
   activeProject: { slug: string; name: string; version: number } | null;
   setActiveProject: (p: { slug: string; name: string; version: number } | null) => void;
   /** Swap in another set of shapes wholesale (opening a project); drops selection and any slicing. */
-  replaceSavedShapes: (shapes: SavedShape[], folders?: string[]) => void;
+  replaceSavedShapes: (shapes: SavedShape[], folders?: string[], units?: UnitItem[]) => void;
 
   // ---- downloaded tile layers (server-side; polled, not persisted) ----
   tileLayers: TileLayerInfo[];
@@ -307,7 +320,10 @@ export interface AppState {
 /** A folder move/rename applied to the store's slices. */
 const relocated = (s: AppState, from: string, to: string) => {
   const r = relocateFolder(s.folders, s.savedShapes, from, to);
-  return { folders: r.folders, savedShapes: r.shapes };
+  const units = s.units.map((u) =>
+    u.folder && within(u.folder, from) ? { ...u, folder: to + u.folder.slice(from.length) } : u,
+  );
+  return { folders: r.folders, savedShapes: r.shapes, units };
 };
 
 const PALETTE = ["#e5e5e5", "#9aa0a6", "#b8b8b8", "#d4d4d4", "#f5f5f5", "#8a8a8a"];
@@ -352,7 +368,7 @@ export const useAppStore = create<AppState>()(
       activeFolder: "",
       setActiveFolder: (activeFolder) => set({ activeFolder }),
       createFolder: (parent, name) => {
-        const all = allFolders(get().folders, get().savedShapes);
+        const all = allFolders(get().folders, [...get().savedShapes, ...get().units]);
         const wanted = (name && cleanFolderName(name)) || "New folder";
         const path = join(parent, freeFolderName(all, parent, wanted));
         set((s) => ({ folders: [...s.folders, path] }));
@@ -363,7 +379,7 @@ export const useAppStore = create<AppState>()(
         if (!clean) return null;
         const to = join(parentOf(path), clean);
         if (to === path) return path;
-        const all = allFolders(get().folders, get().savedShapes);
+        const all = allFolders(get().folders, [...get().savedShapes, ...get().units]);
         if (all.some((f) => f.toLowerCase() === to.toLowerCase())) return null;
         set((s) => ({
           ...relocated(s, path, to),
@@ -374,7 +390,7 @@ export const useAppStore = create<AppState>()(
       moveFolder: (path, parent) => {
         if (within(parent, path) && parent !== "") return false; // into itself
         if (parentOf(path) === parent) return true;
-        const all = allFolders(get().folders, get().savedShapes);
+        const all = allFolders(get().folders, [...get().savedShapes, ...get().units]);
         const name = freeFolderName(all, parent, path.slice(path.lastIndexOf("/") + 1));
         const to = join(parent, name);
         set((s) => ({
@@ -384,11 +400,12 @@ export const useAppStore = create<AppState>()(
         return true;
       },
       deleteFolder: (path) => {
-        const r = dropFolder(get().folders, get().savedShapes, path);
+        const r = dropFolder(get().folders, [...get().savedShapes], path);
         const gone = new Set(r.removed);
         set((s) => ({
-          folders: r.folders,
+          folders: allFolders(r.folders, s.units.filter((u) => !(u.folder && within(u.folder, path)))).filter((f) => !within(f, path)),
           savedShapes: r.shapes,
+          units: s.units.filter((u) => !(u.folder && within(u.folder, path))),
           selectedShapes: s.selectedShapes.filter((n) => !gone.has(n)),
           activeFolder: s.activeFolder && within(s.activeFolder, path) ? parentOf(path) : s.activeFolder,
         }));
@@ -405,6 +422,30 @@ export const useAppStore = create<AppState>()(
             ),
           };
         }),
+      arrangeByType: () =>
+        set((s) => {
+          const r = arrange(s.savedShapes, s.folders);
+          return { savedShapes: r.shapes, folders: r.folders };
+        }),
+
+      units: [],
+      addUnit: (u) =>
+        set((s) => {
+          const entry: UnitItem = { folder: KIND_FOLDER[u.kind], created: new Date().toISOString(), ...u };
+          return { units: [...s.units.filter((x) => x.filename !== u.filename), entry] };
+        }),
+      removeUnit: (filename) => set((s) => ({ units: s.units.filter((u) => u.filename !== filename) })),
+      renameUnit: (filename, name) =>
+        set((s) => ({ units: s.units.map((u) => (u.filename === filename && name.trim() ? { ...u, name: name.trim() } : u)) })),
+      moveUnitsToFolder: (filenames, folder) =>
+        set((s) => {
+          const move = new Set(filenames);
+          return {
+            folders: folder && !s.folders.includes(folder) ? [...s.folders, folder] : s.folders,
+            units: s.units.map((u) => (move.has(u.filename) ? { ...u, folder: folder || undefined } : u)),
+          };
+        }),
+
       setFolderVisible: (path, visible) =>
         set((s) => ({
           savedShapes: s.savedShapes.map((x) =>
@@ -414,8 +455,8 @@ export const useAppStore = create<AppState>()(
 
       activeProject: null,
       setActiveProject: (activeProject) => set({ activeProject }),
-      replaceSavedShapes: (savedShapes, folders = []) =>
-        set({ savedShapes, folders, activeFolder: "", selectedShapes: [], slice: null, pivot: null }),
+      replaceSavedShapes: (savedShapes, folders = [], units = []) =>
+        set({ savedShapes, folders, units, activeFolder: "", selectedShapes: [], slice: null, pivot: null }),
 
       tileLayers: [],
       setTileLayers: (tileLayers) => set({ tileLayers }),
@@ -654,8 +695,11 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           const finalColor = color ?? PALETTE[s.savedShapes.length % PALETTE.length];
           const existing = s.savedShapes.findIndex((x) => x.name === name);
-          // A replaced shape stays where it was filed; a new one goes into the open folder.
-          const folder = existing >= 0 ? s.savedShapes[existing].folder : s.activeFolder || undefined;
+          // A replaced shape stays where it was filed; a new one is filed by type —
+          // a pivot in Pivots/<name>, anything else in Polygons (or the open folder there).
+          const folder = existing >= 0
+            ? s.savedShapes[existing].folder
+            : defaultFolder(name, shapeKind({ geometry }), s.activeFolder);
           const entry: SavedShape = { name, geometry, visible: true, color: finalColor, ...(folder ? { folder } : {}) };
           const next = [...s.savedShapes];
           if (existing >= 0) next[existing] = entry;
@@ -710,6 +754,7 @@ export const useAppStore = create<AppState>()(
         pivotSettings: s.pivotSettings,
         activeProject: s.activeProject,
         folders: s.folders,
+        units: s.units,
         sideTab: s.sideTab,
         openUnits: s.openUnits,
         overlayTiles: s.overlayTiles,

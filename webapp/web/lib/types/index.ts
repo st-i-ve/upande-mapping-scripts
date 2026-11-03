@@ -38,6 +38,27 @@ export interface SavedShape {
   folder?: string;
 }
 
+/** What a generator makes. */
+export type UnitKind = "zones" | "triads" | "hexagons" | "trees";
+
+/**
+ * A generated result filed in the project: the units themselves live in a saved
+ * output file on the server; this is the project's pointer to it.
+ */
+export interface UnitItem {
+  /** The saved output's filename — also its id. */
+  filename: string;
+  name: string;
+  kind: UnitKind;
+  /** Folder it's filed in (defaults to the kind's folder, e.g. "Triads"). */
+  folder?: string;
+  /** How many units (beds, triads, hexagons, trees) it holds. */
+  count: number;
+  /** The shape it was generated from, if any. */
+  source?: string;
+  created: string;
+}
+
 /** Basemap provider keys (localStorage only). */
 export interface BasemapKeys {
   mapbox?: string;

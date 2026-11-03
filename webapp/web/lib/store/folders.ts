@@ -25,7 +25,7 @@ export function cleanFolderName(name: string): string | null {
 }
 
 /** Every folder that exists — listed ones, ones shapes sit in, and all their parents — sorted. */
-export function allFolders(folders: string[], shapes: SavedShape[]): string[] {
+export function allFolders(folders: string[], shapes: { folder?: string }[]): string[] {
   const out = new Set<string>();
   const add = (p: string) => {
     for (let q = p; q; q = parentOf(q)) out.add(q);

@@ -5,6 +5,7 @@ import { Grid3x3 } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { SectionCard } from "@/components/console/SectionCard";
+import { saveUnit, sourceNameOf } from "@/lib/units";
 import { AnimatedNumber } from "@/components/console/AnimatedNumber";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,6 +127,10 @@ export function TreeGridPanel() {
         <Button size="sm" className="flex-1" onClick={generate}>Generate grid</Button>
         {count > 0 && (
           <>
+            <Button size="sm" variant="secondary" title="Save to the project's Trees folder"
+              onClick={() => void saveUnit("trees", treeGridToGeoJSON(treeGrid) as never, sourceNameOf(source)).then(() => setErr(""), (e) => setErr((e as Error).message))}>
+              Save
+            </Button>
             <Button size="sm" variant="secondary" onClick={download}>GeoJSON</Button>
             <Button size="sm" variant="secondary" onClick={() => setTreeGrid([])}>Clear</Button>
           </>

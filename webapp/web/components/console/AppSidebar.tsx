@@ -22,7 +22,7 @@ export function AppSidebar() {
               <img src={logo} alt="Upande" className="h-8 w-8 shrink-0 object-contain" />
               <div className="leading-[1.05]">
                 <div className="text-xl font-bold tracking-[0.16em]">UPANDE</div>
-                <div className="text-xl font-semibold tracking-[0.16em] text-muted-foreground">MAPPER</div>
+                <div className="text-xl font-semibold tracking-[0.16em] text-muted-foreground">GIS</div>
               </div>
             </div>
             <ThemeToggle />

@@ -5,12 +5,16 @@ import {
   FolderOpen, FolderClosed, FolderPlus, Folder, ChevronRight, ChevronDown, Pencil, Trash2, X, Check,
   Cloud, CloudOff, RefreshCw, Eye, EyeOff, LocateFixed, Target, Scissors, Search, PieChart,
   Triangle, FolderInput, Plus, ChevronsDownUp, Download, Layers, Files,
+  CircleDot, Pentagon, Rows3, Hexagon, Trees, ListTree, type LucideIcon,
 } from "lucide-react";
+import { KIND_FOLDER, KIND_ORDER, kindOfFolder, type FolderKind } from "@/lib/store/kinds";
+import { downloadGeoJson } from "@/lib/exportGeo";
+import type { UnitItem } from "@/lib/types";
 import { exportShapesEach, exportShapesTogether } from "@/lib/exportGeo";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
-import { api, type ProjectSummary } from "@/lib/api/client";
+import { api, ApiError, type ProjectSummary } from "@/lib/api/client";
 import {
   adoptProject, closeProject, flushProject, openProject, saveNow, useProjectSync,
 } from "@/lib/project/sync";
@@ -34,6 +38,13 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const NO_SHAPES: SavedShape[] = [];
 const DRAG_SHAPES = "application/x-upande-shapes";
 const DRAG_FOLDER = "application/x-upande-folder";
+const DRAG_UNITS = "application/x-upande-units";
+
+/** The icon a type folder (and what's in it) is shown with. */
+const KIND_ICON: Record<FolderKind, LucideIcon> = {
+  pivots: CircleDot, polygons: Pentagon, zones: Rows3, triads: Triangle, hexagons: Hexagon, trees: Trees,
+};
+const NO_UNITS: UnitItem[] = [];
 const ICON = "text-muted-foreground transition-colors hover:text-primary";
 
 /* ------------------------------------------------------------------ projects */
@@ -255,17 +266,22 @@ function ProjectBar() {
 
 /* ------------------------------------------------------------------ tree */
 
-function dragData(e: DragEvent): { shapes?: string[]; folder?: string } {
+function dragData(e: DragEvent): { shapes?: string[]; folder?: string; units?: string[] } {
   const shapes = e.dataTransfer.getData(DRAG_SHAPES);
   const folder = e.dataTransfer.getData(DRAG_FOLDER);
+  const units = e.dataTransfer.getData(DRAG_UNITS);
   try {
-    return { shapes: shapes ? (JSON.parse(shapes) as string[]) : undefined, folder: folder || undefined };
+    return {
+      shapes: shapes ? (JSON.parse(shapes) as string[]) : undefined,
+      folder: folder || undefined,
+      units: units ? (JSON.parse(units) as string[]) : undefined,
+    };
   } catch {
     return {};
   }
 }
 const accepts = (e: DragEvent) =>
-  e.dataTransfer.types.includes(DRAG_SHAPES) || e.dataTransfer.types.includes(DRAG_FOLDER);
+  [DRAG_SHAPES, DRAG_FOLDER, DRAG_UNITS].some((t) => e.dataTransfer.types.includes(t));
 
 /** Drop shapes or a folder onto `target`. */
 function useDropInto(target: string) {
@@ -278,12 +294,13 @@ function useDropInto(target: string) {
       onDrop: (e: DragEvent) => {
         setOver(false);
         const d = dragData(e);
-        if (!d.shapes && !d.folder) return;
+        if (!d.shapes && !d.folder && !d.units) return;
         e.preventDefault();
         e.stopPropagation();
         const st = useAppStore.getState();
         if (d.shapes) st.moveShapesToFolder(d.shapes, target);
         if (d.folder) st.moveFolder(d.folder, target);
+        if (d.units) st.moveUnitsToFolder(d.units, target);
       },
     },
   };
@@ -313,6 +330,8 @@ interface TreeCtx {
   byFolder: Map<string, SavedShape[]>;
   /** Index in savedShapes, for the letter the map draws. */
   index: Map<string, number>;
+  /** Generated results shown (search applied), by folder. */
+  unitsByFolder: Map<string, UnitItem[]>;
   /** Folders with a visible shape somewhere under them (search applied). */
   nonEmpty: Set<string>;
   searching: boolean;
@@ -391,9 +410,78 @@ function ShapeRow({ s, ctx, depth }: { s: SavedShape; ctx: TreeCtx; depth: numbe
   );
 }
 
+/** A generated result filed in the project: show it, zoom to it, export it. */
+function UnitRow({ u, depth }: { u: UnitItem; depth: number }) {
+  const shown = useAppStore((s) => s.genFilename === u.filename);
+  const handle = useMapBridge((s) => s.handle);
+  const [renaming, setRenaming] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const st = useAppStore.getState;
+  const Icon = KIND_ICON[u.kind];
+
+  const load = async () => {
+    try {
+      setErr(null);
+      return await api.getOutput(u.filename);
+    } catch (e) {
+      setErr(e instanceof ApiError && e.status === 404 ? "Its saved output is gone from the server." : errText(e));
+      return null;
+    }
+  };
+  const show = async () => {
+    if (shown) return st().setGenResult(null, null);
+    const fc = await load();
+    if (!fc) return;
+    st().setGenResult(fc, u.filename);
+    handle?.fitGeometry(fc as never);
+  };
+  const zoom = async () => { const fc = await load(); if (fc) handle?.fitGeometry(fc as never); };
+  const exportIt = async () => { const fc = await load(); if (fc) downloadGeoJson(fc, u.name); };
+  const remove = () => {
+    if (!window.confirm(`Take ${u.name} out of the project? (Its saved output stays under Saved outputs; Ctrl+Z puts it back.)`)) return;
+    if (shown) st().setGenResult(null, null);
+    st().removeUnit(u.filename);
+  };
+
+  return (
+    <li draggable={!renaming}
+      onDragStart={(e) => { e.dataTransfer.setData(DRAG_UNITS, JSON.stringify([u.filename])); e.dataTransfer.effectAllowed = "move"; }}
+      className={`group/row rounded py-[3px] pr-1 text-[10px] ${shown ? "bg-primary/10" : "hover:bg-muted/50"}`}
+      style={{ paddingLeft: 6 + depth * 12 }}>
+      <div className="flex items-center gap-1.5">
+        <Icon size={11} className={`shrink-0 ${shown ? "text-primary" : "text-muted-foreground"}`} />
+        {renaming ? (
+          <InlineName initial={u.name} onCancel={() => setRenaming(false)}
+            onSave={(v) => { st().renameUnit(u.filename, v); setRenaming(false); }} />
+        ) : (
+          <>
+            <button className={`min-w-0 flex-1 truncate text-left ${shown ? "font-medium text-primary" : "text-foreground"}`}
+              onClick={() => void show()} onDoubleClick={() => setRenaming(true)}
+              title={`${u.name} — ${u.count.toLocaleString()} ${u.kind}. Click to show on the map, double-click to rename.`}>
+              {u.name} <span className="tabular font-normal text-muted-foreground/70">{u.count.toLocaleString()}</span>
+            </button>
+            <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+              <button className={ICON} title="Zoom to it" aria-label={`Zoom to ${u.name}`} onClick={() => void zoom()}><LocateFixed size={11} /></button>
+              <button className={ICON} title="Export as GeoJSON" aria-label={`Export ${u.name}`} onClick={() => void exportIt()}><Download size={11} /></button>
+              <button className={ICON} title="Rename" aria-label={`Rename ${u.name}`} onClick={() => setRenaming(true)}><Pencil size={11} /></button>
+              <button className="text-muted-foreground hover:text-destructive" title="Take it out of the project" aria-label={`Remove ${u.name}`} onClick={remove}><Trash2 size={11} /></button>
+            </span>
+          </>
+        )}
+        <button className={`shrink-0 ${ICON}`} title={shown ? "Hide from the map" : "Show on the map"}
+          aria-label={shown ? `Hide ${u.name}` : `Show ${u.name}`} onClick={() => void show()}>
+          {shown ? <Eye size={11} /> : <EyeOff size={11} />}
+        </button>
+      </div>
+      {err && <p className="mt-0.5 pl-4 text-[9px] text-destructive">{err}</p>}
+    </li>
+  );
+}
+
 function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: number }) {
   const activeFolder = useAppStore((s) => s.activeFolder);
   const savedShapes = useAppStore((s) => s.savedShapes);
+  const units = useAppStore((s) => s.units);
   const [renaming, setRenaming] = useState(false);
   const [issue, setIssue] = useState<string | null>(null);
   const drop = useDropInto(path);
@@ -402,13 +490,28 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
   if (ctx.searching && !ctx.nonEmpty.has(path)) return null;
   const isOpen = ctx.searching || ctx.open.has(path);
   const inside = savedShapes.filter((s) => within(folderOf(s), path));
+  const insideUnits = units.filter((u) => u.folder && within(u.folder, path));
+  const total = inside.length + insideUnits.length;
   const anyVisible = inside.some((s) => s.visible);
   const isActive = activeFolder === path;
+  // A type folder at the top (Pivots, Triads, …) shows the type's icon.
+  const kind = depth === 0 ? kindOfFolder(path) : null;
+  const KindIcon = kind ? KIND_ICON[kind] : null;
 
   const remove = () => {
-    if (inside.length && !window.confirm(
-      `Delete the folder ${baseName(path)} and the ${plural(inside.length, "shape")} in it? (Ctrl+Z brings them back.)`)) return;
+    if (total && !window.confirm(
+      `Delete the folder ${baseName(path)} and the ${plural(total, "item")} in it? (Ctrl+Z brings them back.)`)) return;
     st().deleteFolder(path);
+  };
+  /** Click the name: open/close it. Opening it also makes it where new things are saved. */
+  const toggleOpen = () => {
+    if (isOpen) {
+      ctx.setOpen(path, false);
+      if (activeFolder && within(activeFolder, path)) st().setActiveFolder(parentOf(path));
+    } else {
+      ctx.setOpen(path, true);
+      st().setActiveFolder(path);
+    }
   };
   const addSub = () => {
     const p = st().createFolder(path);
@@ -429,7 +532,8 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
         <button className="shrink-0 text-muted-foreground" aria-label={isOpen ? `Collapse ${path}` : `Expand ${path}`} onClick={() => ctx.toggle(path)}>
           {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         </button>
-        {isOpen ? <FolderOpen size={11} className="shrink-0 text-primary/80" /> : <FolderClosed size={11} className="shrink-0 text-primary/80" />}
+        {KindIcon ? <KindIcon size={11} className="shrink-0 text-primary" />
+          : isOpen ? <FolderOpen size={11} className="shrink-0 text-primary/80" /> : <FolderClosed size={11} className="shrink-0 text-primary/80" />}
         {renaming ? (
           <InlineName initial={baseName(path)} issue={issue}
             onCancel={() => { setRenaming(false); setIssue(null); }}
@@ -442,10 +546,10 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
         ) : (
           <>
             <button className={`min-w-0 flex-1 truncate text-left font-medium ${isActive ? "text-primary" : "text-foreground"}`}
-              onClick={() => { st().setActiveFolder(isActive ? parentOf(path) : path); if (!isOpen) ctx.toggle(path); }}
+              onClick={toggleOpen}
               onDoubleClick={() => setRenaming(true)}
-              title={`${path} — click to open (new shapes save here), double-click to rename, drag to move`}>
-              {baseName(path)} <span className="tabular font-normal text-muted-foreground/70">{inside.length}</span>
+              title={`${path} — click to open or close, double-click to rename, drag to move`}>
+              {baseName(path)} <span className="tabular font-normal text-muted-foreground/70">{total}</span>
             </button>
             <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
               <button className={ICON} title="Select every shape in it" aria-label={`Select all in ${path}`}
@@ -470,10 +574,17 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
   );
 }
 
+const kindRank = (f: string) => {
+  const k = kindOfFolder(f);
+  return k && !f.includes("/") ? KIND_ORDER.indexOf(k) : KIND_ORDER.length;
+};
+
 function TreeLevel({ parent, ctx, depth }: { parent: string; ctx: TreeCtx; depth: number }) {
-  const folders = childFolders(ctx.all, parent);
+  // At the top, the type folders come first, in their fixed order.
+  const folders = childFolders(ctx.all, parent).sort((a, b) => kindRank(a) - kindRank(b));
   const shapes = ctx.byFolder.get(parent) ?? [];
-  if (!folders.length && !shapes.length) {
+  const units = ctx.unitsByFolder.get(parent) ?? [];
+  if (!folders.length && !shapes.length && !units.length) {
     return depth > 0 && !ctx.searching
       ? <p className="py-0.5 text-[10px] italic text-muted-foreground/60" style={{ paddingLeft: 20 + depth * 12 }}>Empty — drag shapes here</p>
       : null;
@@ -482,6 +593,7 @@ function TreeLevel({ parent, ctx, depth }: { parent: string; ctx: TreeCtx; depth
     <ul>
       {folders.map((f) => <FolderNode key={f} path={f} ctx={ctx} depth={depth} />)}
       {shapes.map((s) => <ShapeRow key={s.name} s={s} ctx={ctx} depth={depth} />)}
+      {units.map((u) => <UnitRow key={u.filename} u={u} depth={depth} />)}
     </ul>
   );
 }
@@ -544,13 +656,22 @@ function ShapeTree() {
   const activeProject = useAppStore((s) => (hydrated ? s.activeProject : null));
   const shapesVisible = useAppStore((s) => s.shapesVisible);
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
+  const unitsAll = useAppStore((s) => s.units);
   const st = useAppStore.getState;
   const [query, setQuery] = useState("");
   const [open, setOpenSet] = useState<Set<string>>(() => new Set());
+  const [rootOpen, setRootOpen] = useState(true);
   const rootDrop = useDropInto("");
 
   const shapes = hydrated ? savedShapes : NO_SHAPES;
-  const all = useMemo(() => allFolders(folders, shapes), [folders, shapes]);
+  const units = hydrated ? unitsAll : NO_UNITS;
+  // The six type folders are always there, so every project reads the same way.
+  const all = useMemo(
+    () => allFolders([...KIND_ORDER.map((k) => KIND_FOLDER[k]), ...folders], [...shapes, ...units]),
+    [folders, shapes, units],
+  );
+  // Shapes not yet in a type folder — offered to "Arrange by type".
+  const unfiled = shapes.filter((s) => !kindOfFolder(folderOf(s))).length;
 
   const ctx = useMemo<TreeCtx>(() => {
     const q = query.trim().toLowerCase();
@@ -563,15 +684,21 @@ function ShapeTree() {
       byFolder.set(f, [...(byFolder.get(f) ?? []), s]);
       for (let p = f; p; p = parentOf(p)) nonEmpty.add(p);
     }
+    const unitsByFolder = new Map<string, UnitItem[]>();
+    for (const u of q ? units.filter((x) => x.name.toLowerCase().includes(q)) : units) {
+      const f = u.folder ?? "";
+      unitsByFolder.set(f, [...(unitsByFolder.get(f) ?? []), u]);
+      for (let p = f; p; p = parentOf(p)) nonEmpty.add(p);
+    }
     if (q) all.filter((f) => baseName(f).toLowerCase().includes(q)).forEach((f) => {
       for (let p = f; p; p = parentOf(p)) nonEmpty.add(p);
     });
     return {
-      all, byFolder, index, nonEmpty, searching: !!q, open,
+      all, byFolder, unitsByFolder, index, nonEmpty, searching: !!q, open,
       toggle: (p) => setOpenSet((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n; }),
       setOpen: (p, v) => setOpenSet((o) => { const n = new Set(o); if (v) n.add(p); else n.delete(p); return n; }),
     };
-  }, [shapes, all, query, open]);
+  }, [shapes, units, all, query, open]);
 
   const newFolder = () => {
     const p = st().createFolder(activeFolder);
@@ -597,7 +724,7 @@ function ShapeTree() {
           aria-label="Export all shapes" disabled={!shapes.length} onClick={() => exportShapesEach(shapes, rootName)}>
           <Download size={13} />
         </button>
-        <button className={ICON} title="Collapse all folders" aria-label="Collapse all folders" onClick={() => setOpenSet(new Set())}>
+        <button className={ICON} title="Collapse all folders" aria-label="Collapse all folders" onClick={() => { setOpenSet(new Set()); st().setActiveFolder(""); }}>
           <ChevronsDownUp size={13} />
         </button>
         <Switch checked={shapesVisible} onCheckedChange={setShapesVisibleSafe} aria-label="Show shapes on the map" />
@@ -608,6 +735,15 @@ function ShapeTree() {
           onValueChange={(v) => st().setShapeOpacity((Array.isArray(v) ? v[0] : v) / 100)} className="flex-1" />
         <span className="tabular w-8 text-right text-[9px] text-muted-foreground">{Math.round(shapeOpacity * 100)}%</span>
       </div>
+
+      {unfiled > 0 && (
+        <button onClick={() => st().arrangeByType()}
+          title="Pivots (and the blocks cut from them) into Pivots, everything else into Polygons. Ctrl+Z undoes it."
+          className="mt-2 flex w-full items-center gap-1.5 rounded-md border border-dashed border-primary/50 bg-primary/5 px-2 py-1.5 text-left text-[10px] text-primary hover:bg-primary/10">
+          <ListTree size={12} className="shrink-0" />
+          Arrange {plural(unfiled, "shape")} by type — pivots under Pivots, polygons under Polygons
+        </button>
+      )}
 
       {/* Where you are — new shapes are saved into this folder. */}
       <nav aria-label="Open folder" className="mt-2 flex flex-wrap items-center gap-0.5 text-[10px] text-muted-foreground">
@@ -629,9 +765,14 @@ function ShapeTree() {
         className={`mt-1 min-h-10 rounded-md border p-1 ${rootDrop.over ? "border-primary bg-primary/5" : "border-border/60"}`}
       >
         <div className="flex items-center gap-1 px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          <Folder size={11} /> {rootName}
+          <button className="flex min-w-0 items-center gap-1 hover:text-foreground" onClick={() => setRootOpen((o) => !o)}
+            aria-expanded={rootOpen} aria-label={rootOpen ? `Collapse ${rootName}` : `Expand ${rootName}`}
+            title={rootOpen ? "Collapse the project" : "Expand the project"}>
+            {rootOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            <Folder size={11} /> <span className="truncate">{rootName}</span>
+          </button>
           <span className="tabular ml-auto font-normal normal-case tracking-normal">
-            {plural(shapes.length, "shape")} · {plural(all.length, "folder")}
+            {plural(shapes.length, "shape")}{units.length > 0 && ` · ${plural(units.length, "result")}`}
           </span>
           {shapes.length > 0 && (
             <button className="ml-1.5 rounded px-1.5 py-0.5 font-normal normal-case tracking-normal text-primary hover:bg-primary/10"
@@ -641,7 +782,7 @@ function ShapeTree() {
             </button>
           )}
         </div>
-        <TreeLevel parent="" ctx={ctx} depth={0} />
+        {(rootOpen || ctx.searching) && <TreeLevel parent="" ctx={ctx} depth={0} />}
         {hydrated && shapes.length === 0 && all.length === 0 && (
           <p className="px-1 py-2 text-[10px] text-muted-foreground/70">
             No shapes yet. Draw one with the tools on the left, or import GeoJSON from the Tool tab.

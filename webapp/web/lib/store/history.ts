@@ -21,17 +21,19 @@ export const HISTORY_LIMIT = 50;
 interface Snapshot {
   savedShapes: AppState["savedShapes"];
   folders: AppState["folders"];
+  units: AppState["units"];
   refPoints: AppState["refPoints"];
 }
 
 const snap = (s: Snapshot): Snapshot => ({
   savedShapes: s.savedShapes,
   folders: s.folders,
+  units: s.units,
   refPoints: s.refPoints,
 });
 // The store updates immutably, so reference equality is change detection.
 const same = (a: Snapshot, b: Snapshot) =>
-  a.savedShapes === b.savedShapes && a.folders === b.folders && a.refPoints === b.refPoints;
+  a.savedShapes === b.savedShapes && a.folders === b.folders && a.units === b.units && a.refPoints === b.refPoints;
 
 /** Same shapes by value — a cancelled slicing session hands back equal but new objects. */
 const sameShapes = (a: Snapshot["savedShapes"], b: Snapshot["savedShapes"]) =>
@@ -43,7 +45,7 @@ const sameShapes = (a: Snapshot["savedShapes"], b: Snapshot["savedShapes"]) =>
         x.color === y.color && x.folder === y.folder);
     }));
 const sameByValue = (a: Snapshot, b: Snapshot) =>
-  sameShapes(a.savedShapes, b.savedShapes) && a.folders === b.folders && a.refPoints === b.refPoints;
+  sameShapes(a.savedShapes, b.savedShapes) && a.folders === b.folders && a.units === b.units && a.refPoints === b.refPoints;
 
 interface HistoryState {
   past: Snapshot[];

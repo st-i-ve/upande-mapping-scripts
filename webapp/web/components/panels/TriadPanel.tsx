@@ -5,12 +5,12 @@ import { Triangle, Square, Check } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { SectionCard } from "@/components/console/SectionCard";
+import { saveUnit, sourceNameOf } from "@/lib/units";
 import { AnimatedNumber } from "@/components/console/AnimatedNumber";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { generateTriads, type BandDirection, type TriadDirection } from "@/lib/geometry/triad";
-import { api } from "@/lib/api/client";
 import { ListRow } from "@/components/console/ListRow";
 
 export function TriadPanel() {
@@ -69,7 +69,7 @@ export function TriadPanel() {
         // the outputs list, where it would look complete.
         if (stopRef.current) break;
         if (!triads.features.length) continue;
-        const { filename } = await api.saveOutput(`${name} bands-triads`, triads);
+        const filename = await saveUnit("triads", triads as never, name);
         const bands = new Set(triads.features.map((f) => f.properties.band)).size;
         setDone((d) => [...d, { shape: name, filename, triads: triads.features.length, bands }]);
         await breathe(); // a window to press Stop before the next block starts
@@ -198,6 +198,10 @@ export function TriadPanel() {
         </Button>
         {count > 0 && (
           <>
+            <Button size="sm" variant="secondary" title="Save to the project's Triads folder"
+              onClick={() => triad && void saveUnit("triads", triad as never, sourceNameOf(workingPolygon)).then(() => setErr(""), (e) => setErr((e as Error).message))}>
+              Save
+            </Button>
             <Button size="sm" variant="secondary" onClick={download}>GeoJSON</Button>
             <Button size="sm" variant="secondary" onClick={() => { setTriad(null); setTriadHexes(null); }}>Clear</Button>
           </>

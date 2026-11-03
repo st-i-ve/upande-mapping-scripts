@@ -3,7 +3,7 @@
  * the migration. All calls are same-origin: in dev, next.config rewrites
  * `/api/*` to the local uvicorn server; in prod, nginx routes it.
  */
-import type { FeatureCollection, GeoGeometry, OutputInfo, SavedShape, TerraceResult } from "@/lib/types";
+import type { FeatureCollection, GeoGeometry, OutputInfo, SavedShape, TerraceResult, UnitItem } from "@/lib/types";
 
 export class ApiError extends Error {
   constructor(
@@ -79,6 +79,8 @@ export interface Project extends Omit<ProjectSummary, "shape_count"> {
   shapes: SavedShape[];
   /** Every folder path in the project, empty ones included ("Greenhouses/GH-A"). */
   folders?: string[];
+  /** Generated results filed in the project (pointers to saved outputs). */
+  units?: UnitItem[];
 }
 
 const json = (body: unknown): RequestInit => ({
@@ -186,12 +188,12 @@ export const api = {
 
   // ---- projects (shapes stored on the server) ----
   listProjects: () => request<{ projects: ProjectSummary[] }>("/projects"),
-  createProject: (name: string, shapes: SavedShape[], folders: string[] = []) =>
-    request<Project>("/projects", json({ name, shapes, folders })),
+  createProject: (name: string, shapes: SavedShape[], folders: string[] = [], units: UnitItem[] = []) =>
+    request<Project>("/projects", json({ name, shapes, folders, units })),
   getProject: (slug: string) => request<Project>(`/projects/${encodeURIComponent(slug)}`),
-  saveProjectShapes: (slug: string, shapes: SavedShape[], folders: string[], baseVersion: number, force = false) =>
+  saveProjectShapes: (slug: string, shapes: SavedShape[], folders: string[], baseVersion: number, force = false, units?: UnitItem[]) =>
     request<ProjectSummary>(`/projects/${encodeURIComponent(slug)}/shapes`, {
-      ...json({ shapes, folders, base_version: baseVersion, force }),
+      ...json({ shapes, folders, units, base_version: baseVersion, force }),
       method: "PUT",
     }),
   renameProject: (slug: string, name: string) =>

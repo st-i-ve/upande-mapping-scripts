@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { generateTriads, type BandDirection } from "@/lib/geometry/triad";
-import { api } from "@/lib/api/client";
+import { saveUnit, sourceNameOf } from "@/lib/units";
 import { downloadGeoJson } from "@/lib/exportGeo";
 import type { FeatureCollection } from "@/lib/types";
 
@@ -66,10 +66,10 @@ export function HexPanel() {
         await new Promise((r) => setTimeout(r, 30)); // let the progress paint between shapes
         const { hexagons } = generateTriads(shape.geometry, opts);
         if (!hexagons.features.length) continue;
-        await api.saveOutput(`${name} hexagons`, hexagons);
+        await saveUnit("hexagons", hexagons as never, name);
         made++;
       }
-      setMsg({ ok: true, text: `Saved ${made} hexagon output${made === 1 ? "" : "s"} — see Saved outputs on the Export tab.` });
+      setMsg({ ok: true, text: `Saved ${made} to the project's Hexagons folder` });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {
@@ -81,8 +81,8 @@ export function HexPanel() {
     if (!preview) return;
     setBusy(true);
     try {
-      const { filename } = await api.saveOutput("hexagons", preview);
-      setMsg({ ok: true, text: `Saved as ${filename}` });
+      await saveUnit("hexagons", preview, sourceNameOf(source));
+      setMsg({ ok: true, text: "Saved to the project's Hexagons folder" });
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message });
     } finally {

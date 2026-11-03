@@ -12,7 +12,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { api, ApiError, type Project } from "@/lib/api/client";
 import { useAppStore } from "@/lib/store/appStore";
-import type { SavedShape } from "@/lib/types";
+import type { SavedShape, UnitItem } from "@/lib/types";
 import { resetHistory } from "@/lib/store/history";
 
 export type SyncStatus = "idle" | "loading" | "saving" | "saved" | "conflict" | "error";
@@ -33,21 +33,22 @@ export const useProjectSync = create<SyncState>((set) => ({
 }));
 
 const SAVE_DELAY_MS = 800;
-const key = (shapes: SavedShape[], folders: string[] = []) => JSON.stringify([shapes, folders]);
+const key = (shapes: SavedShape[], folders: string[] = [], units: UnitItem[] = []) =>
+  JSON.stringify([shapes, folders, units]);
 const appKey = () => {
-  const { savedShapes, folders } = useAppStore.getState();
-  return key(savedShapes, folders);
+  const { savedShapes, folders, units } = useAppStore.getState();
+  return key(savedShapes, folders, units);
 };
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Make `project` the open one, with its shapes on the map. */
 export function adoptProject(project: Project) {
   const app = useAppStore.getState();
-  app.replaceSavedShapes(project.shapes, project.folders ?? []);
+  app.replaceSavedShapes(project.shapes, project.folders ?? [], project.units ?? []);
   app.setActiveProject({ slug: project.slug, name: project.name, version: project.version });
   // Undo must never reach back into the project that was open before.
   resetHistory();
-  useProjectSync.getState().set({ status: "saved", error: null, synced: key(project.shapes, project.folders) });
+  useProjectSync.getState().set({ status: "saved", error: null, synced: key(project.shapes, project.folders, project.units) });
 }
 
 /** True while the open project has changes the server hasn't got yet. */
@@ -85,13 +86,13 @@ export function closeProject() {
 
 /** Save now. `force` overwrites whatever is on the server (the "keep mine" answer to a conflict). */
 export async function saveNow(force = false) {
-  const { activeProject, savedShapes, folders, setActiveProject } = useAppStore.getState();
+  const { activeProject, savedShapes, folders, units, setActiveProject } = useAppStore.getState();
   if (!activeProject) return;
   const sync = useProjectSync.getState();
-  const k = key(savedShapes, folders);
+  const k = key(savedShapes, folders, units);
   sync.set({ status: "saving", error: null });
   try {
-    const r = await api.saveProjectShapes(activeProject.slug, savedShapes, folders, activeProject.version, force);
+    const r = await api.saveProjectShapes(activeProject.slug, savedShapes, folders, activeProject.version, force, units);
     // Still the same project? (It may have been closed or switched mid-save.)
     if (useAppStore.getState().activeProject?.slug !== activeProject.slug) return;
     setActiveProject({ ...activeProject, name: r.name, version: r.version });
@@ -106,6 +107,7 @@ export async function saveNow(force = false) {
 export function useProjectAutosave() {
   const shapes = useAppStore((s) => s.savedShapes);
   const folders = useAppStore((s) => s.folders);
+  const units = useAppStore((s) => s.units);
   const active = useAppStore((s) => s.activeProject);
   const status = useProjectSync((s) => s.status);
   const synced = useProjectSync((s) => s.synced);
@@ -121,8 +123,8 @@ export function useProjectAutosave() {
       (p) => {
         if (stop) return;
         const app = useAppStore.getState();
-        const local = key(app.savedShapes, app.folders);
-        const remote = key(p.shapes, p.folders);
+        const local = key(app.savedShapes, app.folders, app.units);
+        const remote = key(p.shapes, p.folders, p.units);
         if (local === remote) {
           app.setActiveProject({ slug: p.slug, name: p.name, version: p.version });
           sync.set({ status: "saved", synced: local });
@@ -152,10 +154,10 @@ export function useProjectAutosave() {
   // failure (the panel's Retry resumes; no hammering a server that's down).
   useEffect(() => {
     if (!active || synced === null || status !== "saved") return;
-    if (key(shapes, folders) === synced) return;
+    if (key(shapes, folders, units) === synced) return;
     const t = setTimeout(() => void saveNow(), SAVE_DELAY_MS);
     return () => clearTimeout(t);
-  }, [shapes, folders, active, synced, status]);
+  }, [shapes, folders, units, active, synced, status]);
 }
 
 /**
@@ -164,9 +166,9 @@ export function useProjectAutosave() {
  * open, so later changes keep saving to it.
  */
 export async function backUpShapes(target: { create: string } | { into: string }) {
-  const { savedShapes: shapes, folders } = useAppStore.getState();
+  const { savedShapes: shapes, folders, units } = useAppStore.getState();
   if ("create" in target) {
-    adoptProject(await api.createProject(target.create, shapes, folders));
+    adoptProject(await api.createProject(target.create, shapes, folders, units));
     return { added: shapes.length, skipped: 0 };
   }
   const p = await api.getProject(target.into);
@@ -188,7 +190,8 @@ export async function backUpShapes(target: { create: string } | { into: string }
     added++;
   }
   const mergedFolders = [...new Set([...(p.folders ?? []), ...folders])];
-  const r = await api.saveProjectShapes(p.slug, merged, mergedFolders, p.version);
-  adoptProject({ ...p, shapes: merged, folders: mergedFolders, version: r.version, name: r.name });
+  const mergedUnits = [...(p.units ?? []), ...units.filter((u) => !(p.units ?? []).some((x) => x.filename === u.filename))];
+  const r = await api.saveProjectShapes(p.slug, merged, mergedFolders, p.version, false, mergedUnits);
+  adoptProject({ ...p, shapes: merged, folders: mergedFolders, units: mergedUnits, version: r.version, name: r.name });
   return { added, skipped };
 }
