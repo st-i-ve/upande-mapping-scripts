@@ -10,6 +10,7 @@ import { SectionCard } from "@/components/console/SectionCard";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 import { downloadGeoJson, safeName, zipFiles } from "@/lib/exportGeo";
+import { askConfirm } from "@/lib/confirm";
 import type { FeatureCollection, GeoGeometry, OutputInfo } from "@/lib/types";
 
 function kb(bytes: number) {
@@ -83,14 +84,17 @@ export function OutputsPanel() {
     flash(true, "Frappe format copied");
   });
   const del = (f: string) => tryIt(async () => {
-    if (!window.confirm(`Delete ${f} from the server?`)) return;
+    if (!(await askConfirm({ title: `Delete ${stem(f)}?`, message: "The saved output is removed from the server. This can't be undone." }))) return;
     await api.deleteOutput(f);
     await load();
   });
 
   const picked = items.filter((o) => selected.has(o.filename)).map((o) => o.filename);
   const delSelected = () => tryIt(async () => {
-    if (!window.confirm(`Delete ${picked.length} output${picked.length === 1 ? "" : "s"} from the server?`)) return;
+    if (!(await askConfirm({
+      title: `Delete ${picked.length} output${picked.length === 1 ? "" : "s"}?`,
+      message: "They're removed from the server. This can't be undone.",
+    }))) return;
     for (const f of picked) await api.deleteOutput(f);
     await load();
   });

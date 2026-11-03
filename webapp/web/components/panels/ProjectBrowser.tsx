@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { KIND_FOLDER, KIND_ORDER, kindOfFolder, type FolderKind } from "@/lib/store/kinds";
 import { downloadGeoJson } from "@/lib/exportGeo";
+import { askConfirm } from "@/lib/confirm";
 import type { UnitItem } from "@/lib/types";
 import { exportShapesEach, exportShapesTogether } from "@/lib/exportGeo";
 import { useAppStore } from "@/lib/store/appStore";
@@ -80,10 +81,13 @@ function ProjectBar() {
   };
 
   /** Shapes that aren't in any project would be replaced — make sure that's meant. */
-  const okToReplace = (what: string) =>
-    active || local === 0 || window.confirm(
-      `${what}? The ${plural(local, "shape")} on this map aren't in a project and will be replaced.\n\n` +
-      "To keep them, cancel and back them up to a project first (the cloud button).");
+  const okToReplace = async (what: string) =>
+    !!active || local === 0 || askConfirm({
+      title: `${what}?`,
+      message: `The ${plural(local, "shape")} on this map aren't in a project and will be replaced.\n\n` +
+        "To keep them, cancel and back them up to a project first (the cloud button).",
+      confirmLabel: "Replace them",
+    });
 
   const startCreate = () => {
     setCreating(true);
@@ -93,20 +97,20 @@ function ProjectBar() {
     setBringShapes(!active && local > 0);
   };
 
-  const create = () => {
+  const create = async () => {
     const n = name.trim();
     if (!n) return;
-    if (!bringShapes && !okToReplace(`Start ${n} empty`)) return;
+    if (!bringShapes && !(await okToReplace(`Start ${n} empty`))) return;
     void run(async () => {
       await flushProject(); // the project being left keeps its last edits
-      const { savedShapes: shapes, folders } = useAppStore.getState();
-      adoptProject(await api.createProject(n, bringShapes ? shapes : [], bringShapes ? folders : []));
+      const { savedShapes: shapes, folders, units } = useAppStore.getState();
+      adoptProject(await api.createProject(n, bringShapes ? shapes : [], bringShapes ? folders : [], bringShapes ? units : []));
       setCreating(false);
     });
   };
 
-  const open = (p: ProjectSummary) => {
-    if (!okToReplace(`Open ${p.name}`)) return;
+  const open = async (p: ProjectSummary) => {
+    if (!(await okToReplace(`Open ${p.name}`))) return;
     void run(async () => {
       await flushProject();
       await openProject(p.slug);
@@ -121,8 +125,12 @@ function ProjectBar() {
     setRenaming(null);
   });
 
-  const remove = (p: ProjectSummary) => {
-    if (!window.confirm(`Delete the project ${p.name} and its ${plural(p.shape_count, "shape")} from the server? This can't be undone.`)) return;
+  const remove = async (p: ProjectSummary) => {
+    if (!(await askConfirm({
+      title: `Delete the project ${p.name}?`,
+      message: `Its ${plural(p.shape_count, "shape")} are removed from the server. This can't be undone.`,
+      confirmLabel: "Delete project",
+    }))) return;
     void run(async () => {
       await api.deleteProject(p.slug);
       if (active?.slug === p.slug) closeProject(); // its shapes stay on this map, unattached
@@ -179,7 +187,13 @@ function ProjectBar() {
                 onClick={() => run(() => openProject(active.slug))}
                 title="Replace the shapes on this map with the project's latest saved copy">Load latest</Button>
               <Button size="sm" className="h-7 flex-1 text-[10px]" disabled={busy}
-                onClick={() => window.confirm("Overwrite the project with the shapes on this map? The other changes will be lost.") && run(() => saveNow(true))}>
+                onClick={async () => {
+                  if (await askConfirm({
+                    title: "Keep the shapes on this map?",
+                    message: "The project is overwritten with them. The changes made somewhere else are lost.",
+                    confirmLabel: "Overwrite",
+                  })) void run(() => saveNow(true));
+                }}>
                 Keep mine
               </Button>
             </div>
@@ -215,7 +229,7 @@ function ProjectBar() {
           <div className="flex gap-1.5">
             <Input aria-label="New project name" placeholder="e.g. Kaitet North" value={name} autoFocus
               onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") create(); if (e.key === "Escape") setCreating(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter") void create(); if (e.key === "Escape") setCreating(false); }}
               className="h-7" />
             <Button size="sm" className="h-7" disabled={busy || !name.trim()} onClick={create}>
               <FolderPlus size={11} /> Create
@@ -241,7 +255,7 @@ function ProjectBar() {
             return (
               <li key={p.slug} className={`group/row flex items-center gap-2 border-b border-border/50 px-2 py-1.5 last:border-0 ${isOpen ? "bg-primary/5" : "hover:bg-muted/40"}`}>
                 <button className="min-w-0 flex-1 text-left disabled:cursor-default" disabled={isOpen || busy}
-                  onClick={() => open(p)} title={isOpen ? "Open now" : `Open ${p.name}`}>
+                  onClick={() => void open(p)} title={isOpen ? "Open now" : `Open ${p.name}`}>
                   <span className={`block truncate text-[10px] ${isOpen ? "font-medium text-primary" : "text-foreground"}`}>
                     {p.name}{isOpen && " · open"}
                   </span>
@@ -437,8 +451,12 @@ function UnitRow({ u, depth }: { u: UnitItem; depth: number }) {
   };
   const zoom = async () => { const fc = await load(); if (fc) handle?.fitGeometry(fc as never); };
   const exportIt = async () => { const fc = await load(); if (fc) downloadGeoJson(fc, u.name); };
-  const remove = () => {
-    if (!window.confirm(`Take ${u.name} out of the project? (Its saved output stays under Saved outputs; Ctrl+Z puts it back.)`)) return;
+  const remove = async () => {
+    if (!(await askConfirm({
+      title: `Take ${u.name} out of the project?`,
+      message: "Its saved output stays under Saved outputs. Ctrl+Z puts it back.",
+      confirmLabel: "Remove",
+    }))) return;
     if (shown) st().setGenResult(null, null);
     st().removeUnit(u.filename);
   };
@@ -498,9 +516,12 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
   const kind = depth === 0 ? kindOfFolder(path) : null;
   const KindIcon = kind ? KIND_ICON[kind] : null;
 
-  const remove = () => {
-    if (total && !window.confirm(
-      `Delete the folder ${baseName(path)} and the ${plural(total, "item")} in it? (Ctrl+Z brings them back.)`)) return;
+  const remove = async () => {
+    if (total && !(await askConfirm({
+      title: `Delete the folder ${baseName(path)}?`,
+      message: `The ${plural(total, "item")} in it go too. Ctrl+Z brings them back.`,
+      confirmLabel: "Delete folder",
+    }))) return;
     st().deleteFolder(path);
   };
   /** Click the name: open/close it. Opening it also makes it where new things are saved. */

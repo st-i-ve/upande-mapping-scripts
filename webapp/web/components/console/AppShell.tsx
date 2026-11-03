@@ -8,6 +8,7 @@ import { CommandMenu } from "./CommandMenu";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { ThreeDView } from "./ThreeDView";
 import { useProjectAutosave } from "@/lib/project/sync";
+import { ConfirmHost } from "./ConfirmHost";
 
 /**
  * The whole app shell. The map/3D canvas is "boxed" — a rounded, bordered card
@@ -29,6 +30,7 @@ export function AppShell() {
           {view === "2d" ? <MapCanvas /> : <ThreeDView />}
         </div>
         <CommandMenu hideTrigger />
+        <ConfirmHost />
       </SidebarInset>
       <AppSidebar />
     </SidebarProvider>

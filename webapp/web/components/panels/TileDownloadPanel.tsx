@@ -7,6 +7,7 @@ import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { api, type TileJob } from "@/lib/api/client";
 import { tileTemplate } from "@/lib/map/tileTemplate";
+import { askConfirm } from "@/lib/confirm";
 import { SectionCard } from "@/components/console/SectionCard";
 import { ListRow } from "@/components/console/ListRow";
 import { Button } from "@/components/ui/button";
@@ -317,7 +318,12 @@ export function TileDownloadPanel() {
                   <button title="Zoom to its area" onClick={() => handle?.fitGeometry(l.area.geometry)}><LocateFixed size={11} /></button>
                   <button title="Rename" onClick={() => setRenaming({ slug: l.slug, name: l.name })}><Pencil size={11} /></button>
                   <button title={running ? "Stop and delete" : "Delete these tiles"} className="hover:text-destructive"
-                    onClick={() => window.confirm(`Delete the ${l.name} tiles from the server?`) && remove(l.slug)}>
+                    onClick={async () => {
+                      if (await askConfirm({
+                        title: `Delete ${l.name}?`,
+                        message: running ? "The download stops and its tiles are removed from the server." : "Its tiles are removed from the server. This can't be undone.",
+                      })) remove(l.slug);
+                    }}>
                     <Trash2 size={11} />
                   </button>
                 </>
