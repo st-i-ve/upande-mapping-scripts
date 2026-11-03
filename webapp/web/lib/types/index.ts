@@ -34,6 +34,8 @@ export interface SavedShape {
   geometry: GeoGeometry;
   visible: boolean;
   color?: string;
+  /** Folder path inside the project ("Greenhouses/GH-A"); absent = the root. */
+  folder?: string;
 }
 
 /** Basemap provider keys (localStorage only). */

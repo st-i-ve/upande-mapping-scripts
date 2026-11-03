@@ -15,6 +15,13 @@ import type {
 } from "@/lib/types";
 import type { TreePoint } from "@/lib/geometry/treeGrid";
 import type { TileLayerInfo } from "@/lib/api/client";
+import {
+  allFolders, cleanFolderName, deleteFolder as dropFolder, folderOf, freeFolderName, join,
+  moveFolder as relocateFolder, parentOf, within,
+} from "./folders";
+
+/** The right-hand sidebar's tabs, one per flow. */
+export type SideTab = "browser" | "tool" | "generate" | "export";
 
 /**
  * A pivot being laid out: the circle drawn on the map plus the slicing settings,
@@ -25,6 +32,8 @@ export interface PivotDraft {
   center: [number, number];
   /** Radius out to the circumference, in metres. */
   radiusM: number;
+  /** The saved circle this pivot was made from, if any — its blocks are saved under its name. */
+  source?: string;
 }
 
 export interface PivotSettings {
@@ -170,9 +179,42 @@ export interface AppState {
   knifeWidth: number; // blade width / gap in metres
   setKnifeWidth: (w: number) => void;
 
+  // ---- sidebar tab ----
+  sideTab: SideTab;
+  setSideTab: (t: SideTab) => void;
+
+  // ---- folders inside the project (paths, "Greenhouses/GH-A"; empty ones included) ----
+  folders: string[];
+  /** The folder open in the browser — new shapes are saved into it. "" = the root. */
+  activeFolder: string;
+  setActiveFolder: (path: string) => void;
+  /** Make a folder under `parent`; returns its path. */
+  createFolder: (parent: string, name?: string) => string;
+  /** Rename the folder at `path` (just its last part). Returns the new path, or null if unusable/taken. */
+  renameFolder: (path: string, name: string) => string | null;
+  /** Move folder `path` (with everything in it) under `parent`. False if that would put it inside itself. */
+  moveFolder: (path: string, parent: string) => boolean;
+  /** Delete a folder with its sub-folders and shapes. Returns the shape names removed. */
+  deleteFolder: (path: string) => string[];
+  /** File shapes into a folder ("" = the root). */
+  moveShapesToFolder: (names: string[], folder: string) => void;
+  /** Show or hide every shape in a folder and its sub-folders. */
+  setFolderVisible: (path: string, visible: boolean) => void;
+
+  // ---- project: the server-side home of savedShapes (persisted, so a reload reopens it) ----
+  activeProject: { slug: string; name: string; version: number } | null;
+  setActiveProject: (p: { slug: string; name: string; version: number } | null) => void;
+  /** Swap in another set of shapes wholesale (opening a project); drops selection and any slicing. */
+  replaceSavedShapes: (shapes: SavedShape[], folders?: string[]) => void;
+
   // ---- downloaded tile layers (server-side; polled, not persisted) ----
   tileLayers: TileLayerInfo[];
   setTileLayers: (l: TileLayerInfo[]) => void;
+  /** A downloaded layer laid over the current base map to compare them, and its opacity (0..1). */
+  overlayTile: string | null;
+  setOverlayTile: (slug: string | null) => void;
+  overlayOpacity: number;
+  setOverlayOpacity: (o: number) => void;
 
   // ---- pivot layout (draw a circle, preview pizza slices, confirm) ----
   pivot: PivotDraft | null;
@@ -255,6 +297,12 @@ export interface AppState {
   setBasemapKeys: (keys: BasemapKeys) => void;
 }
 
+/** A folder move/rename applied to the store's slices. */
+const relocated = (s: AppState, from: string, to: string) => {
+  const r = relocateFolder(s.folders, s.savedShapes, from, to);
+  return { folders: r.folders, savedShapes: r.shapes };
+};
+
 const PALETTE = ["#e5e5e5", "#9aa0a6", "#b8b8b8", "#d4d4d4", "#f5f5f5", "#8a8a8a"];
 
 export const useAppStore = create<AppState>()(
@@ -287,8 +335,84 @@ export const useAppStore = create<AppState>()(
       knifeWidth: 1,
       setKnifeWidth: (knifeWidth) => set({ knifeWidth }),
 
+      sideTab: "browser",
+      setSideTab: (sideTab) => set({ sideTab }),
+
+      folders: [],
+      activeFolder: "",
+      setActiveFolder: (activeFolder) => set({ activeFolder }),
+      createFolder: (parent, name) => {
+        const all = allFolders(get().folders, get().savedShapes);
+        const wanted = (name && cleanFolderName(name)) || "New folder";
+        const path = join(parent, freeFolderName(all, parent, wanted));
+        set((s) => ({ folders: [...s.folders, path] }));
+        return path;
+      },
+      renameFolder: (path, name) => {
+        const clean = cleanFolderName(name);
+        if (!clean) return null;
+        const to = join(parentOf(path), clean);
+        if (to === path) return path;
+        const all = allFolders(get().folders, get().savedShapes);
+        if (all.some((f) => f.toLowerCase() === to.toLowerCase())) return null;
+        set((s) => ({
+          ...relocated(s, path, to),
+          activeFolder: within(s.activeFolder, path) && s.activeFolder ? to + s.activeFolder.slice(path.length) : s.activeFolder,
+        }));
+        return to;
+      },
+      moveFolder: (path, parent) => {
+        if (within(parent, path) && parent !== "") return false; // into itself
+        if (parentOf(path) === parent) return true;
+        const all = allFolders(get().folders, get().savedShapes);
+        const name = freeFolderName(all, parent, path.slice(path.lastIndexOf("/") + 1));
+        const to = join(parent, name);
+        set((s) => ({
+          ...relocated(s, path, to),
+          activeFolder: within(s.activeFolder, path) && s.activeFolder ? to + s.activeFolder.slice(path.length) : s.activeFolder,
+        }));
+        return true;
+      },
+      deleteFolder: (path) => {
+        const r = dropFolder(get().folders, get().savedShapes, path);
+        const gone = new Set(r.removed);
+        set((s) => ({
+          folders: r.folders,
+          savedShapes: r.shapes,
+          selectedShapes: s.selectedShapes.filter((n) => !gone.has(n)),
+          activeFolder: s.activeFolder && within(s.activeFolder, path) ? parentOf(path) : s.activeFolder,
+        }));
+        return r.removed;
+      },
+      moveShapesToFolder: (names, folder) =>
+        set((s) => {
+          const move = new Set(names);
+          return {
+            // Keep the folder listed even if it was empty before.
+            folders: folder && !s.folders.includes(folder) ? [...s.folders, folder] : s.folders,
+            savedShapes: s.savedShapes.map((x) =>
+              move.has(x.name) && folderOf(x) !== folder ? { ...x, folder: folder || undefined } : x,
+            ),
+          };
+        }),
+      setFolderVisible: (path, visible) =>
+        set((s) => ({
+          savedShapes: s.savedShapes.map((x) =>
+            within(folderOf(x), path) && x.visible !== visible ? { ...x, visible } : x,
+          ),
+        })),
+
+      activeProject: null,
+      setActiveProject: (activeProject) => set({ activeProject }),
+      replaceSavedShapes: (savedShapes, folders = []) =>
+        set({ savedShapes, folders, activeFolder: "", selectedShapes: [], slice: null, pivot: null }),
+
       tileLayers: [],
       setTileLayers: (tileLayers) => set({ tileLayers }),
+      overlayTile: null,
+      setOverlayTile: (overlayTile) => set({ overlayTile }),
+      overlayOpacity: 0.7,
+      setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
 
       pivot: null,
       setPivot: (pivot) => set({ pivot }),
@@ -454,12 +578,15 @@ export const useAppStore = create<AppState>()(
               });
         set((s) => {
           const next = s.savedShapes.filter((x) => !dropped.has(x.name));
+          // Slices are filed next to the shape they were cut from.
+          const folder = s.savedShapes.find((x) => x.name === sess.source)?.folder;
           sess.slices.forEach((geometry, i) => {
             next.push({
               name: names[i],
               geometry,
               visible: true,
               color: PALETTE[next.length % PALETTE.length],
+              ...(folder ? { folder } : {}),
             });
           });
           // Source is kept but stays hidden, so the slices read on the map.
@@ -515,8 +642,10 @@ export const useAppStore = create<AppState>()(
       addSavedShape: (name, geometry, color) =>
         set((s) => {
           const finalColor = color ?? PALETTE[s.savedShapes.length % PALETTE.length];
-          const entry: SavedShape = { name, geometry, visible: true, color: finalColor };
           const existing = s.savedShapes.findIndex((x) => x.name === name);
+          // A replaced shape stays where it was filed; a new one goes into the open folder.
+          const folder = existing >= 0 ? s.savedShapes[existing].folder : s.activeFolder || undefined;
+          const entry: SavedShape = { name, geometry, visible: true, color: finalColor, ...(folder ? { folder } : {}) };
           const next = [...s.savedShapes];
           if (existing >= 0) next[existing] = entry;
           else next.push(entry);
@@ -568,6 +697,9 @@ export const useAppStore = create<AppState>()(
         genParams: s.genParams,
         terraceGrouping: s.terraceGrouping,
         pivotSettings: s.pivotSettings,
+        activeProject: s.activeProject,
+        folders: s.folders,
+        sideTab: s.sideTab,
       }),
     },
   ),

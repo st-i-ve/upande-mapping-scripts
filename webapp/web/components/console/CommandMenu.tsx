@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { SideTab } from "@/lib/store/appStore";
+import { goToSection } from "@/lib/shapeActions";
 import {
   MapPin,
   Shapes,
@@ -46,8 +48,7 @@ export function CommandMenu({ hideTrigger = false }: { hideTrigger?: boolean }) 
     setOpen(false);
     fn();
   };
-  const jump = (id: string) => () =>
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  const jump = (tab: SideTab, id: string) => () => goToSection(tab, id);
 
   return (
     <>
@@ -68,22 +69,22 @@ export function CommandMenu({ hideTrigger = false }: { hideTrigger?: boolean }) 
         <CommandList>
           <CommandEmpty>No results.</CommandEmpty>
           <CommandGroup heading="Sections">
-            <CommandItem onSelect={run(jump("sec-ref"))}>
+            <CommandItem onSelect={run(jump("browser", "sec-ref"))}>
               <MapPin /> Reference points
             </CommandItem>
-            <CommandItem onSelect={run(jump("sec-shapes"))}>
+            <CommandItem onSelect={run(jump("browser", "sec-shapes"))}>
               <Shapes /> Saved shapes
             </CommandItem>
-            <CommandItem onSelect={run(jump("sec-grid"))}>
+            <CommandItem onSelect={run(jump("generate", "sec-grid"))}>
               <Grid3x3 /> Tree grid
             </CommandItem>
           </CommandGroup>
           <CommandSeparator />
           <CommandGroup heading="Actions">
-            <CommandItem onSelect={run(jump("sec-generate"))}>
+            <CommandItem onSelect={run(jump("generate", "sec-generate"))}>
               <Play /> Generate beds &amp; zones
             </CommandItem>
-            <CommandItem onSelect={run(jump("sec-shapes"))}>
+            <CommandItem onSelect={run(jump("browser", "sec-shapes"))}>
               <Layers /> Toggle overlays
             </CommandItem>
             <CommandItem onSelect={run(() => router.push("/3d"))}>

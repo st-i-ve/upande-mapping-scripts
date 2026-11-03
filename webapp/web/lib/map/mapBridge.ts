@@ -47,6 +47,13 @@ export interface MapHandle {
    * request, so a Backspace while placing points doesn't also delete shapes.
    */
   knifePopPoint: () => boolean;
+  /**
+   * Drop the last vertex of a polygon being drawn. True if it consumed the
+   * request, so Ctrl+Z / Backspace mid-draw steps back a click, not a whole shape.
+   */
+  drawPopVertex: () => boolean;
+  /** True when there's an unsaved drawing on the map. */
+  hasDrawn: () => boolean;
   stopModes: () => void;
   clearDrawn: () => void;
 }

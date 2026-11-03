@@ -118,6 +118,23 @@ export function pivotSlices(shape: GeoGeometry, opts: PivotOptions): GeoGeometry
   }
 }
 
+/**
+ * If `shape` is (close to) a circle, its centre and radius — so a circle already
+ * saved, e.g. a pivot drawn earlier, can be laid out as a pivot again. A shape
+ * whose vertices stray more than `tolerance` (fraction of the radius) from a
+ * common distance to the centre isn't one.
+ */
+export function circleFit(shape: GeoGeometry, tolerance = 0.06): { center: [number, number]; radiusM: number } | null {
+  if (shape.type !== "Polygon") return null;
+  const ring = (shape.coordinates as [number, number][][])[0];
+  if (!ring || ring.length < 17) return null; // a handful of corners is a polygon, not a circle
+  const center = pivotCenter(shape);
+  const ds = ring.slice(0, -1).map((p) => distance(point(center), point(p), { units: "meters" }));
+  const mean = ds.reduce((a, b) => a + b, 0) / ds.length;
+  if (!(mean > 0) || (Math.max(...ds) - Math.min(...ds)) / mean > tolerance) return null;
+  return { center, radiusM: mean };
+}
+
 /** The pivot's circle as a polygon, for saving and slicing. */
 export function pivotCircle(center: [number, number], radiusM: number): GeoGeometry {
   return circle(center, radiusM, { units: "meters", steps: 128 }).geometry as unknown as GeoGeometry;

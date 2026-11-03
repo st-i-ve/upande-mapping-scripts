@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import json
 import re
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from beds_zones import generate_beds_zones, preview_split, terrace_sections
+from projects import router as projects_router
 from tile_layers import router as tile_layers_router
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -22,9 +25,11 @@ FRONTEND = ROOT / "frontend"
 STORAGE = ROOT / "storage"
 STORAGE.mkdir(parents=True, exist_ok=True)
 TILES = ROOT.parent / "tiles"
+TILE_CACHE_EXTENSION = ROOT.parent / "tile-cache-extension"
 
 app = FastAPI(title="Upande Bed & Zone Mapper")
 app.include_router(tile_layers_router)
+app.include_router(projects_router)
 
 
 class GenerateRequest(BaseModel):
@@ -290,6 +295,23 @@ def get_output_frappe(filename: str):
         raise HTTPException(400, f"Could not parse stored result: {e}")
     text = _to_frappe_ndjson(fc)
     return Response(content=text, media_type="text/plain")
+
+
+@app.get("/api/tile-cache-extension.zip")
+def tile_cache_extension_zip() -> Response:
+    """The tile-cache browser extension, zipped fresh from the repo on each request."""
+    if not TILE_CACHE_EXTENSION.is_dir():
+        raise HTTPException(404, "Extension not found")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in sorted(TILE_CACHE_EXTENSION.rglob("*")):
+            if p.is_file():
+                zf.write(p, Path("tile-cache-extension") / p.relative_to(TILE_CACHE_EXTENSION))
+    return Response(
+        buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="tile-cache-extension.zip"'},
+    )
 
 
 @app.get("/api/health")

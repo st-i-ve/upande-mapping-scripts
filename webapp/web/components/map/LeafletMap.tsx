@@ -13,6 +13,7 @@ import {
   buildOverlays,
   addWayback,
   LABEL_PANE,
+  OVERLAY_PANE,
 } from "@/lib/map/baseLayers";
 import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
 import { pivotCircle, pivotSlices, pivotSpokes } from "@/lib/geometry/pivot";
@@ -59,6 +60,8 @@ export default function LeafletMap() {
 
   const basemapKeys = useAppStore((s) => s.basemapKeys);
   const tileLayers = useAppStore((s) => s.tileLayers);
+  const overlayTile = useAppStore((s) => s.overlayTile);
+  const overlayOpacity = useAppStore((s) => s.overlayOpacity);
 
   const sliceLayerRef = useRef<L.LayerGroup | null>(null);
   const pivotLayerRef = useRef<L.LayerGroup | null>(null);
@@ -71,6 +74,7 @@ export default function LeafletMap() {
   const layerControlRef = useRef<L.Control.Layers | null>(null);
   const keyedRef = useRef<Record<string, L.Layer>>({});
   const tileLayersRef = useRef<Record<string, L.TileLayer>>({});
+  const overlayRef = useRef<L.TileLayer | null>(null);
   const baseRef = useRef<L.Layer | null>(null);
   const defaultBaseRef = useRef<L.Layer | null>(null);
 
@@ -92,6 +96,14 @@ export default function LeafletMap() {
     if (labelPane) {
       labelPane.style.zIndex = "350";
       labelPane.style.pointerEvents = "none";
+    }
+    // A downloaded layer laid over the base map for comparison sits above the
+    // base tiles but under the labels, whichever base is picked.
+    map.createPane(OVERLAY_PANE);
+    const overlayPane = map.getPane(OVERLAY_PANE);
+    if (overlayPane) {
+      overlayPane.style.zIndex = "250";
+      overlayPane.style.pointerEvents = "none";
     }
 
     // Full base-layer set (ported from the vanilla app), default Google Satellite.
@@ -569,6 +581,19 @@ export default function LeafletMap() {
         map.pm.disableGlobalDragMode();
         map.pm.disableGlobalRemovalMode();
       },
+      drawPopVertex: () => {
+        const pm = map.pm as unknown as {
+          Draw: { getActiveShape?: () => string | undefined } & Record<string, { _removeLastVertex?: () => void; _layer?: L.Polyline }>;
+        };
+        const shape = pm.Draw.getActiveShape?.();
+        const tool = shape ? pm.Draw[shape] : undefined;
+        if (!tool?._removeLastVertex) return false;
+        // Nothing placed yet: let the key fall through to the normal undo.
+        if (!(tool._layer?.getLatLngs() as L.LatLng[] | undefined)?.length) return false;
+        tool._removeLastVertex();
+        return true;
+      },
+      hasDrawn: () => drawnRef.layer != null,
       clearDrawn: () => {
         if (drawnRef.layer) drawnGroup.removeLayer(drawnRef.layer);
         drawnRef.layer = null;
@@ -807,6 +832,41 @@ export default function LeafletMap() {
     // It was deleted while on screen: fall back to the default imagery.
     else if (shown && defaultBaseRef.current) map.addLayer(defaultBaseRef.current);
   }, [tileKey]);
+
+  // ---- compare overlay: one downloaded layer over the base map, faded ----
+  const overlayInfo = tileLayers.find((l) => l.slug === overlayTile);
+  const overlayKey = overlayInfo ? `${overlayInfo.slug}:${overlayInfo.state}` : "";
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (overlayRef.current) map.removeLayer(overlayRef.current);
+    overlayRef.current = null;
+    const t = useAppStore.getState().tileLayers.find((l) => l.slug === useAppStore.getState().overlayTile);
+    if (!t) return;
+    let bounds: L.LatLngBounds | undefined;
+    try {
+      bounds = L.geoJSON(t.area.geometry as never).getBounds();
+    } catch {
+      /* no bounds */
+    }
+    const lyr = L.tileLayer(t.tile_url, {
+      pane: OVERLAY_PANE,
+      // Stretch its outermost zooms so it stays visible zoomed in or out past them.
+      minNativeZoom: t.min_zoom,
+      maxNativeZoom: t.max_zoom,
+      maxZoom: 22,
+      bounds,
+      opacity: useAppStore.getState().overlayOpacity,
+      attribution: `${t.name} (overlay)`,
+    }).addTo(map);
+    overlayRef.current = lyr;
+    // Laid over somewhere off screen: go to it so the comparison is visible.
+    if (bounds?.isValid() && !map.getBounds().intersects(bounds)) map.fitBounds(bounds);
+  }, [overlayKey]);
+
+  useEffect(() => {
+    overlayRef.current?.setOpacity(overlayOpacity);
+  }, [overlayOpacity]);
 
   // ---- terrace block corner pickers (click to set a block's start corner) ----
   useEffect(() => {

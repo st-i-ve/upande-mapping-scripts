@@ -64,7 +64,6 @@ export function TreeGridPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Grid3x3 size={12} /> Tree grid</span>}
-      index="06"
       meta={count > 0 ? <span className="tabular text-[9px] text-primary"><AnimatedNumber value={count} /> pts</span> : undefined}
     >
       <div className="grid grid-cols-2 gap-2">

@@ -60,7 +60,6 @@ export function SegmentsPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Scissors size={12} /> Segments</span>}
-      index="02"
       meta={<span className="text-[8px] uppercase tracking-wider text-primary">slicing</span>}
     >
       {/* Finish sits at the top: it is the action this panel exists for. */}
@@ -86,7 +85,7 @@ export function SegmentsPanel() {
         Cutting <strong>{session.source}</strong> — {session.widths.length} cut
         {session.widths.length === 1 ? "" : "s"}
         {session.future.length > 0 && `, ${session.future.length} undone`}. The original is
-        kept, hidden in Saved shapes. Nothing is saved until you finish.
+        kept, hidden in the Browser. Nothing is saved until you finish.
       </p>
 
       <ul className="mt-1.5">
@@ -101,7 +100,7 @@ export function SegmentsPanel() {
       <Dialog open={review !== null} onOpenChange={(o) => !o && setReview(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Move {review?.length ?? 0} segments into Saved shapes?</DialogTitle>
+            <DialogTitle>Move {review?.length ?? 0} segments into the Browser?</DialogTitle>
             <DialogDescription>
               They join the list <strong>{session.source}</strong> came from, and can then be
               selected, renamed or used to generate triads. {session.source} itself is kept,
@@ -145,7 +144,7 @@ export function SegmentsPanel() {
               Keep slicing
             </Button>
             <Button size="sm" disabled={!clean} onClick={port}>
-              Move to Saved shapes
+              Save to the Browser
             </Button>
           </DialogFooter>
         </DialogContent>

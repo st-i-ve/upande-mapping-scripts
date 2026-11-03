@@ -112,7 +112,6 @@ export function TriadPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Triangle size={12} /> Triad</span>}
-      index="09"
       meta={count > 0 ? <span className="tabular text-[9px] text-primary"><AnimatedNumber value={count} /> triads · {bandCount} bands</span> : undefined}
     >
       <label className="block text-[9px] text-muted-foreground">

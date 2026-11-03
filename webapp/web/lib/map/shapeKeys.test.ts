@@ -41,6 +41,16 @@ describe("resolveShapeKey", () => {
     ).toBeNull();
   });
 
+  it("maps Ctrl/⌘+Z to undo, and Ctrl+Y / Ctrl+Shift+Z to redo", () => {
+    expect(resolveShapeKey({ key: "z", ctrlKey: true })).toBe("undo");
+    expect(resolveShapeKey({ key: "z", metaKey: true })).toBe("undo");
+    expect(resolveShapeKey({ key: "y", ctrlKey: true })).toBe("redo");
+    expect(resolveShapeKey({ key: "Z", ctrlKey: true, shiftKey: true })).toBe("redo");
+    expect(resolveShapeKey({ key: "z" })).toBeNull();
+    // A text field keeps its own undo.
+    expect(resolveShapeKey({ key: "z", ctrlKey: true, target: { tagName: "INPUT", type: "text" } as never })).toBeNull();
+  });
+
   it("fires for keypresses on non-typing elements", () => {
     expect(resolveShapeKey({ key: "Delete", target: { tagName: "BODY" } as never })).toBe("delete");
   });

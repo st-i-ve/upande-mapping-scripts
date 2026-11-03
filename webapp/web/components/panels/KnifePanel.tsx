@@ -25,7 +25,6 @@ export function KnifePanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Scissors size={12} /> Knife</span>}
-      index="10"
       meta={slicing ? <span className="text-[8px] uppercase tracking-wider text-primary">slicing</span> : undefined}
     >
       {slicing ? (
@@ -40,7 +39,7 @@ export function KnifePanel() {
         <p className="mb-2 text-[9px] text-muted-foreground/70">
           Cut the working polygon along a line, leaving a gap the width of the blade.
           Each piece becomes its own saved shape and the working outline clears.
-          To slice one saved shape repeatedly, hit <strong>slice</strong> on its row.
+          To slice one saved shape repeatedly, select it and pick the <strong>scissors</strong> on the left rail (or on its row in the Browser).
         </p>
       )}
 

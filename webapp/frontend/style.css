@@ -56,7 +56,7 @@ header h1 {
 }
 
 .header-right { display: flex; align-items: center; gap: 14px; }
-#link3d {
+#link3d, #linkTileExt {
   font-size: 12px;
   font-weight: 600;
   color: var(--accent);
@@ -65,7 +65,7 @@ header h1 {
   border-radius: var(--radius);
   padding: 3px 10px;
 }
-#link3d:hover { color: var(--accent-hover); border-color: var(--accent); }
+#link3d:hover, #linkTileExt:hover { color: var(--accent-hover); border-color: var(--accent); }
 
 #status { font-size: 12px; font-weight: 500; }
 .status-idle  { color: var(--text-faint); }

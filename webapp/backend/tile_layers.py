@@ -10,17 +10,20 @@ the only state there is, so nothing lives in worker memory.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
 import signal
 import subprocess
 import tempfile
+import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +37,14 @@ NODE = os.environ.get("MAPPER_NODE", "/home/ubuntu/.nvm/versions/node/v24.14.1/b
 MAX_TILES = 20_000
 MIN_FREE_BYTES = 3 * 1024**3
 EST_TILE_BYTES = 20 * 1024
+
+# Uploaded zips (from the Tile Cache Inspector extension): size caps for the
+# upload itself and for what it unpacks to.
+MAX_UPLOAD_BYTES = 1024**3
+MAX_UNPACKED_BYTES = 2 * 1024**3
+MAX_UPLOAD_TILES = 100_000
+# <layer folder>/<z>/<x>/<y>.<ext>, the layer folder optional (A, B, C… from the extension).
+_ZIP_TILE = re.compile(r"^(?:(.+)/)?(\d{1,2})/(\d+)/(\d+)\.(png|jpe?g|webp|gif)$", re.I)
 
 router = APIRouter(prefix="/api/tiles")
 
@@ -203,12 +214,165 @@ def download(req: DownloadRequest) -> dict:
     return _read_layer(dest) or {}
 
 
+def _sniff_image(head: bytes) -> Optional[str]:
+    """The image format these leading bytes really are, or None if not an image."""
+    if head.startswith(b"\x89PNG"):
+        return "png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if head.startswith(b"GIF8"):
+        return "gif"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def _unique_slug(name: str) -> str:
+    base = _slug(name) or "layer"
+    slug, n = base, 2
+    while (LAYERS / slug).exists():
+        slug, n = f"{base}-{n}", n + 1
+    return slug
+
+
+def _tiles_area(tiles: list[tuple[int, int, int]]) -> dict[str, Any]:
+    """Bounding box of the tiles (taken at their deepest zoom) as a Polygon Feature."""
+    zmax = max(z for z, _, _ in tiles)
+    xs = [x for z, x, _ in tiles if z == zmax]
+    ys = [y for z, _, y in tiles if z == zmax]
+
+    def lonlat(x: int, y: int) -> list[float]:
+        n = 2**zmax
+        return [x / n * 360 - 180, math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y / n))))]
+
+    (w, n_), (e, s_) = lonlat(min(xs), min(ys)), lonlat(max(xs) + 1, max(ys) + 1)
+    ring = [[w, s_], [e, s_], [e, n_], [w, n_], [w, s_]]
+    return {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [ring]}}
+
+
+@router.post("/upload")
+async def upload(request: Request, name: str) -> dict:
+    """Add tile layers from a zip of <layer>/<z>/<x>/<y>.<ext> — the Tile Cache
+    Inspector extension's export. The zip is the raw request body; each top-level
+    folder becomes a layer of its own."""
+    if not _NAME.match(name.strip()):
+        raise HTTPException(400, "Name: letters, numbers, spaces, - and _ only")
+    LAYERS.mkdir(parents=True, exist_ok=True)
+    if shutil.disk_usage(TILES).free < MIN_FREE_BYTES:
+        raise HTTPException(507, "Not enough free disk on the server for an upload")
+
+    fd, tmp = tempfile.mkstemp(prefix="_upload-", suffix=".zip", dir=LAYERS)
+    created: list[Path] = []
+    try:
+        size = 0
+        with os.fdopen(fd, "wb") as f:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, f"Upload is over {MAX_UPLOAD_BYTES // 1024**2} MB")
+                f.write(chunk)
+        try:
+            zf = zipfile.ZipFile(tmp)
+        except zipfile.BadZipFile:
+            raise HTTPException(400, "That file isn't a zip")
+
+        with zf:
+            groups: dict[str, list[tuple[zipfile.ZipInfo, int, int, int, str]]] = {}
+            for info in zf.infolist():
+                m = _ZIP_TILE.match(info.filename)
+                if info.is_dir() or not m or ".." in info.filename:
+                    continue
+                folder, z, x, y, _ = m.groups()
+                z, x, y = int(z), int(x), int(y)
+                if z > 23 or x >= 2**z or y >= 2**z:
+                    continue
+                # Trust the bytes, not the name: a ".png" can be a JPEG, or no image at all.
+                with zf.open(info) as f:
+                    ext = _sniff_image(f.read(12))
+                if not ext:
+                    continue
+                groups.setdefault(folder or "", []).append((info, z, x, y, ext))
+            tiles = [t for g in groups.values() for t in g]
+            if not tiles:
+                raise HTTPException(400, "No image tiles in that zip — expected <z>/<x>/<y>.png style files")
+            if len(tiles) > MAX_UPLOAD_TILES:
+                raise HTTPException(400, f"{len(tiles):,} tiles is over the {MAX_UPLOAD_TILES:,} limit")
+            unpacked = sum(t[0].file_size for t in tiles)
+            if unpacked > MAX_UNPACKED_BYTES or shutil.disk_usage(TILES).free - unpacked < MIN_FREE_BYTES:
+                raise HTTPException(507, "Not enough free disk on the server for those tiles")
+
+            try:
+                sources = json.loads(zf.read("layers.json"))
+            except (KeyError, ValueError):
+                sources = {}
+
+            for folder, group in sorted(groups.items()):
+                label = name.strip() if len(groups) == 1 else f"{name.strip()} · {folder or 'tiles'}"[:120]
+                slug = _unique_slug(label)
+                dest = LAYERS / slug
+                dest.mkdir()
+                created.append(dest)
+                # One extension per layer (its tile URL names it); browsers sniff the image either way.
+                fmt = Counter(t[4] for t in group).most_common(1)[0][0]
+                for info, z, x, y, _ in group:
+                    out = dest / str(z) / str(x) / f"{y}.{fmt}"
+                    out.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(info) as src, open(out, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                zooms = [t[1] for t in group]
+                (dest / "layer.json").write_text(json.dumps({
+                    "name": label,
+                    "slug": slug,
+                    "source_url": (sources.get(folder) or {}).get("template", "uploaded zip"),
+                    "format": fmt,
+                    "min_zoom": min(zooms),
+                    "max_zoom": max(zooms),
+                    "area": _tiles_area([(z, x, y) for _, z, x, y, _ in group]),
+                    "state": "done",
+                    "current": len(group),
+                    "total": len(group),
+                    "failed": 0,
+                    "uploaded": True,
+                    "created": datetime.now(timezone.utc).isoformat(),
+                }))
+    except BaseException:
+        for d in created:
+            shutil.rmtree(d, ignore_errors=True)
+        raise
+    finally:
+        os.unlink(tmp)
+    return {"layers": [m for d in created if (m := _read_layer(d))]}
+
+
 @router.get("/layers")
 def list_layers() -> dict:
     if not LAYERS.is_dir():
         return {"layers": []}
     layers = [m for d in sorted(LAYERS.iterdir()) if d.is_dir() and (m := _read_layer(d))]
     return {"layers": layers}
+
+
+class RenameRequest(BaseModel):
+    name: str = Field(..., max_length=60)
+
+
+@router.patch("/layers/{slug}")
+def rename_layer(slug: str, req: RenameRequest) -> dict:
+    """Give a layer a new display name; its folder (slug) and tile URL stay put."""
+    if not re.fullmatch(r"[a-z0-9_-]+", slug):
+        raise HTTPException(400, "Invalid layer name")
+    if not _NAME.match(req.name.strip()):
+        raise HTTPException(400, "Name: letters, numbers, spaces, - and _ only")
+    meta_path = LAYERS / slug / "layer.json"
+    try:
+        meta = json.loads(meta_path.read_text())
+    except (OSError, ValueError):
+        raise HTTPException(404, "No such tile layer")
+    meta["name"] = req.name.strip()
+    tmp = meta_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(meta))
+    tmp.replace(meta_path)  # atomic, so a running download's own writes never see half a file
+    return _read_layer(LAYERS / slug) or {}
 
 
 @router.delete("/layers/{slug}")

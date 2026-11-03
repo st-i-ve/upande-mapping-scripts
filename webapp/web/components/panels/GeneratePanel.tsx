@@ -126,7 +126,6 @@ export function GeneratePanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Play size={12} /> Generate</span>}
-      index="05"
       meta={<StatusBadge status={status}>{msg}</StatusBadge>}
     >
       <div className="flex gap-1.5">

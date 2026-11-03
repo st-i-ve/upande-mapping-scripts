@@ -7,6 +7,7 @@ import { AppSidebar } from "./AppSidebar";
 import { CommandMenu } from "./CommandMenu";
 import { MapCanvas } from "@/components/map/MapCanvas";
 import { ThreeDView } from "./ThreeDView";
+import { useProjectAutosave } from "@/lib/project/sync";
 
 /**
  * The whole app shell. The map/3D canvas is "boxed" — a rounded, bordered card
@@ -16,6 +17,7 @@ import { ThreeDView } from "./ThreeDView";
  */
 export function AppShell() {
   const view = useAppStore((s) => s.view);
+  useProjectAutosave();
   return (
     <SidebarProvider
       className="min-h-0 flex-1 bg-sidebar"

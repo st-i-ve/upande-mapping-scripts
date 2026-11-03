@@ -3,6 +3,7 @@ import { renderHook } from "@testing-library/react";
 import { useShapeKeyboard } from "./useShapeKeyboard";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
+import { resetHistory } from "@/lib/store/history";
 import type { GeoGeometry } from "@/lib/types";
 
 const geom: GeoGeometry = { type: "Point", coordinates: [35.748, 0.0686] };
@@ -17,8 +18,8 @@ function seed(selected: string[]) {
 }
 
 /** Dispatch a real keydown, optionally from an element (so the typing guard applies). */
-function press(key: string, from?: HTMLElement) {
-  const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+function press(key: string, from?: HTMLElement, mods: KeyboardEventInit = {}) {
+  const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods });
   (from ?? window).dispatchEvent(e);
   return e;
 }
@@ -114,6 +115,36 @@ describe("useShapeKeyboard", () => {
     const { unmount } = renderHook(() => useShapeKeyboard());
     unmount();
     press("Delete");
+    expect(names()).toEqual(["Cut 1", "Cut 2"]);
+  });
+
+  it("Ctrl+Z brings back deleted shapes and Ctrl+Y deletes them again", async () => {
+    seed(["Cut 1"]);
+    await Promise.resolve();
+    resetHistory();
+    renderHook(() => useShapeKeyboard());
+    press("Delete");
+    await Promise.resolve();
+    expect(names()).toEqual(["Cut 2"]);
+    const e = press("z", undefined, { ctrlKey: true });
+    expect(e.defaultPrevented).toBe(true);
+    expect(names()).toEqual(["Cut 1", "Cut 2"]);
+    press("y", undefined, { ctrlKey: true });
+    expect(names()).toEqual(["Cut 2"]);
+    press("z", undefined, { ctrlKey: true, shiftKey: false });
+    press("Z", undefined, { ctrlKey: true, shiftKey: true });
+    expect(names()).toEqual(["Cut 2"]);
+  });
+
+  it("Ctrl+Z takes back a vertex of the polygon being drawn before anything else", () => {
+    seed([]);
+    let popped = 0;
+    useMapBridge.setState({
+      handle: { drawPopVertex: () => { popped++; return true; }, knifePopPoint: () => false } as never,
+    });
+    renderHook(() => useShapeKeyboard());
+    press("z", undefined, { ctrlKey: true });
+    expect(popped).toBe(1);
     expect(names()).toEqual(["Cut 1", "Cut 2"]);
   });
 });

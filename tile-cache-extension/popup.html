@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 12px system-ui, sans-serif; width: 420px; margin: 10px; color: #222; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 10px; }
+  .totals div { background: #f2f4f7; border-radius: 6px; padding: 6px; }
+  .totals b { display: block; font-size: 18px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  th, td { text-align: left; padding: 3px 4px; border-bottom: 1px solid #eee; }
+  td.n { text-align: right; }
+  .recent { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-height: 220px; overflow: auto; }
+  .recent img { width: 100%; aspect-ratio: 1; background: #ddd; border-radius: 3px; display: block; }
+  .recent .miss { outline: 2px solid #d33; }
+  .row { display: flex; gap: 6px; margin-top: 10px; }
+  textarea { width: 100%; height: 48px; font: 11px monospace; box-sizing: border-box; }
+  button { cursor: pointer; }
+  .muted { color: #777; }
+  #zooms { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+  <h1>Tile Cache Inspector</h1>
+  <div class="totals">
+    <div><b id="seen">0</b>tiles seen</div>
+    <div><b id="stored">0</b>in extension cache</div>
+    <div><b id="hits">0</b>served by browser cache</div>
+  </div>
+  <div class="muted" id="zooms"></div>
+  <table>
+    <thead><tr><th>Host</th><th class="n">Seen</th><th class="n">Browser cache</th><th class="n">Stored</th></tr></thead>
+    <tbody id="hosts"><tr><td colspan="4" class="muted">No tiles yet — open the map and pan around.</td></tr></tbody>
+  </table>
+  <div class="muted">Latest tiles from the extension cache (red = not stored)</div>
+  <div class="recent" id="recent"></div>
+  <div style="margin-top:10px">
+    <label><input type="checkbox" id="allSites"> Watch tiles on every site</label>
+    <div class="muted">Otherwise, only these sites (one origin per line)</div>
+    <textarea id="sites"></textarea>
+  </div>
+  <div class="row">
+    <button id="save">Save sites</button>
+    <button id="download">Download tiles (.zip)</button>
+    <button id="refresh">Refresh</button>
+    <button id="clear">Clear cache &amp; stats</button>
+  </div>
+  <script src="tiles.js"></script>
+  <script src="zip.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

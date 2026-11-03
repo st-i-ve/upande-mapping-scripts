@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { area, bearing, centroid, circle, difference, feature, featureCollection, point, polygon } from "@turf/turf";
 import type { Polygon } from "geojson";
-import { pivotCircle, pivotSlices, pivotSpokes } from "./pivot";
+import { circleFit, pivotCircle, pivotSlices, pivotSpokes } from "./pivot";
 import type { GeoGeometry } from "@/lib/types";
 
 const CENTER: [number, number] = [36.8, -0.3];
@@ -74,5 +74,28 @@ describe("pivotSpokes", () => {
   it("pivotCircle slices like a drawn pivot", () => {
     const s = pivotSlices(pivotCircle(CENTER, 150), { center: CENTER, count: 8, pathM: 3, centerRadiusM: 12 });
     expect(s).toHaveLength(8);
+  });
+});
+
+describe("circleFit", () => {
+  it("finds the centre and radius of a saved circle", () => {
+    const fit = circleFit(pivotCircle(CENTER, 200))!;
+    expect(fit.radiusM).toBeCloseTo(200, 0);
+    expect(fit.center[0]).toBeCloseTo(CENTER[0], 5);
+    expect(fit.center[1]).toBeCloseTo(CENTER[1], 5);
+  });
+
+  it("works on a coarser circle too", () => {
+    const coarse = circle(CENTER, 150, { units: "meters", steps: 32 }).geometry as unknown as GeoGeometry;
+    expect(circleFit(coarse)?.radiusM).toBeCloseTo(150, -1);
+  });
+
+  it("turns down shapes that aren't circles", () => {
+    const square = polygon([[[36.8, -0.3], [36.802, -0.3], [36.802, -0.298], [36.8, -0.298], [36.8, -0.3]]]).geometry as unknown as GeoGeometry;
+    expect(circleFit(square)).toBeNull();
+    // An ellipse: a circle squashed to 70% north–south.
+    const ring = (pivotCircle(CENTER, 200).coordinates as number[][][])[0]
+      .map(([x, y]) => [x, CENTER[1] + (y - CENTER[1]) * 0.7]);
+    expect(circleFit({ type: "Polygon", coordinates: [ring] } as GeoGeometry)).toBeNull();
   });
 });

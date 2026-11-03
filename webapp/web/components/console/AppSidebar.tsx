@@ -4,7 +4,7 @@ import { useAppStore } from "@/lib/store/appStore";
 import { Sidebar, SidebarContent, SidebarRail } from "@/components/ui/sidebar";
 import { ViewSwitcher } from "./ViewSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
-import { Panels2D } from "./Panels2D";
+import { Panels2D, SideTabs } from "./Panels2D";
 import { ThreeDToolset } from "./ThreeDToolset";
 
 /** Right-hand control sidebar. The header is a sticky glassmorphic bar — panels
@@ -30,6 +30,11 @@ export function AppSidebar() {
           <div className="mt-3">
             <ViewSwitcher />
           </div>
+          {view === "2d" && (
+            <div className="mt-2">
+              <SideTabs />
+            </div>
+          )}
         </div>
         <div className="p-3">
           {view === "2d" ? <Panels2D /> : <ThreeDToolset />}

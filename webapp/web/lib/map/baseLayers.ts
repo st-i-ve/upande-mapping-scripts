@@ -24,6 +24,8 @@ const ESRI_LABELS_NATIVE_ZOOM = 19;
 
 /** Pane for reference overlays: above every base tile layer, below our data. */
 export const LABEL_PANE = "reference-labels";
+/** Pane for a downloaded tile layer laid over the base map to compare against it. */
+export const OVERLAY_PANE = "tile-overlay";
 
 export interface BaseLayerSet {
   baseLayers: Record<string, L.Layer>;

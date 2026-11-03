@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, CircleDashed, PieChart, RotateCw, X } from "lucide-react";
+import { Check, CircleDashed, PieChart, RotateCw, Scissors, X } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -11,13 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { pivotCircle, pivotSlices } from "@/lib/geometry/pivot";
+import { shapeLetter } from "@/lib/shapeLabels";
 
 /**
  * Pivot layout — draw the pivot circle on the map (click the centre, move out,
  * click the edge), then set the slices, path and machinery centre while the map
  * previews the cut live. Rotate until the paths sit on the ones on the ground.
- * Confirming saves the circle and opens a slicing session on it, so the blocks
- * are named and saved through Segments like any other slice.
+ * Saving stores the circle and its blocks ("Pivot A 1", "Pivot A 2", …) as saved
+ * shapes straight away; or the cut can be opened in Segments to fine-tune first.
+ * A pivot made from a saved circle keeps that circle's name.
  */
 export function PivotPanel() {
   const hydrated = useHydrated();
@@ -29,27 +31,34 @@ export function PivotPanel() {
   const addSavedShape = useAppStore((s) => s.addSavedShape);
   const startSlice = useAppStore((s) => s.startSlice);
   const applySlice = useAppStore((s) => s.applySlice);
+  const finishSlice = useAppStore((s) => s.finishSlice);
   const handle = useMapBridge((s) => s.handle);
   const armed = useMapBridge((s) => s.knifeArmed);
 
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
 
   const draft = hydrated ? pivot : null;
   const { count, pathM, centerRadiusM, rotation, clockwise } = settings;
 
   const taken = new Set(savedShapes.map((s) => s.name.toLowerCase()));
-  let free = 1;
-  while (taken.has(`pivot ${free}`)) free++;
-  const finalName = name.trim() || `Pivot ${free}`;
-  const clash = taken.has(finalName.toLowerCase());
+  let free = 0;
+  while (taken.has(`pivot ${shapeLetter(free).toLowerCase()}`)) free++;
+  const nextName = `Pivot ${shapeLetter(free)}`;
+  // Made from a saved circle: its blocks go under that circle's name.
+  const source = draft?.source && savedShapes.some((s) => s.name === draft.source) ? draft.source : null;
+  const finalName = source ?? (name.trim() || nextName);
+  const clash = !source && taken.has(finalName.toLowerCase());
 
   const draw = () => {
     setError(null);
+    setSaved(null);
     handle?.pivotDraw();
   };
 
-  const confirm = () => {
+  /** "save": the blocks become saved shapes now. "segments": open the cut there to fine-tune first. */
+  const confirm = (mode: "save" | "segments") => {
     if (!draft || clash) return;
     const circle = pivotCircle(draft.center, draft.radiusM);
     const pieces = pivotSlices(circle, {
@@ -59,9 +68,14 @@ export function PivotPanel() {
       setError("Nothing left to slice — the centre radius covers the whole pivot.");
       return;
     }
-    addSavedShape(finalName, circle);
+    // A saved circle is redrawn from the (possibly adjusted) centre and radius, keeping its colour.
+    addSavedShape(finalName, circle, savedShapes.find((s) => s.name === finalName)?.color);
     startSlice(finalName);
     applySlice(pieces, pathM);
+    if (mode === "save") {
+      const names = finishSlice();
+      setSaved(`Saved ${names.length} block${names.length === 1 ? "" : "s"}: ${names[0]}${names.length > 1 ? ` … ${names[names.length - 1]}` : ""}`);
+    }
     setPivot(null);
     setName("");
     handle?.fitGeometry(circle);
@@ -74,7 +88,6 @@ export function PivotPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><PieChart size={12} /> Pivot</span>}
-      index="11"
       meta={draft ? <span className="text-[8px] uppercase tracking-wider text-primary">preview</span> : undefined}
     >
       {!draft ? (
@@ -87,8 +100,10 @@ export function PivotPanel() {
             <CircleDashed size={12} /> {armed ? "Click the centre, then the edge…" : "Draw pivot circle"}
           </Button>
           <p className="mt-1.5 text-[8px] text-muted-foreground/60">
-            <strong>Esc</strong> puts the tool away.
+            <strong>Esc</strong> puts the tool away. Already have the circle? Select it in the
+            <strong> Browser</strong> and press <strong>Make pivot</strong>.
           </p>
+          {saved && <p className="mt-1.5 text-[9px] text-primary">{saved}</p>}
         </>
       ) : (
         <>
@@ -135,12 +150,19 @@ export function PivotPanel() {
             <Switch checked={clockwise} onCheckedChange={(c) => setSettings({ clockwise: c })} aria-label="Number slices clockwise" />
           </label>
 
-          <label className="mt-2 block text-[9px] text-muted-foreground">
-            Name
-            <Input aria-label="Pivot name" placeholder={`Pivot ${free}`} value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={`mt-1 h-8 ${clash ? "border-destructive" : ""}`} />
-          </label>
+          {source ? (
+            <p className="mt-2 text-[9px] text-muted-foreground">
+              From saved circle <strong className="text-foreground">{source}</strong> — its blocks
+              will be {source} 1, {source} 2, …
+            </p>
+          ) : (
+            <label className="mt-2 block text-[9px] text-muted-foreground">
+              Name
+              <Input aria-label="Pivot name" placeholder={nextName} value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={`mt-1 h-8 ${clash ? "border-destructive" : ""}`} />
+            </label>
+          )}
           {clash && <p className="mt-0.5 text-[9px] text-destructive">A saved shape is already called {finalName}.</p>}
 
           <p className="tabular mt-2 text-[8px] text-muted-foreground/60">
@@ -148,8 +170,9 @@ export function PivotPanel() {
           </p>
 
           <div className="mt-2 flex gap-1.5">
-            <Button size="sm" className="flex-1" disabled={clash} onClick={confirm}>
-              <Check size={12} /> Confirm {finalName}
+            <Button size="sm" className="flex-1" disabled={clash} onClick={() => confirm("save")}
+              title={`Save the circle and its blocks (${finalName} 1, ${finalName} 2, …) to the open folder`}>
+              <Check size={12} /> Save {finalName} blocks
             </Button>
             <Button size="sm" variant="secondary" className="h-8" onClick={draw} title="Draw the circle again">
               <CircleDashed size={12} />
@@ -158,10 +181,13 @@ export function PivotPanel() {
               <X size={12} />
             </Button>
           </div>
+          <Button size="sm" variant="secondary" className="mt-1.5 w-full text-[9px]" disabled={clash} onClick={() => confirm("segments")}
+            title="Open the cut in Segments to adjust or rename blocks before saving">
+            <Scissors size={11} /> Fine-tune in Segments first
+          </Button>
           {error && <p className="mt-1.5 text-[9px] text-destructive">{error}</p>}
           <p className="mt-1.5 text-[8px] text-muted-foreground/60">
-            Confirming saves the circle and opens its slices in <strong>Segments</strong>, where
-            you name the blocks and finish.
+            The blocks are filed into the folder open in the Browser. Ctrl+Z takes the whole pivot back.
           </p>
         </>
       )}

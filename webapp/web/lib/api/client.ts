@@ -3,7 +3,7 @@
  * the migration. All calls are same-origin: in dev, next.config rewrites
  * `/api/*` to the local uvicorn server; in prod, nginx routes it.
  */
-import type { FeatureCollection, GeoGeometry, OutputInfo, TerraceResult } from "@/lib/types";
+import type { FeatureCollection, GeoGeometry, OutputInfo, SavedShape, TerraceResult } from "@/lib/types";
 
 export class ApiError extends Error {
   constructor(
@@ -57,6 +57,23 @@ export interface TileLayerInfo {
   /** Leaflet template for the stored tiles, e.g. /tiles/downloaded/x/{z}/{x}/{y}.png */
   tile_url: string;
   area: { geometry: GeoGeometry };
+}
+
+/** A project as listed: a named set of shapes kept on the server. */
+export interface ProjectSummary {
+  name: string;
+  slug: string;
+  created: string;
+  updated: string;
+  /** Bumped on every save; a save based on an older version is refused (409). */
+  version: number;
+  shape_count: number;
+}
+
+export interface Project extends Omit<ProjectSummary, "shape_count"> {
+  shapes: SavedShape[];
+  /** Every folder path in the project, empty ones included ("Greenhouses/GH-A"). */
+  folders?: string[];
 }
 
 const json = (body: unknown): RequestInit => ({
@@ -134,7 +151,48 @@ export const api = {
   downloadTiles: (job: TileJob & { name: string }) =>
     request<TileLayerInfo>("/tiles/download", json(job)),
 
+  /** Add layers from a Tile Cache Inspector export (<layer>/<z>/<x>/<y>.<ext> zip). */
+  // XHR rather than fetch: only XHR reports upload progress.
+  uploadTileZip: (file: File, name: string, opts: { onProgress?: (sent: number, total: number) => void; signal?: AbortSignal } = {}) =>
+    new Promise<{ layers: TileLayerInfo[] }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/tiles/upload?name=${encodeURIComponent(name)}`);
+      xhr.setRequestHeader("content-type", "application/zip");
+      xhr.responseType = "json";
+      xhr.upload.onprogress = (e) => opts.onProgress?.(e.loaded, e.lengthComputable ? e.total : file.size);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response);
+        else reject(new ApiError(xhr.status, xhr.response?.detail ?? xhr.statusText ?? "Upload failed"));
+      };
+      xhr.onerror = () => reject(new ApiError(0, "Upload failed — network error"));
+      xhr.onabort = () => reject(new ApiError(0, "Upload cancelled"));
+      opts.signal?.addEventListener("abort", () => xhr.abort());
+      xhr.send(file);
+    }),
+
+  renameTileLayer: (slug: string, name: string) =>
+    request<TileLayerInfo>(`/tiles/layers/${encodeURIComponent(slug)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name }),
+    }),
+
   listTileLayers: () => request<{ layers: TileLayerInfo[] }>("/tiles/layers"),
+
+  // ---- projects (shapes stored on the server) ----
+  listProjects: () => request<{ projects: ProjectSummary[] }>("/projects"),
+  createProject: (name: string, shapes: SavedShape[], folders: string[] = []) =>
+    request<Project>("/projects", json({ name, shapes, folders })),
+  getProject: (slug: string) => request<Project>(`/projects/${encodeURIComponent(slug)}`),
+  saveProjectShapes: (slug: string, shapes: SavedShape[], folders: string[], baseVersion: number, force = false) =>
+    request<ProjectSummary>(`/projects/${encodeURIComponent(slug)}/shapes`, {
+      ...json({ shapes, folders, base_version: baseVersion, force }),
+      method: "PUT",
+    }),
+  renameProject: (slug: string, name: string) =>
+    request<ProjectSummary>(`/projects/${encodeURIComponent(slug)}`, { ...json({ name }), method: "PATCH" }),
+  deleteProject: (slug: string) =>
+    request<{ deleted: string }>(`/projects/${encodeURIComponent(slug)}`, { method: "DELETE" }),
 
   deleteTileLayer: (slug: string) =>
     request<{ deleted: string }>(`/tiles/layers/${encodeURIComponent(slug)}`, { method: "DELETE" }),

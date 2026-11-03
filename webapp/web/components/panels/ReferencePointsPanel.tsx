@@ -57,7 +57,6 @@ export function ReferencePointsPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><MapPin size={12} /> Reference points</span>}
-      index="01"
       meta={
         <Switch
           checked={refVisible}

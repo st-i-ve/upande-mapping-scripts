@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, Eye, Trash2, LocateFixed } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, Eye, Trash2, LocateFixed, Upload, Layers, X, Pencil } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -35,6 +35,10 @@ export function TileDownloadPanel() {
   const selectedShapes = useAppStore((s) => s.selectedShapes);
   const layers = useAppStore((s) => s.tileLayers);
   const setLayers = useAppStore((s) => s.setTileLayers);
+  const overlayTile = useAppStore((s) => s.overlayTile);
+  const setOverlayTile = useAppStore((s) => s.setOverlayTile);
+  const overlayOpacity = useAppStore((s) => s.overlayOpacity);
+  const setOverlayOpacity = useAppStore((s) => s.setOverlayOpacity);
 
   const [url, setUrl] = useState("");
   const [subdomains, setSubdomains] = useState("a,b,c");
@@ -47,6 +51,15 @@ export function TileDownloadPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [templated, setTemplated] = useState(false);
+  const [uploaded, setUploaded] = useState<string | null>(null);
+  const zipInput = useRef<HTMLInputElement>(null);
+  // A picked zip waits here to be named before it's saved as a layer.
+  const [zip, setZip] = useState<File | null>(null);
+  const [zipName, setZipName] = useState("");
+  // Bytes sent so far; null when no upload is running. Full = the server is unpacking.
+  const [progress, setProgress] = useState<{ sent: number; total: number } | null>(null);
+  const uploadAbort = useRef<AbortController | null>(null);
+  const [renaming, setRenaming] = useState<{ slug: string; name: string } | null>(null);
 
   const shape = hydrated && selectedShapes.length === 1
     ? savedShapes.find((s) => s.name === selectedShapes[0]) ?? null
@@ -97,8 +110,46 @@ export function TileDownloadPanel() {
     setLayers((await api.listTileLayers()).layers);
   });
 
+  const pickZip = (file: File) => {
+    setUploaded(null);
+    setError(null);
+    setZip(file);
+    setZipName(file.name.replace(/\.zip$/i, "").replace(/[^A-Za-z0-9 _-]+/g, " ").trim().slice(0, 60));
+  };
+
+  // Save the picked zip (from the Tile Cache Inspector extension) as a layer under
+  // the given name; a zip holding several layers (A, B, C…) becomes "<name> · A" etc.
+  const doUpload = () => run(async () => {
+    if (!zip) return;
+    const ctl = new AbortController();
+    uploadAbort.current = ctl;
+    setProgress({ sent: 0, total: zip.size });
+    try {
+      const r = await api.uploadTileZip(zip, zipName.trim(), {
+        onProgress: (sent, total) => setProgress({ sent, total }),
+        signal: ctl.signal,
+      });
+      setZip(null);
+      setUploaded(`Saved ${r.layers.map((l) => `${l.name} (${l.total.toLocaleString()} tiles)`).join(", ")}`);
+      setLayers((await api.listTileLayers()).layers);
+      // Straight onto the map, over the current imagery, ready to compare.
+      if (r.layers[0]) setOverlayTile(r.layers[0].slug);
+    } finally {
+      setProgress(null);
+      uploadAbort.current = null;
+    }
+  });
+
+  const doRename = () => run(async () => {
+    if (!renaming) return;
+    await api.renameTileLayer(renaming.slug, renaming.name.trim());
+    setRenaming(null);
+    setLayers((await api.listTileLayers()).layers);
+  });
+
   const remove = (slug: string) => run(async () => {
     await api.deleteTileLayer(slug);
+    if (overlayTile === slug) setOverlayTile(null);
     setLayers((await api.listTileLayers()).layers);
   });
 
@@ -112,13 +163,13 @@ export function TileDownloadPanel() {
     if (f) setFormat(f);
   };
 
+  const overlay = layers.find((l) => l.slug === overlayTile) ?? null;
   const ready = !!url.trim() && !!handle;
   const tooMany = count ? count.count > count.max : false;
 
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Download size={12} /> Tile layers</span>}
-      index="12"
       meta={active ? <span className="text-[8px] uppercase tracking-wider text-primary">downloading</span> : undefined}
     >
       <p className="mb-2 text-[9px] text-muted-foreground/70">
@@ -197,6 +248,57 @@ export function TileDownloadPanel() {
           {tooMany && ` — over the ${count.max.toLocaleString()} limit; narrow the area or zooms`}
         </p>
       )}
+
+      <div className="mt-2.5 border-t border-border pt-2">
+        <p className="mb-1.5 text-[9px] text-muted-foreground/70">
+          Or save a tile zip from the <strong>Tile Cache Inspector</strong> extension (the puzzle
+          piece at the foot of the tool rail) as a layer of your own, to lay over the map and compare.
+        </p>
+        <input ref={zipInput} type="file" accept=".zip,application/zip" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) pickZip(f); }} />
+        {!zip ? (
+          <Button size="sm" variant="secondary" className="w-full" disabled={busy} onClick={() => zipInput.current?.click()}>
+            <Upload size={12} /> Choose tiles zip
+          </Button>
+        ) : (
+          <div className="rounded-md border border-border p-2">
+            <p className="truncate text-[9px] text-muted-foreground" title={zip.name}>
+              {zip.name} · {mb(zip.size)}
+            </p>
+            <label className="mt-1.5 block text-[9px] text-muted-foreground">
+              Save as layer named
+              <Input aria-label="Uploaded layer name" placeholder="e.g. Farm 2024 imagery" value={zipName}
+                disabled={!!progress} onChange={(e) => setZipName(e.target.value)} className="mt-1 h-8" />
+            </label>
+            {progress ? (
+              <div className="mt-2">
+                <span className="block h-1.5 overflow-hidden rounded bg-muted">
+                  <span className={`block h-full bg-primary transition-all ${progress.sent >= progress.total ? "animate-pulse" : ""}`}
+                    style={{ width: `${progress.total ? Math.round((progress.sent / progress.total) * 100) : 0}%` }} />
+                </span>
+                <div className="mt-1 flex items-center justify-between text-[8px] text-muted-foreground">
+                  <span className="tabular">
+                    {progress.sent >= progress.total
+                      ? "Uploaded — unpacking tiles on the server…"
+                      : `${mb(progress.sent)} of ${mb(progress.total)} · ${Math.round((progress.sent / progress.total) * 100)}%`}
+                  </span>
+                  {progress.sent < progress.total && (
+                    <button className="hover:text-destructive" onClick={() => uploadAbort.current?.abort()}>Cancel</button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 flex gap-1.5">
+                <Button size="sm" variant="secondary" className="flex-1" onClick={() => setZip(null)}>Cancel</Button>
+                <Button size="sm" className="flex-1" disabled={busy || !zipName.trim()} onClick={doUpload}>
+                  <Upload size={12} /> Save as layer
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+        {uploaded && <p className="mt-1.5 text-[9px] text-primary">{uploaded}</p>}
+      </div>
       {error && <p className="mt-1.5 text-[9px] text-destructive">{error}</p>}
 
       {layers.length > 0 && (
@@ -208,14 +310,29 @@ export function TileDownloadPanel() {
               <ListRow key={l.slug} actions={
                 <>
                   <button title="Show this layer" onClick={() => handle?.showTileLayer(l.slug)}><Eye size={11} /></button>
+                  <button title={overlayTile === l.slug ? "Remove the overlay" : "Lay over the current map, to compare"}
+                    className={overlayTile === l.slug ? "text-primary" : undefined}
+                    onClick={() => setOverlayTile(overlayTile === l.slug ? null : l.slug)}>
+                    <Layers size={11} />
+                  </button>
                   <button title="Zoom to its area" onClick={() => handle?.fitGeometry(l.area.geometry)}><LocateFixed size={11} /></button>
+                  <button title="Rename" onClick={() => setRenaming({ slug: l.slug, name: l.name })}><Pencil size={11} /></button>
                   <button title={running ? "Stop and delete" : "Delete these tiles"} className="hover:text-destructive"
                     onClick={() => window.confirm(`Delete the ${l.name} tiles from the server?`) && remove(l.slug)}>
                     <Trash2 size={11} />
                   </button>
                 </>
               }>
-                <span className="text-[10px] text-foreground">{l.name}</span>{" "}
+                {renaming?.slug === l.slug ? (
+                  <form className="flex gap-1" onSubmit={(e) => { e.preventDefault(); doRename(); }}>
+                    <Input aria-label="New layer name" autoFocus value={renaming.name} className="h-6 text-[10px]"
+                      onChange={(e) => setRenaming({ slug: l.slug, name: e.target.value })}
+                      onKeyDown={(e) => e.key === "Escape" && setRenaming(null)} />
+                    <Button type="submit" size="sm" className="h-6 px-2 text-[9px]" disabled={busy || !renaming.name.trim()}>Save</Button>
+                  </form>
+                ) : (
+                  <span className="text-[10px] text-foreground">{l.name}</span>
+                )}{" "}
                 <span className="tabular text-[8px] text-muted-foreground/70">z{l.min_zoom}–{l.max_zoom}</span>
                 <span className="tabular block text-[8px] text-muted-foreground/70">
                   {running ? `${l.current.toLocaleString()} / ${l.total.toLocaleString()} tiles · ${pct}%`
@@ -233,6 +350,30 @@ export function TileDownloadPanel() {
             );
           })}
         </ul>
+      )}
+
+      {overlay && (
+        <div className="mt-2 rounded-md border border-primary/30 bg-primary/5 p-2">
+          <div className="flex items-center justify-between text-[9px]">
+            <span className="text-foreground">
+              <Layers size={10} className="mr-1 inline" />
+              Overlay: <strong>{overlay.name}</strong>
+            </span>
+            <button title="Remove the overlay" className="text-muted-foreground hover:text-destructive"
+              onClick={() => setOverlayTile(null)}>
+              <X size={11} />
+            </button>
+          </div>
+          <label className="mt-1.5 flex items-center gap-2 text-[9px] text-muted-foreground">
+            Opacity
+            <input aria-label="Overlay opacity" type="range" min={0} max={100} value={Math.round(overlayOpacity * 100)}
+              onChange={(e) => setOverlayOpacity(+e.target.value / 100)} className="flex-1 accent-primary" />
+            <span className="tabular w-7 text-right">{Math.round(overlayOpacity * 100)}%</span>
+          </label>
+          <p className="mt-1 text-[8px] text-muted-foreground/70">
+            Pick the layer underneath from the map&apos;s layer menu (top right).
+          </p>
+        </div>
       )}
     </SectionCard>
   );

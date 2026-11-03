@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Tile Cache Inspector",
+  "version": "0.4.0",
+  "description": "Watches map tiles loaded by any site, stores a copy of each, and shows what was cached.",
+  "permissions": ["webRequest", "storage", "unlimitedStorage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Tile Cache Inspector" }
+}

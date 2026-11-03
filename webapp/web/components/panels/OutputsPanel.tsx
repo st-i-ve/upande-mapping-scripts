@@ -69,7 +69,6 @@ export function OutputsPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Archive size={12} /> Saved outputs</span>}
-      index="07"
       meta={
         <button onClick={load} aria-label="Refresh" className="text-muted-foreground hover:text-primary">
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />

@@ -5,7 +5,7 @@
  * the user is typing" guard — are testable without a map or a real DOM event.
  */
 
-export type ShapeKeyAction = "delete" | "escape";
+export type ShapeKeyAction = "delete" | "escape" | "undo" | "redo";
 
 const TYPING_TAGS = new Set(["TEXTAREA", "SELECT"]);
 
@@ -39,12 +39,18 @@ export type ShapeKeyEvent = {
   metaKey?: boolean;
   ctrlKey?: boolean;
   altKey?: boolean;
+  shiftKey?: boolean;
 };
 
 /** Which shape action a keypress maps to, or null when it isn't one of ours. */
 export function resolveShapeKey(e: ShapeKeyEvent): ShapeKeyAction | null {
+  // In a text field, Ctrl+Z is the field's own undo.
   if (isTypingTarget(e.target)) return null;
-  // Modifier combos belong to the browser / OS (⌘⌫ = back, etc.).
+  const mod = (e.ctrlKey || e.metaKey) && !e.altKey;
+  const k = e.key.toLowerCase();
+  if (mod && k === "z") return e.shiftKey ? "redo" : "undo";
+  if (mod && k === "y" && !e.shiftKey) return "redo";
+  // Other modifier combos belong to the browser / OS (⌘⌫ = back, etc.).
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   if (e.key === "Delete" || e.key === "Backspace") return "delete";
   // Escape puts the knife away — nothing else, so it can't disturb a pick or an

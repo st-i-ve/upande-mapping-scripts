@@ -72,7 +72,6 @@ export function TerracePanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Layers size={12} /> Terrace mode</span>}
-      index="4T"
     >
       <p className="mb-2 text-[9px] text-muted-foreground/70">
         For staircase greenhouses: pick a stepped edge, then group sections into blocks.

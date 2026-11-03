@@ -46,7 +46,6 @@ export function BasemapKeysPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><KeyRound size={12} /> Basemap keys</span>}
-      index="08"
     >
       <p className="mb-2 text-[9px] text-muted-foreground/70">
         Add provider keys to unlock their satellite layers in the layer control.

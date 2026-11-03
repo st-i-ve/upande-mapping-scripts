@@ -62,7 +62,6 @@ export function ParametersPanel() {
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><SlidersHorizontal size={12} /> Parameters</span>}
-      index="04"
     >
       {/* Working polygon source */}
       <div className="mb-3 rounded-md border border-border bg-secondary/30 p-2">
