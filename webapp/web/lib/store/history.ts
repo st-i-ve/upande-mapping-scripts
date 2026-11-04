@@ -12,6 +12,9 @@
  * becomes one step — undoing it puts back the shape exactly as it was before.
  *
  * Opening a project resets the history: undo never reaches into another project.
+ *
+ * The stacks are kept in sessionStorage, so a reload of the tab keeps them (per
+ * tab, and only for the project they belong to).
  */
 import { create } from "zustand";
 import { useAppStore, type AppState } from "./appStore";
@@ -151,5 +154,51 @@ export function resetHistory() {
   useHistory.setState({ past: [], future: [] });
 }
 
-// Loading saved work from the browser is not a step the user can undo.
-useAppStore.persist?.onFinishHydration?.(() => resetHistory());
+// ---- survive a reload: the stacks live in sessionStorage, tagged with the project ----
+const STORE_KEY = "upande-history";
+const owner = () => useAppStore.getState().activeProject?.slug ?? "";
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function saveStacks() {
+  if (typeof sessionStorage === "undefined") return;
+  const { past, future } = useHistory.getState();
+  let p = past;
+  let f = future;
+  // Big projects × 50 steps can outgrow the storage: keep the newest steps that fit.
+  for (;;) {
+    try {
+      sessionStorage.setItem(STORE_KEY, JSON.stringify({ owner: owner(), past: p, future: f, sliceBase }));
+      return;
+    } catch {
+      if (!p.length && !f.length) return;
+      p = p.slice(Math.ceil(p.length / 2));
+      f = f.slice(0, Math.floor(f.length / 2));
+    }
+  }
+}
+
+/** Take back the stacks saved before a reload — if they belong to what's open now. */
+function restoreStacks() {
+  resetHistory();
+  try {
+    const raw = typeof sessionStorage !== "undefined" ? sessionStorage.getItem(STORE_KEY) : null;
+    if (!raw) return;
+    const saved = JSON.parse(raw) as { owner: string; past: Snapshot[]; future: Snapshot[]; sliceBase: Snapshot | null };
+    if (saved.owner !== owner()) return;
+    useHistory.setState({ past: saved.past ?? [], future: saved.future ?? [] });
+    if (useAppStore.getState().slice && saved.sliceBase) sliceBase = saved.sliceBase;
+  } catch {
+    /* unreadable — start fresh */
+  }
+}
+
+useHistory.subscribe(() => {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveStacks, 300);
+});
+
+// Loading saved work from the browser is not a step the user can undo — but the
+// steps from before a reload are. Hydration from localStorage is synchronous, so
+// it may already be done by the time this module loads.
+if (useAppStore.persist?.hasHydrated?.()) restoreStacks();
+else useAppStore.persist?.onFinishHydration?.(() => restoreStacks());

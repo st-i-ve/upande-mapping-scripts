@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Hexagon, Download, Save, X } from "lucide-react";
+import { useToolSetting } from "@/lib/hooks/useToolSetting";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -31,9 +32,9 @@ export function HexPanel() {
   const setTriadHexes = useAppStore((s) => s.setTriadHexes);
   const fitGeometry = useMapBridge((s) => s.handle?.fitGeometry);
 
-  const [sideLength, setSideLength] = useState(5);
-  const [rotationDeg, setRotationDeg] = useState(0);
-  const [bandDirection, setBandDirection] = useState<BandDirection>("north-south");
+  const [sideLength, setSideLength] = useToolSetting("hex.sideLength", 5);
+  const [rotationDeg, setRotationDeg] = useToolSetting("hex.rotationDeg", 0);
+  const [bandDirection, setBandDirection] = useToolSetting<BandDirection>("hex.bandDirection", "north-south");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 

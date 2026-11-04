@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Grid3x3 } from "lucide-react";
+import { useToolSetting } from "@/lib/hooks/useToolSetting";
 import { useAppStore } from "@/lib/store/appStore";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { SectionCard } from "@/components/console/SectionCard";
@@ -23,10 +24,10 @@ export function TreeGridPanel() {
   const treeGrid = useAppStore((s) => s.treeGrid);
   const setTreeGrid = useAppStore((s) => s.setTreeGrid);
 
-  const [treeSpacing, setTreeSpacing] = useState(2);
-  const [rowSpacing, setRowSpacing] = useState(4);
-  const [majorEdge, setMajorEdge] = useState<"EW" | "NS">("EW");
-  const [rotationDeg, setRotationDeg] = useState(0);
+  const [treeSpacing, setTreeSpacing] = useToolSetting("trees.treeSpacing", 2);
+  const [rowSpacing, setRowSpacing] = useToolSetting("trees.rowSpacing", 4);
+  const [majorEdge, setMajorEdge] = useToolSetting<"EW" | "NS">("trees.majorEdge", "EW");
+  const [rotationDeg, setRotationDeg] = useToolSetting("trees.rotationDeg", 0);
   const [masks, setMasks] = useState<Record<string, "inc" | "exc">>({});
   const [err, setErr] = useState("");
 

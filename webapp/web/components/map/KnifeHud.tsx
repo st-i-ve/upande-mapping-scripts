@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useToolSetting } from "@/lib/hooks/useToolSetting";
 import { Check, ChevronDown, LocateFixed, Redo2, Slice, Undo2, Waypoints, X } from "lucide-react";
 import { mergePolygons } from "@/lib/geometry/knife";
 import { useAppStore } from "@/lib/store/appStore";
@@ -27,7 +27,8 @@ export function KnifeHud() {
   const undoSlice = useAppStore((s) => s.undoSlice);
   const redoSlice = useAppStore((s) => s.redoSlice);
   const project = useAppStore((s) => (hydrated ? s.activeProject?.name : undefined));
-  const [open, setOpen] = useState(true);
+  const [open, setOpenRaw] = useToolSetting("knife.panelOpen", true);
+  const setOpen = (f: (o: boolean) => boolean) => setOpenRaw(f(open));
   // A session open with the knife put away (after a reload, say) still shows,
   // so cuts in progress are never out of sight.
   if (!mode && !slice) return null;

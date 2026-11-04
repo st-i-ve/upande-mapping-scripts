@@ -1,11 +1,11 @@
 /**
- * A slicing session as it's stored with a project on the server: everything but
- * the undo/redo stacks, in a fixed key order so the saved and loaded copies
+ * A slicing session as it's stored with a project on the server — its cut-by-cut
+ * undo and redo included (the newest 50), in a fixed key order so the saved and loaded copies
  * serialise identically (the sync compares them as JSON).
  */
-import type { SliceSession } from "./appStore";
+import { SLICE_UNDO_LIMIT, type SliceSession } from "./appStore";
 
-export type SliceDraft = Omit<SliceSession, "history" | "future">;
+export type SliceDraft = SliceSession;
 
 export function toDraft(s: SliceSession | null | undefined): SliceDraft | null {
   if (!s) return null;
@@ -17,6 +17,8 @@ export function toDraft(s: SliceSession | null | undefined): SliceDraft | null {
     sourceWasVisible: s.sourceWasVisible,
     adopted: s.adopted,
     resumedFrom: s.resumedFrom,
+    history: s.history.slice(-SLICE_UNDO_LIMIT),
+    future: s.future.slice(0, SLICE_UNDO_LIMIT),
   };
 }
 
@@ -33,7 +35,7 @@ export function fromDraft(d: unknown, shapeNames: string[]): SliceSession | null
     sourceWasVisible: x.sourceWasVisible ?? true,
     adopted: Array.isArray(x.adopted) ? x.adopted : [],
     resumedFrom: x.resumedFrom ?? 0,
-    history: [],
-    future: [],
+    history: Array.isArray(x.history) ? x.history : [],
+    future: Array.isArray(x.future) ? x.future : [],
   };
 }

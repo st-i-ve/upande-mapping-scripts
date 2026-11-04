@@ -89,6 +89,9 @@ export interface SliceSession {
   resumedFrom: number;
 }
 
+/** Cut-by-cut undo kept for a slicing session (in memory, storage and the project). */
+export const SLICE_UNDO_LIMIT = 50;
+
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Numeric-suffix segments of a slice name: "Field 2 10" → [2, 10]. */
@@ -242,6 +245,9 @@ export interface AppState {
   overlayOpacity: number;
   /** Where the map was last looking, so a reload comes back to the same place. */
   mapView: { lat: number; lon: number; zoom: number } | null;
+  /** Tool settings that panels keep between visits and reloads (see useToolSetting). */
+  toolSettings: Record<string, unknown>;
+  setToolSetting: (key: string, value: unknown) => void;
   setMapView: (v: { lat: number; lon: number; zoom: number }) => void;
   setOverlayOpacity: (o: number) => void;
 
@@ -484,6 +490,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ overlayTiles: [...s.overlayTiles.filter((x) => x !== slug), ...(on ? [slug] : [])] })),
       overlayOpacity: 1,
       mapView: null,
+      toolSettings: {},
+      setToolSetting: (key, value) => set((s) => ({ toolSettings: { ...s.toolSettings, [key]: value } })),
       setMapView: (mapView) => set({ mapView }),
       setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
 
@@ -531,7 +539,7 @@ export const useAppStore = create<AppState>()(
                 slice: {
                   ...s.slice,
                   slices,
-                  history: [...s.slice.history, s.slice.slices],
+                  history: [...s.slice.history, s.slice.slices].slice(-SLICE_UNDO_LIMIT),
                   widths: [...s.slice.widths, width],
                   future: [], // a new cut abandons whatever redo was holding
                 },
@@ -563,7 +571,7 @@ export const useAppStore = create<AppState>()(
             slice: {
               ...s.slice,
               slices: next.slices,
-              history: [...s.slice.history, s.slice.slices],
+              history: [...s.slice.history, s.slice.slices].slice(-SLICE_UNDO_LIMIT),
               widths: [...s.slice.widths, next.width],
               future,
             },
@@ -774,10 +782,16 @@ export const useAppStore = create<AppState>()(
         // An unfinished slicing session survives a reload — its current cuts,
         // not their undo history (a huge polygon's history could fill storage,
         // and a failed write would stop the shapes saving too).
-        slice: s.slice ? { ...s.slice, history: [], future: [] } : null,
+        // The session's cut-by-cut undo comes along (newest 50), so Ctrl+Z still
+        // steps back through the cuts after a reload.
+        slice: s.slice
+          ? { ...s.slice, history: s.slice.history.slice(-SLICE_UNDO_LIMIT), future: s.slice.future.slice(0, SLICE_UNDO_LIMIT) }
+          : null,
         overlayTiles: s.overlayTiles,
         overlayOpacity: s.overlayOpacity,
         mapView: s.mapView,
+        toolSettings: s.toolSettings,
+        knifeWidth: s.knifeWidth,
       }),
     },
   ),

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Triangle, Square, Check } from "lucide-react";
+import { useToolSetting } from "@/lib/hooks/useToolSetting";
 import { useAppStore } from "@/lib/store/appStore";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { SectionCard } from "@/components/console/SectionCard";
@@ -24,12 +25,12 @@ export function TriadPanel() {
   const triadQueue = useAppStore((s) => s.triadQueue);
   const setTriadQueue = useAppStore((s) => s.setTriadQueue);
 
-  const [sideLength, setSideLength] = useState(5);
-  const [rotationDeg, setRotationDeg] = useState(0);
+  const [sideLength, setSideLength] = useToolSetting("triad.sideLength", 5);
+  const [rotationDeg, setRotationDeg] = useToolSetting("triad.rotationDeg", 0);
   // Which end the numbering starts from — bands run north→south by default and
   // triads west→east, matching how the blocks are walked on the ground.
-  const [bandDirection, setBandDirection] = useState<BandDirection>("north-south");
-  const [triadDirection, setTriadDirection] = useState<TriadDirection>("west-east");
+  const [bandDirection, setBandDirection] = useToolSetting<BandDirection>("triad.bandDirection", "north-south");
+  const [triadDirection, setTriadDirection] = useToolSetting<TriadDirection>("triad.triadDirection", "west-east");
   const [err, setErr] = useState("");
 
   // ---- sequential run over the queued shapes ----
