@@ -42,7 +42,8 @@ const appKey = () => {
   const { savedShapes, folders, units, slice } = useAppStore.getState();
   return key(savedShapes, folders, units, toDraft(slice));
 };
-const projectKey = (p: Project) => key(p.shapes, p.folders, p.units, p.draft);
+// Normalised, so a draft stored in an older form still matches the same session here.
+const projectKey = (p: Project) => key(p.shapes, p.folders, p.units, toDraft(fromDraft(p.draft)));
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Make `project` the open one, with its shapes on the map. */

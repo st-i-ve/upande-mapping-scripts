@@ -62,9 +62,9 @@ describe("appStore", () => {
       const opts = useAppStore.persist.getOptions();
       const saved = opts.partialize!(useAppStore.getState()) as Partial<AppState>;
       expect(saved.slice?.slices).toHaveLength(2);
-      expect(saved.slice?.history).toEqual([[polyA]]); // cut-by-cut undo is kept across reloads
       const cur = useAppStore.getState();
       expect(opts.merge!(saved, cur).slice?.source).toBe("Block A");
+      expect(opts.merge!(saved, cur).slice?.history).toEqual([[polyA]]); // cut-by-cut undo is kept across reloads
       expect(opts.merge!({ ...saved, savedShapes: [] }, cur).slice).toBeNull();
     });
 

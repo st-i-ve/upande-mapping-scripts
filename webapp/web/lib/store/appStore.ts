@@ -4,7 +4,8 @@
  * this store and reflects it as Leaflet layers; panels only read/write here.
  */
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
+import { SLICE_UNDO_LIMIT, fromDraft, toDraft } from "./sliceDraft";
 import type {
   UnitItem,
   UnitKind,
@@ -89,8 +90,7 @@ export interface SliceSession {
   resumedFrom: number;
 }
 
-/** Cut-by-cut undo kept for a slicing session (in memory, storage and the project). */
-export const SLICE_UNDO_LIMIT = 50;
+export { SLICE_UNDO_LIMIT };
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -342,6 +342,46 @@ const relocated = (s: AppState, from: string, to: string) => {
 };
 
 const PALETTE = ["#e5e5e5", "#9aa0a6", "#b8b8b8", "#d4d4d4", "#f5f5f5", "#8a8a8a"];
+
+/**
+ * localStorage that never throws. A write that doesn't fit (the browser keeps
+ * about 5 MB per site) is retried without the slicing session's undo steps — the
+ * project on the server still has them — and otherwise skipped with a warning.
+ * Letting it throw would break whatever change triggered the write, half-applied.
+ */
+let warnedFull = false;
+const safeStorage: StateStorage = {
+  getItem: (name) => {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    try {
+      localStorage.setItem(name, value);
+      return;
+    } catch {
+      /* too big — try a smaller copy */
+    }
+    try {
+      const v = JSON.parse(value) as { state?: { slice?: { history?: unknown[]; future?: unknown[] } | null } };
+      if (v.state?.slice) v.state.slice = { ...v.state.slice, history: [], future: [] };
+      localStorage.setItem(name, JSON.stringify(v));
+    } catch (e) {
+      if (!warnedFull) console.warn("This browser's storage is full; your work is still saved with the project.", e);
+      warnedFull = true;
+    }
+  },
+  removeItem: (name) => {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      /* nothing to do */
+    }
+  },
+};
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -747,6 +787,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "upande-mapper",
+      storage: createJSONStorage(() => safeStorage),
       // v1: shapes are drawn as outline + letter, so fill starts off. Without this
       // a previously persisted 0.4 would keep hiding the imagery.
       version: 1,
@@ -754,7 +795,7 @@ export const useAppStore = create<AppState>()(
       // opened elsewhere) is dropped rather than resumed on nothing.
       merge: (persisted, current) => {
         const m = { ...current, ...(persisted as Partial<AppState>) };
-        if (m.slice && !m.savedShapes.some((x) => x.name === m.slice!.source)) m.slice = null;
+        m.slice = fromDraft(m.slice, m.savedShapes.map((x) => x.name));
         return m;
       },
       migrate: (persisted, version) =>
@@ -779,14 +820,9 @@ export const useAppStore = create<AppState>()(
         sideTab: s.sideTab,
         openUnits: s.openUnits,
         openFolders: s.openFolders,
-        // An unfinished slicing session survives a reload — its current cuts,
-        // not their undo history (a huge polygon's history could fill storage,
-        // and a failed write would stop the shapes saving too).
-        // The session's cut-by-cut undo comes along (newest 50), so Ctrl+Z still
-        // steps back through the cuts after a reload.
-        slice: s.slice
-          ? { ...s.slice, history: s.slice.history.slice(-SLICE_UNDO_LIMIT), future: s.slice.future.slice(0, SLICE_UNDO_LIMIT) }
-          : null,
+        // An unfinished slicing session survives a reload, its cut-by-cut undo
+        // included (newest 50, stored as changes — see sliceDraft).
+        slice: toDraft(s.slice),
         overlayTiles: s.overlayTiles,
         overlayOpacity: s.overlayOpacity,
         mapView: s.mapView,
