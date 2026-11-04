@@ -15,7 +15,7 @@ import {
   LABEL_PANE,
   OVERLAY_PANE,
 } from "@/lib/map/baseLayers";
-import { cutPolygon, explodePolygons, sliceAll } from "@/lib/geometry/knife";
+import { sliceAll } from "@/lib/geometry/knife";
 import { pivotCircle, pivotSlices, pivotSpokes } from "@/lib/geometry/pivot";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import { shapeLetter } from "@/lib/shapeLabels";
@@ -24,9 +24,9 @@ import { WorkingChip } from "./WorkingChip";
 import { KnifeHud } from "./KnifeHud";
 import { shapeOfGeometry } from "@/lib/units";
 import { setWorkingShape } from "@/lib/shapeActions";
-import { undo as undoHistory, redo as redoHistory } from "@/lib/store/history";
+import { knifeTarget } from "@/lib/geometry/knifeTarget";
 import { Plus, Minus } from "lucide-react";
-import type { GeoGeometry, SavedShape } from "@/lib/types";
+import type { GeoGeometry } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
 const DEFAULT_ZOOM = 16;
@@ -298,15 +298,9 @@ export default function LeafletMap() {
     /**
      * The last cut that went through, so Ctrl+Z can take it back AND put you
      * back where you were: the path re-opened with its points (straight knife),
-     * the knife still out, and — for a working-polygon cut — the polygon back.
-     * Only valid while nothing has changed since (the refs are checked).
+     * the knife still out. Only valid while nothing has changed since (the refs are checked).
      */
-    type LastCut =
-      | { kind: "slice"; mode: KnifeMode; points: L.LatLng[]; slices: GeoGeometry[] }
-      | { kind: "working"; mode: KnifeMode; points: L.LatLng[]; poly: GeoGeometry; shapes: SavedShape[] };
-    let lastCut: LastCut | null = null;
-    /** A working-polygon cut taken back by undo, for Ctrl+Y to re-apply. */
-    let undoneCut: Extract<LastCut, { kind: "working" }> | null = null;
+    let lastCut: { mode: KnifeMode; points: L.LatLng[]; slices: GeoGeometry[] } | null = null;
     const knDots = L.layerGroup().addTo(map);
     const knCoords = (): [number, number][] => knPts.map((p) => [p.lng, p.lat]);
     /**
@@ -391,30 +385,25 @@ export default function LeafletMap() {
       return true;
     };
 
-    // Cut the working polygon and add each resulting piece as its own saved shape,
-    // then clear the working polygon — keeping it would leave a dashed twin of one
-    // piece on the map that no shape control can delete. Cut a piece further with
-    // "use" on its row in Saved shapes.
-    const applyKnifeCut = (line: [number, number][]) => {
+    /**
+     * No session yet: open one on the shape this stroke crosses, so every cut
+     * goes into a slicing session — pieces stay on screen, the original is kept,
+     * and nothing is saved until Finish. An unsaved working outline is saved
+     * first, so there is an original to keep.
+     */
+    const knOpenSession = (line: [number, number][]) => {
       const st = useAppStore.getState();
-      const poly = st.workingPolygon;
-      if (!poly || line.length < 2) return;
-      const res = cutPolygon(poly, line, st.knifeWidth || 1);
-      if (!res) return;
-      const pieces = explodePolygons(res);
-      const base = st.savedShapes.length;
-      const names = pieces.map((_, i) => `Cut ${base + i + 1}`);
-      pieces.forEach((g, i) => st.addSavedShape(names[i], g));
-      // The pieces stay together, beside the shape they were cut from (or in
-      // Polygons/Cuts) — not a folder each.
-      st.moveShapesToFolder(names, shapeOfGeometry(poly)?.folder ?? "Polygons/Cuts");
-      st.setWorkingPolygon(null);
-      try {
-        const b = L.geoJSON(res as never).getBounds();
-        if (b.isValid()) map.fitBounds(b, { padding: [28, 28] });
-      } catch {
-        /* ignore */
-      }
+      if (st.slice) return;
+      const t = knifeTarget(st.savedShapes, line, { selected: st.selectedShapes, working: st.workingPolygon });
+      if (!t) return;
+      let name: string;
+      if ("working" in t) {
+        const taken = new Set(st.savedShapes.map((x) => x.name));
+        name = "Outline";
+        for (let n = 2; taken.has(name); n++) name = `Outline ${n}`;
+        st.addSavedShape(name, st.workingPolygon!);
+      } else name = t.name;
+      useAppStore.getState().startSlice(name);
     };
     function knStop() {
       pvStop();
@@ -446,9 +435,10 @@ export default function LeafletMap() {
       const first = map.latLngToLayerPoint(knPts[0]);
       return knPts.every((p) => map.latLngToLayerPoint(p).distanceTo(first) < 6);
     };
-    // End of a stroke: apply it, then re-arm the same knife mode if we're slicing,
-    // so cut after cut needs no trip back to the tool rail. A degenerate path
-    // ends the tool instead — otherwise straight mode would never let go.
+    // End of a stroke: cut (opening a session on the crossed shape if needed),
+    // then re-arm the same knife so cut after cut needs no trip back to the rail.
+    // The view is left alone. A degenerate path ends the tool instead —
+    // otherwise straight mode would never let go.
     const knFinish = () => {
       const mode = knMode;
       const line = knCoords();
@@ -456,22 +446,12 @@ export default function LeafletMap() {
       const nowhere = knDegenerate();
       knStop();
       if (nowhere || !mode) return;
-      undoneCut = null; // a new cut ends whatever redo was holding
-      const before = useAppStore.getState();
-      if (applySliceCut(line)) {
-        const after = useAppStore.getState().slice;
-        lastCut = after && after.slices !== before.slice?.slices
-          ? { kind: "slice", mode, points, slices: after.slices }
-          : null;
-        knArm(mode);
-        return;
-      }
-      const poly = before.workingPolygon;
-      applyKnifeCut(line);
-      const after = useAppStore.getState();
-      lastCut = poly && after.savedShapes !== before.savedShapes
-        ? { kind: "working", mode, points, poly, shapes: after.savedShapes }
-        : null;
+      knOpenSession(line);
+      const before = useAppStore.getState().slice;
+      applySliceCut(line);
+      const after = useAppStore.getState().slice;
+      lastCut = after && after.slices !== before?.slices ? { mode, points, slices: after.slices } : null;
+      knArm(mode);
     };
     /** Re-arm the knife with a cut's path open for editing again. */
     const knResume = (mode: KnifeMode, points: L.LatLng[]) => {
@@ -485,28 +465,10 @@ export default function LeafletMap() {
     const knUndoCut = () => {
       const c = lastCut;
       lastCut = null;
-      if (!c) return false;
       const st = useAppStore.getState();
-      if (c.kind === "slice") {
-        if (!st.slice || st.slice.slices !== c.slices) return false; // something else happened since
-        st.undoSlice();
-      } else {
-        if (st.slice || st.savedShapes !== c.shapes || !undoHistory()) return false;
-        useAppStore.getState().setWorkingPolygon(c.poly);
-        undoneCut = c;
-      }
+      if (!c || !st.slice || st.slice.slices !== c.slices) return false; // something else happened since
+      st.undoSlice();
       knResume(c.mode, c.points);
-      return true;
-    };
-    /** Ctrl+Y after that undo: re-apply the working-polygon cut as it was. */
-    const knRedoCut = () => {
-      const c = undoneCut;
-      undoneCut = null;
-      if (!c) return false;
-      if (useAppStore.getState().workingPolygon !== c.poly || !redoHistory()) return false;
-      useAppStore.getState().setWorkingPolygon(null);
-      knStop();
-      lastCut = { ...c, shapes: useAppStore.getState().savedShapes };
       return true;
     };
     const knUp = () => {
@@ -581,6 +543,7 @@ export default function LeafletMap() {
       if (pvTemp) { map.removeLayer(pvTemp); pvTemp = null; }
       if (pvSpoke) { map.removeLayer(pvSpoke); pvSpoke = null; }
       useMapBridge.getState().setKnifeArmed(false);
+      if (useMapBridge.getState().tool === "circle") useMapBridge.getState().setTool("select");
     }
     const pvMove = (e: L.LeafletMouseEvent) => {
       if (!pvCenter) return;
@@ -697,7 +660,6 @@ export default function LeafletMap() {
       pivotDraw: () => pvArm(),
       knifePopPoint: () => knPopPoint(),
       knifeUndoCut: () => knUndoCut(),
-      knifeRedoCut: () => knRedoCut(),
       stopModes: () => {
         disableFreehand();
         knStop();
@@ -726,6 +688,20 @@ export default function LeafletMap() {
       },
     });
 
+    // The cursor follows the tool: a knife for the knife, a pencil for the
+    // pencil… (styles in globals.css, keyed on data-tool).
+    const applyCursor = () => {
+      const { tool, knifeMode } = useMapBridge.getState();
+      map.getContainer().dataset.tool = knifeMode ? "knife" : tool;
+    };
+    applyCursor();
+    const unsubTool = useMapBridge.subscribe(applyCursor);
+    // A Geoman shape finished drawing: the tool is done, back to select.
+    map.on("pm:drawend", () => {
+      const b = useMapBridge.getState();
+      if (b.tool === "polygon" || b.tool === "rect") b.setTool("select");
+    });
+
     // A new blade width (from the knife panel) redraws the band on a path in progress.
     const unsubWidth = useAppStore.subscribe((st, prev) => {
       if (knMode && st.knifeWidth !== prev.knifeWidth) knRedraw();
@@ -733,6 +709,7 @@ export default function LeafletMap() {
 
     return () => {
       unsubWidth();
+      unsubTool();
       map.off();
       map.remove();
       mapRef.current = null;

@@ -1,83 +1,63 @@
 "use client";
 
-import { Scissors } from "lucide-react";
+import { Scissors, Slice, Waypoints } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
+import { runTool } from "@/lib/toolActions";
 import { SectionCard } from "@/components/console/SectionCard";
+import { BladeWidth } from "@/components/console/BladeWidth";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
+/** The knife's settings — the same ones as its panel on the map. */
 export function KnifePanel() {
   const hydrated = useHydrated();
-  const workingPolygon = useAppStore((s) => s.workingPolygon);
-  const knifeWidth = useAppStore((s) => s.knifeWidth);
-  const setKnifeWidth = useAppStore((s) => s.setKnifeWidth);
   const slice = useAppStore((s) => s.slice);
   const handle = useMapBridge((s) => s.handle);
-
+  const mode = useMapBridge((s) => s.knifeMode);
   const slicing = hydrated ? slice : null;
-  // While slicing, the knife cuts the slice set — no working polygon needed.
-  const ready = !!handle && (slicing != null || (hydrated && !!workingPolygon));
-
-
 
   return (
     <SectionCard
       title={<span className="inline-flex items-center gap-1.5"><Scissors size={11} /> Knife</span>}
       meta={slicing ? <span className="text-[9px] uppercase tracking-wider text-primary">slicing</span> : undefined}
     >
-      {slicing ? (
-        <p className="mb-2 text-[10px] text-muted-foreground/70">
-          Slicing <strong>{slicing.source}</strong> — cut as many times as you like, changing the
-          blade width between cuts. The original is kept; nothing is saved until you finish.
-          {slicing.resumedFrom > 0 && (
-            <> Picked up its {slicing.resumedFrom} existing slices, so you carry on cutting those.</>
-          )}
-        </p>
-      ) : (
-        <p className="mb-2 text-[10px] text-muted-foreground/70">
-          Cut the working polygon along a line, leaving a gap the width of the blade.
-          Each piece becomes its own saved shape and the working outline clears.
-          To slice one saved shape repeatedly, select it and pick the <strong>scissors</strong> on the left rail (or on its row in the Browser).
-        </p>
-      )}
+      <p className="mb-2 text-[10px] text-muted-foreground/70">
+        Cut across any shape — it opens a slicing session on that shape, and you can cut it as many
+        times as you like, changing the blade width between cuts. <strong>Finish</strong> saves the
+        pieces as shapes; the original is always kept. A selected shape, or the working polygon,
+        is cut first when the line crosses more than one.
+      </p>
 
-      <label className="block text-[10px] text-muted-foreground">
-        Blade width / gap (m)
-        <Input aria-label="Blade width in metres" type="number" step={0.1} min={0.1} value={knifeWidth} onChange={(e) => setKnifeWidth(+e.target.value)} className="mt-1 h-7 tabular" />
-      </label>
-      <div className="mt-2 flex gap-1.5">
-        <Button size="sm" className="flex-1" disabled={!ready} onClick={() => handle?.knifeStraight()}>Straight cut</Button>
-        <Button size="sm" variant="secondary" className="flex-1" disabled={!ready} onClick={() => handle?.knifeFreehand()}>Freehand cut</Button>
+      <BladeWidth />
+      <div className="mt-2.5 flex gap-1.5">
+        <Button size="sm" className="flex-1" variant={mode === "straight" ? "default" : "secondary"} disabled={!handle}
+          onClick={() => runTool("knife-straight", true)}>
+          <Waypoints size={11} /> Straight <kbd className="font-mono text-[9px] opacity-70">K</kbd>
+        </Button>
+        <Button size="sm" className="flex-1" variant={mode === "freehand" ? "default" : "secondary"} disabled={!handle}
+          onClick={() => runTool("knife-draw", true)}>
+          <Slice size={11} /> Freehand <kbd className="font-mono text-[9px] opacity-70">⇧K</kbd>
+        </Button>
       </div>
       <p className="mt-2 text-[9px] text-muted-foreground/60">
         Straight: click points on the map, <strong>Backspace</strong> removes the last one, and
-        click the last point again — or double-click — to tie off the cut. The knife stays out,
-        so you can start the next cut somewhere else. Freehand: drag across the polygon. The
-        pale band shows the blade at its true width.
-      </p>
-      <p className="mt-1 text-[9px] text-muted-foreground/60">
-        The knife stays out for the next cut — press <strong>Esc</strong> (or double-click
-        without drawing a path) to put it away.
+        click the last point again — or double-click — to cut. Freehand: drag across the shape.
+        The pale band shows the blade at its true width. <strong>Enter</strong> finishes,
+        <strong> Esc</strong> puts the knife away.
       </p>
 
       {slicing && (
         <p className="mt-2.5 rounded-md border border-border/60 bg-muted/30 p-2 text-[10px] text-muted-foreground">
+          Slicing <strong className="text-foreground">{slicing.source}</strong> ·{" "}
           {slicing.widths.length} cut{slicing.widths.length === 1 ? "" : "s"} ·{" "}
-          <strong className="text-foreground">{slicing.slices.length} segments</strong>
+          <strong className="text-foreground">{slicing.slices.length} pieces</strong>
           {slicing.widths.length > 0 && (
             <span className="tabular block text-[9px] text-muted-foreground/70">
               {slicing.widths.map((w) => `${w}m`).join(" · ")}
             </span>
           )}
-          <span className="mt-1 block">Finish or discard them in <strong>Segments</strong> above.</span>
-        </p>
-      )}
-
-      {!slicing && !workingPolygon && hydrated && (
-        <p className="mt-1.5 text-[10px] text-muted-foreground/60">
-          Set a working polygon first — Parameters, or <strong>use</strong> on a saved shape to cut a piece again.
+          <span className="mt-1 block">Finish or discard them in <strong>Segments</strong> above, or on the map.</span>
         </p>
       )}
     </SectionCard>

@@ -7,7 +7,7 @@ import { isTypingTarget, type ShapeKeyEvent } from "./shapeKeys";
 export type ToolId =
   | "select" | "pencil" | "polygon" | "rect" | "circle"
   | "edit" | "move" | "erase"
-  | "knife-straight" | "knife-draw" | "slice"
+  | "knife-straight" | "knife-draw"
   | "union" | "subtract" | "intersect"
   | "undo" | "redo" | "delete" | "clear";
 
@@ -28,9 +28,8 @@ export const TOOL_INFO: Record<ToolId, ToolInfo> = {
   edit: { name: "Edit vertices", key: "E", desc: "Drag a shape's corner points to reshape it." },
   move: { name: "Move", key: "M", desc: "Drag a drawn shape to a new place." },
   erase: { name: "Erase drawing", key: "X", desc: "Click a drawn shape to remove it." },
-  "knife-straight": { name: "Knife — straight", key: "K", desc: "Click points along the cut, then click the last point again to cut." },
-  "knife-draw": { name: "Knife — freehand", key: "Shift+K", desc: "Drag across the polygon to cut along the line you draw." },
-  slice: { name: "Slice selected", key: "S", desc: "Cut the one selected shape as many times as you like, keeping the original." },
+  "knife-straight": { name: "Knife", key: "K", desc: "Cut across a shape as many times as you like, then Finish to save the pieces — the original is kept." },
+  "knife-draw": { name: "Knife — freehand", key: "Shift+K", desc: "The knife, cutting along a line you drag instead of points you click." },
   union: { name: "Union", key: "U", desc: "Merge the selected shapes into one." },
   subtract: { name: "Subtract", key: "−", desc: "Take the other selected shapes away from the first one." },
   intersect: { name: "Intersect", key: "I", desc: "Keep only where the selected shapes overlap." },
@@ -44,7 +43,7 @@ export const TOOL_INFO: Record<ToolId, ToolInfo> = {
 const KEYS: Record<string, ToolId> = {
   v: "select", p: "pencil", d: "polygon", r: "rect", c: "circle",
   e: "edit", m: "move", x: "erase",
-  k: "knife-straight", "shift+k": "knife-draw", s: "slice",
+  k: "knife-straight", "shift+k": "knife-draw",
   u: "union", "-": "subtract", i: "intersect",
   "shift+delete": "clear", "shift+backspace": "clear",
 };

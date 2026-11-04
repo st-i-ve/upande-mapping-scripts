@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import {
   MousePointer2, Hexagon, Square, Spline, Move, Eraser, Trash2, PencilLine, Circle,
-  Slice, Waypoints, Scissors, Mountain, Sun, Layers, Ruler, Compass, Puzzle,
+  Slice, Mountain, Sun, Layers, Ruler, Compass, Puzzle,
   SquaresUnite, SquaresSubtract, SquaresIntersect, Undo2, Redo2, CircleX, type LucideIcon,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
@@ -36,8 +36,7 @@ const TOOL_GROUPS: { label: string; tools: { id: ToolId; icon: LucideIcon }[] }[
   {
     label: "Cut",
     tools: [
-      { id: "knife-straight", icon: Waypoints },
-      { id: "knife-draw", icon: Slice },
+      { id: "knife-straight", icon: Slice },
     ],
   },
 ];
@@ -152,10 +151,9 @@ export function LeftRail() {
     );
   }
 
-  // The knife can be put away (Esc) or switched (its map panel) without the
-  // rail — so the knife's own state decides which knife button is lit.
-  const active = knifeMode ? (knifeMode === "straight" ? "knife-straight" : "knife-draw")
-    : tool.startsWith("knife") ? "select" : tool;
+  // The knife can be put away (Esc) without the rail, so its own state
+  // decides whether the knife button is lit — straight or freehand alike.
+  const active = knifeMode ? "knife-straight" : tool.startsWith("knife") ? "select" : tool;
 
   const n = selected.length;
   const canUndo = slicing ? sliceUndo : pastLen > 0;
@@ -170,11 +168,6 @@ export function LeftRail() {
           {g.tools.map((t) => (
             <RailButton key={t.id} id={t.id} icon={t.icon} disabled={!handle} active={active === t.id} />
           ))}
-          {g.label === "Cut" && (
-            <RailButton id="slice" icon={Scissors} disabled={!handle || n !== 1}
-              name={n === 1 ? `Slice ${selected[0]}` : undefined}
-              note={n !== 1 ? "Select one shape first." : undefined} />
-          )}
         </div>
       ))}
 

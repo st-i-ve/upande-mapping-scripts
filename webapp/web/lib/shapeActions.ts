@@ -6,6 +6,7 @@ import { useAppStore, type SideTab, type UnitKind } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { booleanOp, type BooleanOp } from "@/lib/geometry/booleanOps";
 import { circleFit } from "@/lib/geometry/pivot";
+import { askConfirm } from "@/lib/confirm";
 
 /** The selected shapes, in list order (it matters: subtract = first minus the rest). */
 export function selectedInOrder() {
@@ -43,16 +44,17 @@ export function setWorkingShape(name: string) {
   st.setSelectedShapes([name]);
 }
 
-/** Start slicing one saved shape, with it on screen and the knife out. */
+/**
+ * Start slicing one saved shape with the knife out (straight). The view is left
+ * where it is — the knife's own cut on any shape does the same without this.
+ */
 export function sliceShape(name: string) {
   const st = useAppStore.getState();
-  const shape = st.savedShapes.find((s) => s.name === name);
-  if (!shape) return;
+  if (!st.savedShapes.some((s) => s.name === name)) return;
   st.startSlice(name);
-  st.setSideTab("tool");
-  const h = useMapBridge.getState().handle;
-  h?.fitGeometry(shape.geometry);
-  h?.knifeFreehand();
+  const b = useMapBridge.getState();
+  if (b.knifeMode !== "straight") b.handle?.knifeStraight();
+  b.setTool("knife-straight");
 }
 
 /** The one selected shape, if it's a circle that can become a pivot. */
@@ -91,4 +93,28 @@ export function goToSection(tab: SideTab, id?: string) {
   requestAnimationFrame(() =>
     requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })),
   );
+}
+
+/**
+ * Save the slicing session's pieces as shapes (default names), keeping the
+ * original. The knife stays out, so the next cut can start on another shape.
+ */
+export function finishSlicing() {
+  const st = useAppStore.getState();
+  if (!st.slice || st.slice.slices.length < 2) return [];
+  return st.finishSlice();
+}
+
+/** Drop the session's cuts; the shape is left exactly as it was. */
+export async function discardSlicing() {
+  const st = useAppStore.getState();
+  if (!st.slice) return;
+  if (st.slice.widths.length) {
+    const ok = await askConfirm({
+      title: `Discard ${st.slice.widths.length} cut${st.slice.widths.length === 1 ? "" : "s"}?`,
+      message: `${st.slice.source} stays as it was — nothing has been saved yet.`,
+    });
+    if (!ok) return;
+  }
+  useAppStore.getState().cancelSlice();
 }

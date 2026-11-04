@@ -53,12 +53,10 @@ export interface MapHandle {
   knifePopPoint: () => boolean;
   /**
    * Take back the cut that just went through and re-open its path for editing
-   * (knife still out; a working polygon comes back). False if there's no such
+   * (knife still out). False if there's no such
    * cut, or something has changed since.
    */
   knifeUndoCut: () => boolean;
-  /** Re-apply a working-polygon cut that knifeUndoCut took back. */
-  knifeRedoCut: () => boolean;
   /**
    * Drop the last vertex of a polygon being drawn. True if it consumed the
    * request, so Ctrl+Z / Backspace mid-draw steps back a click, not a whole shape.

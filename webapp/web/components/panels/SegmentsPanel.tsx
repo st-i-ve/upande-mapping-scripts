@@ -13,7 +13,6 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { checkNames, namesAreClean, NAME_ISSUE_TEXT } from "@/lib/shapeNames";
-import { mergePolygons } from "@/lib/geometry/knife";
 
 /**
  * The segments of a slice in progress — transient, and only on screen while a
@@ -43,12 +42,10 @@ export function SegmentsPanel() {
   const issues = review ? checkNames(review, existing, freed) : [];
   const clean = review ? namesAreClean(review, existing, freed) : false;
 
+  // The view stays where it is, and the knife stays out for the next shape.
   const port = () => {
-    const merged = mergePolygons(session.slices);
     finishSlice(review ?? undefined);
     setReview(null);
-    handle?.knifeStop();
-    if (merged) handle?.fitGeometry(merged);
   };
 
   const stop = () => {

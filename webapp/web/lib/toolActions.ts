@@ -5,7 +5,7 @@
 import { useAppStore, type SideTab } from "@/lib/store/appStore";
 import { useMapBridge, type MapHandle } from "@/lib/map/mapBridge";
 import { TOOL_INFO, type ToolId } from "@/lib/map/tools";
-import { combineSelected, deleteSelected, sliceShape } from "@/lib/shapeActions";
+import { combineSelected, deleteSelected } from "@/lib/shapeActions";
 import { redoStep, undoStep } from "@/lib/undoActions";
 
 /** Sticky tools: picking one makes it the map's active mode. */
@@ -44,11 +44,6 @@ export function runTool(id: ToolId, fromKey = false) {
     return;
   }
   switch (id) {
-    case "slice":
-      if (st.selectedShapes.length !== 1) return bridge.flashTool("Select one shape to slice.");
-      sliceShape(st.selectedShapes[0]);
-      bridge.setTool("knife-draw");
-      return;
     case "union":
     case "subtract":
     case "intersect":

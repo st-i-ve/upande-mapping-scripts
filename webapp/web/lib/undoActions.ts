@@ -23,8 +23,6 @@ export function undoStep(): boolean {
 }
 
 export function redoStep(): boolean {
-  const h = useMapBridge.getState().handle;
-  if (h?.knifeRedoCut?.()) return true;
   const st = useAppStore.getState();
   if (st.slice) {
     if (!st.slice.future.length) return false;
