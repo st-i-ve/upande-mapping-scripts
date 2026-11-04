@@ -21,6 +21,7 @@ import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import { shapeLetter } from "@/lib/shapeLabels";
 import { LayerPicker } from "./LayerPicker";
 import { WorkingChip } from "./WorkingChip";
+import { KnifeHud } from "./KnifeHud";
 import { shapeOfGeometry } from "@/lib/units";
 import { setWorkingShape } from "@/lib/shapeActions";
 import { undo as undoHistory, redo as redoHistory } from "@/lib/store/history";
@@ -420,6 +421,7 @@ export default function LeafletMap() {
       knPts = [];
       knMode = null;
       useMapBridge.getState().setKnifeArmed(false);
+      useMapBridge.getState().setKnifeMode(null);
       map.off("mousedown", knDown);
       map.off("mousemove", knMove);
       map.off("mouseup", knUp);
@@ -558,6 +560,7 @@ export default function LeafletMap() {
       }
       knMode = mode;
       useMapBridge.getState().setKnifeArmed(true);
+      useMapBridge.getState().setKnifeMode(mode === "draw" ? "freehand" : "straight");
       // The blade band is sized in pixels, so it has to be redrawn on zoom.
       map.on("zoomend", knRedraw);
     }
@@ -723,7 +726,13 @@ export default function LeafletMap() {
       },
     });
 
+    // A new blade width (from the knife panel) redraws the band on a path in progress.
+    const unsubWidth = useAppStore.subscribe((st, prev) => {
+      if (knMode && st.knifeWidth !== prev.knifeWidth) knRedraw();
+    });
+
     return () => {
+      unsubWidth();
       map.off();
       map.remove();
       mapRef.current = null;
@@ -1101,6 +1110,7 @@ export default function LeafletMap() {
       <div ref={hostRef} className="h-full w-full" />
       <LayerPicker />
       <WorkingChip />
+      <KnifeHud />
       <div className="absolute left-3 top-3 z-[600] flex flex-col overflow-hidden rounded-lg border border-border bg-popover/90 shadow-lg backdrop-blur"
         onDoubleClick={(e) => e.stopPropagation()}>
         <button aria-label="Zoom in" title="Zoom in" disabled={zoom >= 22}

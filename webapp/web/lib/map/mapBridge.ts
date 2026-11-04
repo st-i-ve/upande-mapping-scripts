@@ -82,6 +82,15 @@ interface MapBridge {
   picking: boolean;
   /** True while a knife mode is armed. Mirrors handle.knifeArmed() for readers. */
   knifeArmed: boolean;
+  /** Which knife is out — straight path or freehand drag — or null when it's put away. */
+  knifeMode: "straight" | "freehand" | null;
+  setKnifeMode: (m: "straight" | "freehand" | null) => void;
+  /** The left-rail tool last picked (by click or shortcut key). */
+  tool: string;
+  setTool: (t: string) => void;
+  /** A short message from a tool that couldn't run (shown beside the rail). */
+  toolFlash: string | null;
+  flashTool: (msg: string | null) => void;
   setHandle: (h: MapHandle | null) => void;
   setPicking: (p: boolean) => void;
   setKnifeArmed: (k: boolean) => void;
@@ -96,6 +105,15 @@ export const useMapBridge = create<MapBridge>((set) => ({
   setLayers: (p) => set(p),
   picking: false,
   knifeArmed: false,
+  knifeMode: null,
+  setKnifeMode: (knifeMode) => set({ knifeMode }),
+  tool: "select",
+  setTool: (tool) => set({ tool }),
+  toolFlash: null,
+  flashTool: (toolFlash) => {
+    set({ toolFlash });
+    if (toolFlash) setTimeout(() => set((s) => (s.toolFlash === toolFlash ? { toolFlash: null } : {})), 3000);
+  },
   setHandle: (handle) => set({ handle }),
   setPicking: (picking) => set({ picking }),
   setKnifeArmed: (knifeArmed) => set({ knifeArmed }),

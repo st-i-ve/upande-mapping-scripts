@@ -5,6 +5,8 @@ import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { resolveShapeKey } from "@/lib/map/shapeKeys";
 import { redoStep, undoStep } from "@/lib/undoActions";
+import { resolveToolKey } from "@/lib/map/tools";
+import { runTool } from "@/lib/toolActions";
 
 /**
  * Map keyboard shortcuts:
@@ -15,12 +17,19 @@ import { redoStep, undoStep } from "@/lib/undoActions";
  *   being placed, and otherwise removes the selected saved shapes — or, with none
  *   selected, the unsaved drawing.
  * - Escape puts the knife away (and only the knife).
+ * - Single letters pick a rail tool (K knife, V select, … — see lib/map/tools.ts).
  *
  * Reads state at keypress time so the listener binds once for the map's life.
  */
 export function useShapeKeyboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const tool = resolveToolKey(e);
+      if (tool) {
+        e.preventDefault();
+        if (!e.repeat) runTool(tool, true);
+        return;
+      }
       const action = resolveShapeKey(e);
       if (!action) return;
       const handle = useMapBridge.getState().handle;
