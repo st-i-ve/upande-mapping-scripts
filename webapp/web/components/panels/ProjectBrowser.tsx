@@ -10,6 +10,7 @@ import {
 import { KIND_FOLDER, KIND_ORDER, kindOfFolder, type FolderKind } from "@/lib/store/kinds";
 import { downloadGeoJson } from "@/lib/exportGeo";
 import { askConfirm } from "@/lib/confirm";
+import { sourceNameOf } from "@/lib/units";
 import type { UnitItem } from "@/lib/types";
 import { exportShapesEach, exportShapesTogether } from "@/lib/exportGeo";
 import { useAppStore } from "@/lib/store/appStore";
@@ -20,7 +21,7 @@ import {
   adoptProject, closeProject, flushProject, openProject, saveNow, useProjectSync,
 } from "@/lib/project/sync";
 import { allFolders, baseName, childFolders, folderOf, parentOf, within } from "@/lib/store/folders";
-import { deleteSelected, goToUnits, selectedInOrder, makePivotFromSelected, selectedCircle, sliceShape } from "@/lib/shapeActions";
+import { deleteSelected, goToUnits, selectedInOrder, setWorkingShape, makePivotFromSelected, selectedCircle, sliceShape } from "@/lib/shapeActions";
 import { SectionCard } from "@/components/console/SectionCard";
 import { CloudBackupButton, CloudBackupForm } from "@/components/panels/CloudBackup";
 import { Button } from "@/components/ui/button";
@@ -344,6 +345,8 @@ interface TreeCtx {
   byFolder: Map<string, SavedShape[]>;
   /** Index in savedShapes, for the letter the map draws. */
   index: Map<string, number>;
+  /** The shape the working polygon (the dashed outline) was taken from. */
+  workingName?: string;
   /** Generated results shown (search applied), by folder. */
   unitsByFolder: Map<string, UnitItem[]>;
   /** Folders with a visible shape somewhere under them (search applied). */
@@ -402,11 +405,18 @@ function ShapeRow({ s, ctx, depth }: { s: SavedShape; ctx: TreeCtx; depth: numbe
       ) : (
         <>
           <button className={`min-w-0 flex-1 truncate text-left ${s.visible ? "text-foreground" : "text-muted-foreground/60"}`}
-            onClick={click} onDoubleClick={() => handle?.fitGeometry(s.geometry)}
-            title={`${s.name} — click to select (Ctrl/Shift adds), double-click to zoom, drag into a folder`}>
+            onClick={click} onDoubleClick={() => { setWorkingShape(s.name); handle?.fitGeometry(s.geometry); }}
+            title={`${s.name} — click to select (Ctrl/Shift adds), double-click to use it as the working polygon, drag into a folder`}>
             {s.name}
+            {!s.visible && <span className="ml-1 text-[9px] italic">hidden</span>}
           </button>
-          <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+          {ctx.workingName === s.name && (
+            <span title="This is the working polygon (the dashed outline Generate and the knife use)"
+              className="flex shrink-0 items-center gap-0.5 rounded border border-[#f5b942]/70 px-1 text-[9px] text-[#f5b942]">
+              <Target size={9} /> working
+            </span>
+          )}
+          <span className="hidden shrink-0 items-center gap-1.5 group-hover/row:flex group-focus-within/row:flex">
             <button className={ICON} title="Zoom to it" aria-label={`Zoom to ${s.name}`} onClick={() => handle?.fitGeometry(s.geometry)}><LocateFixed size={11} /></button>
             <button className={ICON} title="Use as the working polygon (Generate / knife)" aria-label={`Use ${s.name}`} onClick={() => st().setWorkingPolygon(s.geometry)}><Target size={11} /></button>
             <button className={ICON} title="Slice it repeatedly with the knife (original kept)" aria-label={`Slice ${s.name}`} onClick={() => sliceShape(s.name)}><Scissors size={11} /></button>
@@ -478,7 +488,7 @@ function UnitRow({ u, depth }: { u: UnitItem; depth: number }) {
               title={`${u.name} — ${u.count.toLocaleString()} ${u.kind}. Click to show on the map, double-click to rename.`}>
               {u.name} <span className="tabular font-normal text-muted-foreground/70">{u.count.toLocaleString()}</span>
             </button>
-            <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+            <span className="hidden shrink-0 items-center gap-1.5 group-hover/row:flex group-focus-within/row:flex">
               <button className={ICON} title="Zoom to it" aria-label={`Zoom to ${u.name}`} onClick={() => void zoom()}><LocateFixed size={11} /></button>
               <button className={ICON} title="Export as GeoJSON" aria-label={`Export ${u.name}`} onClick={() => void exportIt()}><Download size={11} /></button>
               <button className={ICON} title="Rename" aria-label={`Rename ${u.name}`} onClick={() => setRenaming(true)}><Pencil size={11} /></button>
@@ -572,7 +582,7 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
               title={`${path} — click to open or close, double-click to rename, drag to move`}>
               {baseName(path)} <span className="tabular font-normal text-muted-foreground/70">{total}</span>
             </button>
-            <span className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+            <span className="hidden shrink-0 items-center gap-1.5 group-hover/row:flex group-focus-within/row:flex">
               <button className={ICON} title="Select every shape in it" aria-label={`Select all in ${path}`}
                 onClick={() => st().setSelectedShapes(inside.map((s) => s.name))}><Check size={11} /></button>
               <button className={ICON} title="Export everything in it as one GeoJSON" aria-label={`Export ${path}`} disabled={!inside.length}
@@ -678,9 +688,11 @@ function ShapeTree() {
   const shapesVisible = useAppStore((s) => s.shapesVisible);
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
   const unitsAll = useAppStore((s) => s.units);
+  const workingPolygon = useAppStore((s) => s.workingPolygon);
   const st = useAppStore.getState;
   const [query, setQuery] = useState("");
-  const [open, setOpenSet] = useState<Set<string>>(() => new Set());
+  const openFolders = useAppStore((s) => s.openFolders);
+  const open = useMemo(() => new Set(openFolders), [openFolders]);
   const [rootOpen, setRootOpen] = useState(true);
   const rootDrop = useDropInto("");
 
@@ -716,10 +728,11 @@ function ShapeTree() {
     });
     return {
       all, byFolder, unitsByFolder, index, nonEmpty, searching: !!q, open,
-      toggle: (p) => setOpenSet((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n; }),
-      setOpen: (p, v) => setOpenSet((o) => { const n = new Set(o); if (v) n.add(p); else n.delete(p); return n; }),
+      workingName: hydrated ? sourceNameOf(workingPolygon) : undefined,
+      toggle: (p) => useAppStore.getState().setFolderOpen(p, !open.has(p)),
+      setOpen: (p, v) => useAppStore.getState().setFolderOpen(p, v),
     };
-  }, [shapes, units, all, query, open]);
+  }, [shapes, units, all, query, open, workingPolygon, hydrated]);
 
   const newFolder = () => {
     const p = st().createFolder(activeFolder);
@@ -745,7 +758,7 @@ function ShapeTree() {
           aria-label="Export all shapes" disabled={!shapes.length} onClick={() => exportShapesEach(shapes, rootName)}>
           <Download size={13} />
         </button>
-        <button className={ICON} title="Collapse all folders" aria-label="Collapse all folders" onClick={() => { setOpenSet(new Set()); st().setActiveFolder(""); }}>
+        <button className={ICON} title="Collapse all folders" aria-label="Collapse all folders" onClick={() => { st().collapseAllFolders(); st().setActiveFolder(""); }}>
           <ChevronsDownUp size={13} />
         </button>
         <Switch checked={shapesVisible} onCheckedChange={setShapesVisibleSafe} aria-label="Show shapes on the map" />

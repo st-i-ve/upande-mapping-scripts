@@ -35,19 +35,22 @@ export const shapeKind = (s: Pick<SavedShape, "geometry">): ShapeKind =>
   circleFit(s.geometry) ? "pivots" : "polygons";
 
 /**
- * Where a new shape goes. A pivot gets a folder of its own under Pivots, so the
- * blocks cut from it gather beside it. Anything else goes to Polygons — or the
- * open folder, if that's already somewhere inside Polygons.
+ * Where a new shape goes: a folder of its own under its type — Pivots/<name> or
+ * Polygons/<name> — so the pieces later cut from it gather beside it. If a folder
+ * inside Polygons is open, a new polygon goes in there instead.
  */
 export function defaultFolder(name: string, kind: ShapeKind, activeFolder: string): string {
-  if (kind === "pivots") return `${KIND_FOLDER.pivots}/${name.replace(/\//g, "-")}`;
-  return activeFolder && within(activeFolder, KIND_FOLDER.polygons) ? activeFolder : KIND_FOLDER.polygons;
+  const own = name.replace(/\//g, "-");
+  if (kind === "pivots") return `${KIND_FOLDER.pivots}/${own}`;
+  const insidePolygons = activeFolder && activeFolder !== KIND_FOLDER.polygons && within(activeFolder, KIND_FOLDER.polygons);
+  return insidePolygons ? activeFolder : `${KIND_FOLDER.polygons}/${own}`;
 }
 
 /**
  * File everything that isn't in a type folder yet. A folder of shapes moves as a
  * whole — under Pivots if it holds a pivot circle, else under Polygons — and a
- * loose shape moves with the slices cut from it. Nothing already filed is touched.
+ * loose shape gets a folder of its own there, with the slices cut from it.
+ * Nothing already filed is touched.
  */
 export function arrangeByType(shapes: SavedShape[], folders: string[]): { shapes: SavedShape[]; folders: string[] } {
   const isFiled = (path: string) => !!path && kindOfFolder(path) != null;
@@ -80,7 +83,7 @@ export function arrangeByType(shapes: SavedShape[], folders: string[]): { shapes
       for (const m of members) moveTo.set(m.name, to + folderOf(m).slice(top.length));
     } else {
       const head = key.slice(5);
-      const to = kind === "pivots" ? `${KIND_FOLDER.pivots}/${head}` : KIND_FOLDER.polygons;
+      const to = `${KIND_FOLDER[kind]}/${head.replace(/\//g, "-")}`;
       for (const m of members) moveTo.set(m.name, to);
     }
   }

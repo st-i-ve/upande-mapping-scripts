@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
@@ -20,14 +20,20 @@ import { pivotCircle, pivotSlices, pivotSpokes } from "@/lib/geometry/pivot";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
 import { shapeLetter } from "@/lib/shapeLabels";
 import { LayerPicker } from "./LayerPicker";
+import { WorkingChip } from "./WorkingChip";
+import { shapeOfGeometry } from "@/lib/units";
+import { setWorkingShape } from "@/lib/shapeActions";
+import { undo as undoHistory, redo as redoHistory } from "@/lib/store/history";
 import { Plus, Minus } from "lucide-react";
-import type { GeoGeometry } from "@/lib/types";
+import type { GeoGeometry, SavedShape } from "@/lib/types";
 
 const DEFAULT_CENTER: L.LatLngExpression = [0.0686, 35.748];
 const DEFAULT_ZOOM = 16;
 const ACCENT = "#e5e5e5";
 
 const genRenderer = L.canvas({ padding: 0.5 });
+/** The working polygon's highlight — amber, so it reads apart from white selection. */
+const WORKING = "#f5b942";
 
 export default function LeafletMap() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -80,6 +86,8 @@ export default function LeafletMap() {
   const overlaysRef = useRef<Record<string, L.Layer>>({});
   /** Puts a standard base map on screen by id, "base:<name>". Set at bootstrap. */
   const switchBaseRef = useRef<(id: string) => void>(() => {});
+  /** The last click on a saved shape, to spot a double-click across a redraw. */
+  const lastShapeClick = useRef<{ name: string; at: number } | null>(null);
   const keyedRef = useRef<Record<string, L.Layer>>({});
   /** Imported layers on screen, by slug, with the state they were built from. */
   const overlayLayersRef = useRef<Record<string, { key: string; layer: L.TileLayer }>>({});
@@ -286,6 +294,18 @@ export default function LeafletMap() {
      * (empty, therefore tool-ending) path.
      */
     let knClosedAt = 0;
+    /**
+     * The last cut that went through, so Ctrl+Z can take it back AND put you
+     * back where you were: the path re-opened with its points (straight knife),
+     * the knife still out, and — for a working-polygon cut — the polygon back.
+     * Only valid while nothing has changed since (the refs are checked).
+     */
+    type LastCut =
+      | { kind: "slice"; mode: KnifeMode; points: L.LatLng[]; slices: GeoGeometry[] }
+      | { kind: "working"; mode: KnifeMode; points: L.LatLng[]; poly: GeoGeometry; shapes: SavedShape[] };
+    let lastCut: LastCut | null = null;
+    /** A working-polygon cut taken back by undo, for Ctrl+Y to re-apply. */
+    let undoneCut: Extract<LastCut, { kind: "working" }> | null = null;
     const knDots = L.layerGroup().addTo(map);
     const knCoords = (): [number, number][] => knPts.map((p) => [p.lng, p.lat]);
     /**
@@ -382,7 +402,11 @@ export default function LeafletMap() {
       if (!res) return;
       const pieces = explodePolygons(res);
       const base = st.savedShapes.length;
-      pieces.forEach((g, i) => st.addSavedShape(`Cut ${base + i + 1}`, g));
+      const names = pieces.map((_, i) => `Cut ${base + i + 1}`);
+      pieces.forEach((g, i) => st.addSavedShape(names[i], g));
+      // The pieces stay together, beside the shape they were cut from (or in
+      // Polygons/Cuts) — not a folder each.
+      st.moveShapesToFolder(names, shapeOfGeometry(poly)?.folder ?? "Polygons/Cuts");
       st.setWorkingPolygon(null);
       try {
         const b = L.geoJSON(res as never).getBounds();
@@ -426,14 +450,62 @@ export default function LeafletMap() {
     const knFinish = () => {
       const mode = knMode;
       const line = knCoords();
+      const points = knPts.slice();
       const nowhere = knDegenerate();
       knStop();
-      if (nowhere) return;
+      if (nowhere || !mode) return;
+      undoneCut = null; // a new cut ends whatever redo was holding
+      const before = useAppStore.getState();
       if (applySliceCut(line)) {
-        if (mode) knArm(mode);
+        const after = useAppStore.getState().slice;
+        lastCut = after && after.slices !== before.slice?.slices
+          ? { kind: "slice", mode, points, slices: after.slices }
+          : null;
+        knArm(mode);
         return;
       }
+      const poly = before.workingPolygon;
       applyKnifeCut(line);
+      const after = useAppStore.getState();
+      lastCut = poly && after.savedShapes !== before.savedShapes
+        ? { kind: "working", mode, points, poly, shapes: after.savedShapes }
+        : null;
+    };
+    /** Re-arm the knife with a cut's path open for editing again. */
+    const knResume = (mode: KnifeMode, points: L.LatLng[]) => {
+      knArm(mode);
+      if (mode === "straight") {
+        knPts = points.slice();
+        knRedraw();
+      }
+    };
+    /** Ctrl+Z straight after a cut: take it back and return to editing its path. */
+    const knUndoCut = () => {
+      const c = lastCut;
+      lastCut = null;
+      if (!c) return false;
+      const st = useAppStore.getState();
+      if (c.kind === "slice") {
+        if (!st.slice || st.slice.slices !== c.slices) return false; // something else happened since
+        st.undoSlice();
+      } else {
+        if (st.slice || st.savedShapes !== c.shapes || !undoHistory()) return false;
+        useAppStore.getState().setWorkingPolygon(c.poly);
+        undoneCut = c;
+      }
+      knResume(c.mode, c.points);
+      return true;
+    };
+    /** Ctrl+Y after that undo: re-apply the working-polygon cut as it was. */
+    const knRedoCut = () => {
+      const c = undoneCut;
+      undoneCut = null;
+      if (!c) return false;
+      if (useAppStore.getState().workingPolygon !== c.poly || !redoHistory()) return false;
+      useAppStore.getState().setWorkingPolygon(null);
+      knStop();
+      lastCut = { ...c, shapes: useAppStore.getState().savedShapes };
+      return true;
     };
     const knUp = () => {
       map.off("mousemove", knMove);
@@ -621,6 +693,8 @@ export default function LeafletMap() {
       knifeArmed: () => knMode != null || pvArmed,
       pivotDraw: () => pvArm(),
       knifePopPoint: () => knPopPoint(),
+      knifeUndoCut: () => knUndoCut(),
+      knifeRedoCut: () => knRedoCut(),
       stopModes: () => {
         disableFreehand();
         knStop();
@@ -677,25 +751,33 @@ export default function LeafletMap() {
     }
   }, [refPoints, refVisible, refOpacity]);
 
-  // ---- saved-shape overlays (click to select; shift-click to multi-select) ----
+  // ---- saved-shape overlays (click to select; shift-click to multi-select;
+  // double-click to use it as the working polygon) ----
   // Outline + letter rather than a solid fill, so the imagery stays readable.
-  // Fill is opt-in via the opacity slider (0 by default).
+  // Fill is opt-in via the opacity slider (0 by default). The shape in use as the
+  // working polygon is drawn highlighted itself, instead of a dashed copy on top.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- shapeOfGeometry reads the shapes from the store
+  const workingName = useMemo(() => shapeOfGeometry(workingPolygon)?.name, [workingPolygon, savedShapes]);
   useEffect(() => {
     const grp = shapeLayerRef.current;
     if (!grp) return;
     grp.clearLayers();
     if (!shapesVisible) return;
+    // While slicing, the session draws the shape's pieces itself — leave the
+    // source and its earlier slices out (without hiding them in the saved data).
+    const inSession = new Set(slice ? [slice.source, ...slice.adopted.map((a) => a.name)] : []);
     savedShapes.forEach((s, i) => {
-      if (!s.visible) return;
+      if (!s.visible || inSession.has(s.name)) return;
       const color = s.color || ACCENT;
       const selected = selectedShapes.includes(s.name);
+      const working = s.name === workingName;
       L.geoJSON(s.geometry as never, {
         style: {
-          color: selected ? "#ffffff" : color,
-          weight: selected ? 3 : 2,
-          fill: shapeOpacity > 0,
-          fillColor: color,
-          fillOpacity: shapeOpacity,
+          color: working ? WORKING : selected ? "#ffffff" : color,
+          weight: working ? 3.5 : selected ? 3 : 2,
+          fill: working || shapeOpacity > 0,
+          fillColor: working ? WORKING : color,
+          fillOpacity: working ? Math.max(0.12, shapeOpacity) : shapeOpacity,
         },
       })
         .bindTooltip(shapeLetter(i), {
@@ -708,11 +790,26 @@ export default function LeafletMap() {
           // it reaches the map, or clicking near an outline swallows it.
           if (clickBelongsToTool()) return;
           L.DomEvent.stop(e);
+          // Double-click = "use this one". Detected from two clicks on the same
+          // shape: the first click re-draws the shape (selection), so the
+          // browser's own dblclick never reaches it.
+          const now = Date.now();
+          const prev = lastShapeClick.current;
+          lastShapeClick.current = { name: s.name, at: now };
+          if (prev && prev.name === s.name && now - prev.at < 450) {
+            lastShapeClick.current = null;
+            const map = mapRef.current;
+            // Not the map's double-click zoom, which the same gesture would set off.
+            map?.doubleClickZoom.disable();
+            setTimeout(() => map?.doubleClickZoom.enable(), 350);
+            setWorkingShape(s.name);
+            return;
+          }
           useAppStore.getState().toggleSelectedShape(s.name, e.originalEvent.shiftKey);
         })
         .addTo(grp);
     });
-  }, [savedShapes, shapesVisible, shapeOpacity, selectedShapes]);
+  }, [savedShapes, shapesVisible, shapeOpacity, selectedShapes, workingName, slice]);
 
   // ---- live slicing preview (alternating fills so the blade gaps read) ----
   useEffect(() => {
@@ -776,10 +873,15 @@ export default function LeafletMap() {
     if (!grp) return;
     grp.clearLayers();
     if (!workingPolygon) return;
+    // A shown saved shape is highlighted in place (above); only an outline with no
+    // visible shape behind it — a drawing, or a hidden shape — gets the dashed copy.
+    const src = shapeOfGeometry(workingPolygon);
+    if (src && src.visible && shapesVisible) return;
     L.geoJSON(workingPolygon as never, {
-      style: { color: ACCENT, weight: 2, dashArray: "5 4", fill: false },
+      interactive: false,
+      style: { color: WORKING, weight: 2, dashArray: "5 4", fill: false },
     }).addTo(grp);
-  }, [workingPolygon]);
+  }, [workingPolygon, savedShapes, shapesVisible]);
 
   // ---- generated beds & zones ----
   useEffect(() => {
@@ -998,6 +1100,7 @@ export default function LeafletMap() {
     <div className="relative isolate h-full w-full">
       <div ref={hostRef} className="h-full w-full" />
       <LayerPicker />
+      <WorkingChip />
       <div className="absolute left-3 top-3 z-[600] flex flex-col overflow-hidden rounded-lg border border-border bg-popover/90 shadow-lg backdrop-blur"
         onDoubleClick={(e) => e.stopPropagation()}>
         <button aria-label="Zoom in" title="Zoom in" disabled={zoom >= 22}

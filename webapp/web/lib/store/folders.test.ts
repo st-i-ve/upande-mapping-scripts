@@ -31,7 +31,7 @@ describe("folders in the store", () => {
   it("files new shapes by type; replacing a shape keeps its folder", () => {
     const st = useAppStore.getState();
     st.addSavedShape("P1", g); // a point: not a circle, so a polygon-type shape
-    expect(useAppStore.getState().savedShapes[0].folder).toBe("Polygons");
+    expect(useAppStore.getState().savedShapes[0].folder).toBe("Polygons/P1");
     useAppStore.setState({ savedShapes: [{ ...useAppStore.getState().savedShapes[0], folder: "Mine" }] });
     st.addSavedShape("P1", g); // replace
     expect(useAppStore.getState().savedShapes[0].folder).toBe("Mine");

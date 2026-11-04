@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { resolveShapeKey } from "@/lib/map/shapeKeys";
-import { redo, undo } from "@/lib/store/history";
+import { redoStep, undoStep } from "@/lib/undoActions";
 
 /**
  * Map keyboard shortcuts:
@@ -37,15 +37,8 @@ export function useShapeKeyboard() {
 
       if (action === "undo" || action === "redo") {
         e.preventDefault(); // never the browser's own undo over the map
-        if (action === "undo") {
-          // The step in progress comes first, then the session, then the history.
-          if (handle?.drawPopVertex?.() || handle?.knifePopPoint()) return;
-          if (st.slice) return st.undoSlice();
-          undo();
-        } else {
-          if (st.slice) return st.redoSlice();
-          redo();
-        }
+        if (action === "undo") undoStep();
+        else redoStep();
         return;
       }
 

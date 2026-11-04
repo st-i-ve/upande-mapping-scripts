@@ -208,6 +208,12 @@ export interface AppState {
   moveShapesToFolder: (names: string[], folder: string) => void;
   /** Show or hide every shape in a folder and its sub-folders. */
   setFolderVisible: (path: string, visible: boolean) => void;
+  /** Folders expanded in the Browser tree. */
+  openFolders: string[];
+  setFolderOpen: (path: string, open: boolean) => void;
+  /** Expand a folder and every folder above it, so what's inside is in view. */
+  revealFolder: (path: string) => void;
+  collapseAllFolders: () => void;
   /** File everything not yet in a type folder (Pivots, Polygons, …) into one. */
   arrangeByType: () => void;
 
@@ -422,6 +428,16 @@ export const useAppStore = create<AppState>()(
             ),
           };
         }),
+      openFolders: [],
+      setFolderOpen: (path, open) =>
+        set((s) => ({ openFolders: open ? [...new Set([...s.openFolders, path])] : s.openFolders.filter((f) => f !== path) })),
+      revealFolder: (path) =>
+        set((s) => {
+          const add: string[] = [];
+          for (let p = path; p; p = parentOf(p)) add.push(p);
+          return { openFolders: [...new Set([...s.openFolders, ...add])] };
+        }),
+      collapseAllFolders: () => set({ openFolders: [] }),
       arrangeByType: () =>
         set((s) => {
           const r = arrange(s.savedShapes, s.folders);
@@ -486,7 +502,9 @@ export const useAppStore = create<AppState>()(
             name: d.name,
             wasVisible: d.visible,
           }));
-          const hide = new Set([name, ...adopted.map((a) => a.name)]);
+          // The source and its slices are NOT hidden in the saved data: the map
+          // leaves them out while the session draws its own pieces. So a session
+          // lost to a reload or a closed tab can't leave a shape stuck hidden.
           return {
             slice: {
               source: name,
@@ -499,13 +517,6 @@ export const useAppStore = create<AppState>()(
               adopted,
               resumedFrom: leaves.length,
             },
-            savedShapes: s.savedShapes.map((x) => {
-              // Hide the source and its slices — the session draws them itself.
-              if (hide.has(x.name)) return { ...x, visible: false };
-              // Don't leave the abandoned session's source stuck hidden.
-              if (prev && x.name === prev.source) return { ...x, visible: prev.sourceWasVisible };
-              return x;
-            }),
           };
         }),
       applySlice: (slices, width) =>
@@ -553,21 +564,8 @@ export const useAppStore = create<AppState>()(
             },
           };
         }),
-      cancelSlice: () =>
-        set((s) => {
-          if (!s.slice) return {};
-          const { source, sourceWasVisible, adopted } = s.slice;
-          const back = new Map(adopted.map((a) => [a.name, a.wasVisible]));
-          return {
-            slice: null,
-            savedShapes: s.savedShapes.map((x) => {
-              if (x.name === source) return { ...x, visible: sourceWasVisible };
-              // Adopted slices go back exactly as they were, visibility included.
-              if (back.has(x.name)) return { ...x, visible: back.get(x.name)! };
-              return x;
-            }),
-          };
-        }),
+      // Nothing to put back: a session never touches the saved shapes until it finishes.
+      cancelSlice: () => set((s) => (s.slice ? { slice: null } : {})),
       sliceNames: () => {
         const sess = get().slice;
         if (!sess) return [];
@@ -629,7 +627,10 @@ export const useAppStore = create<AppState>()(
                 return nm;
               });
         set((s) => {
-          const next = s.savedShapes.filter((x) => !dropped.has(x.name));
+          // The source is kept but hidden from here on, so its slices read on the map.
+          const next = s.savedShapes
+            .filter((x) => !dropped.has(x.name))
+            .map((x) => (x.name === sess.source ? { ...x, visible: false } : x));
           // Slices are filed next to the shape they were cut from.
           const folder = s.savedShapes.find((x) => x.name === sess.source)?.folder;
           sess.slices.forEach((geometry, i) => {
@@ -736,6 +737,13 @@ export const useAppStore = create<AppState>()(
       // v1: shapes are drawn as outline + letter, so fill starts off. Without this
       // a previously persisted 0.4 would keep hiding the imagery.
       version: 1,
+      // A remembered session whose shape has gone (deleted, or another project
+      // opened elsewhere) is dropped rather than resumed on nothing.
+      merge: (persisted, current) => {
+        const m = { ...current, ...(persisted as Partial<AppState>) };
+        if (m.slice && !m.savedShapes.some((x) => x.name === m.slice!.source)) m.slice = null;
+        return m;
+      },
       migrate: (persisted, version) =>
         version < 1
           ? { ...(persisted as object), shapeOpacity: 0 }
@@ -757,6 +765,11 @@ export const useAppStore = create<AppState>()(
         units: s.units,
         sideTab: s.sideTab,
         openUnits: s.openUnits,
+        openFolders: s.openFolders,
+        // An unfinished slicing session survives a reload — its current cuts,
+        // not their undo history (a huge polygon's history could fill storage,
+        // and a failed write would stop the shapes saving too).
+        slice: s.slice ? { ...s.slice, history: [], future: [] } : null,
         overlayTiles: s.overlayTiles,
         overlayOpacity: s.overlayOpacity,
       }),

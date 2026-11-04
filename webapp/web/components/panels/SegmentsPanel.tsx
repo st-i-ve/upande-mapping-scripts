@@ -85,7 +85,7 @@ export function SegmentsPanel() {
         Cutting <strong>{session.source}</strong> — {session.widths.length} cut
         {session.widths.length === 1 ? "" : "s"}
         {session.future.length > 0 && `, ${session.future.length} undone`}. The original is
-        kept, hidden in the Browser. Nothing is saved until you finish.
+        left off the map while you slice. Your cuts survive a reload, but they only reach the project when you <strong>finish</strong>.
       </p>
 
       <ul className="mt-1.5">

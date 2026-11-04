@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { useAppStore, type SideTab } from "@/lib/store/appStore";
 import { useMapBridge, type MapHandle } from "@/lib/map/mapBridge";
-import { useHistory, undo, redo } from "@/lib/store/history";
+import { useHistory } from "@/lib/store/history";
+import { redoStep, undoStep } from "@/lib/undoActions";
 import { combineSelected, deleteSelected, sliceShape } from "@/lib/shapeActions";
 import { OP_LABEL } from "@/lib/geometry/booleanOps";
 
@@ -149,7 +150,6 @@ export function LeftRail() {
   const n = selected.length;
   const canUndo = slicing ? sliceUndo : pastLen > 0;
   const canRedo = slicing ? sliceRedo : futureLen > 0;
-  const st = () => useAppStore.getState();
 
   return (
     <nav className="relative flex w-11 shrink-0 flex-col items-center gap-0.5 overflow-y-auto py-2" aria-label="Shape tools">
@@ -178,9 +178,9 @@ export function LeftRail() {
       <Divider />
       <div role="group" aria-label="History" className="flex flex-col items-center gap-0.5">
         <RailButton label={slicing ? "Undo cut (Ctrl+Z)" : `Undo (Ctrl+Z) — ${pastLen} step${pastLen === 1 ? "" : "s"} back`}
-          icon={Undo2} disabled={!canUndo} onClick={() => (slicing ? st().undoSlice() : undo())} />
+          icon={Undo2} disabled={!canUndo} onClick={() => undoStep()} />
         <RailButton label={slicing ? "Redo cut (Ctrl+Y)" : "Redo (Ctrl+Y)"}
-          icon={Redo2} disabled={!canRedo} onClick={() => (slicing ? st().redoSlice() : redo())} />
+          icon={Redo2} disabled={!canRedo} onClick={() => redoStep()} />
         <RailButton label={n ? `Delete ${n} selected (Del)` : "Delete selected (Del) — select shapes first"}
           icon={Trash2} danger disabled={!n} onClick={deleteSelected} />
         <RailButton label="Clear the unsaved drawing" icon={CircleX} danger disabled={!handle}

@@ -30,6 +30,19 @@ export function combineSelected(op: BooleanOp): string | null {
   return null;
 }
 
+/**
+ * Make a saved shape the working polygon — what Generate and the knife act on —
+ * and select it. Double-click does this, on the map or in the Browser. Using the
+ * shape's own geometry object keeps the link: the map highlights the shape itself.
+ */
+export function setWorkingShape(name: string) {
+  const st = useAppStore.getState();
+  const shape = st.savedShapes.find((s) => s.name === name);
+  if (!shape) return;
+  st.setWorkingPolygon(shape.geometry);
+  st.setSelectedShapes([name]);
+}
+
 /** Start slicing one saved shape, with it on screen and the knife out. */
 export function sliceShape(name: string) {
   const st = useAppStore.getState();

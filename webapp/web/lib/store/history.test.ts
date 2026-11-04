@@ -28,7 +28,7 @@ describe("undo history", () => {
     expect(undo()).toBe(true);
     expect(names()).toEqual(["A", "B"]);
     expect(undo()).toBe(true);
-    expect(useAppStore.getState().savedShapes[0].folder).toBe("Polygons"); // where it was filed
+    expect(useAppStore.getState().savedShapes[0].folder).toBe("Polygons/A"); // where it was filed
     expect(redo()).toBe(true);
     expect(useAppStore.getState().savedShapes[0].folder).toBe("Pivots");
     undo(); undo(); undo();

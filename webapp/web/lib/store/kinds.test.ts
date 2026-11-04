@@ -15,11 +15,12 @@ describe("filing by type", () => {
     expect(shapeKind({ geometry: square })).toBe("polygons");
   });
 
-  it("gives a pivot its own folder under Pivots, polygons go to Polygons", () => {
+  it("gives each new shape its own folder under its type", () => {
     expect(defaultFolder("Pivot A", "pivots", "")).toBe("Pivots/Pivot A");
-    expect(defaultFolder("Field", "polygons", "")).toBe("Polygons");
+    expect(defaultFolder("Field", "polygons", "")).toBe("Polygons/Field");
+    expect(defaultFolder("Field", "polygons", "Polygons")).toBe("Polygons/Field");
     expect(defaultFolder("Field", "polygons", "Polygons/North")).toBe("Polygons/North");
-    expect(defaultFolder("Field", "polygons", "Pivots/Pivot A")).toBe("Polygons");
+    expect(defaultFolder("Field", "polygons", "Pivots/Pivot A")).toBe("Polygons/Field");
   });
 
   it("reads type folders", () => {
@@ -43,7 +44,7 @@ describe("filing by type", () => {
     expect(at).toEqual({
       "Pivot 1": "Pivots/Pivot 1", "Pivot 1 1": "Pivots/Pivot 1",
       "Paddock A": "Polygons/Paddock A", "Paddock A1": "Polygons/Paddock A",
-      Loose: "Polygons", "Loose 1": "Polygons",
+      Loose: "Polygons/Loose", "Loose 1": "Polygons/Loose",
       "Pivot B": "Pivots/Pivot B", "Pivot B 1": "Pivots/Pivot B",
       Done: "Polygons/Old",
     });
@@ -73,6 +74,7 @@ describe("generated results in the project", () => {
   it("arranging by type is one undoable step for the whole project", () => {
     useAppStore.setState({ savedShapes: [sh("Field", square)] });
     useAppStore.getState().arrangeByType();
-    expect(useAppStore.getState().savedShapes[0].folder).toBe("Polygons");
+    expect(useAppStore.getState().savedShapes[0].folder).toBe("Polygons/Field");
   });
 });
+

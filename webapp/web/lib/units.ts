@@ -9,10 +9,22 @@ import type { FeatureCollection, GeoGeometry, UnitKind } from "@/lib/types";
 
 const LABEL: Record<UnitKind, string> = { zones: "beds & zones", triads: "triads", hexagons: "hexagons", trees: "trees" };
 
-/** The saved shape a geometry came from (the working polygon is the shape's own geometry object). */
-export function sourceNameOf(geom: GeoGeometry | null | undefined): string | undefined {
+/**
+ * The saved shape a geometry came from. Usually the very same object (the working
+ * polygon is set from the shape), but after a reload the two are separate copies,
+ * so fall back to comparing coordinates.
+ */
+export function shapeOfGeometry(geom: GeoGeometry | null | undefined) {
   if (!geom) return undefined;
-  return useAppStore.getState().savedShapes.find((s) => s.geometry === geom)?.name;
+  const shapes = useAppStore.getState().savedShapes;
+  const same = shapes.find((s) => s.geometry === geom);
+  if (same) return same;
+  const key = JSON.stringify(geom);
+  return shapes.find((s) => JSON.stringify(s.geometry) === key);
+}
+
+export function sourceNameOf(geom: GeoGeometry | null | undefined): string | undefined {
+  return shapeOfGeometry(geom)?.name;
 }
 
 /** How many units a result holds: beds for zones, features otherwise. */

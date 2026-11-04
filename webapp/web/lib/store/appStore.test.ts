@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useAppStore } from "./appStore";
+import { useAppStore, type AppState } from "./appStore";
 import type { GeoGeometry } from "@/lib/types";
 
 const geom: GeoGeometry = { type: "Point", coordinates: [35.748, 0.0686] };
@@ -55,6 +55,19 @@ describe("appStore", () => {
   });
 
   describe("slicing session", () => {
+    it("a session survives a reload, but not one whose shape has gone", () => {
+      useAppStore.getState().addSavedShape("Block A", polyA);
+      useAppStore.getState().startSlice("Block A");
+      useAppStore.getState().applySlice([polyA, polyB], 2);
+      const opts = useAppStore.persist.getOptions();
+      const saved = opts.partialize!(useAppStore.getState()) as Partial<AppState>;
+      expect(saved.slice?.slices).toHaveLength(2);
+      expect(saved.slice?.history).toEqual([]); // undo history isn't kept across reloads
+      const cur = useAppStore.getState();
+      expect(opts.merge!(saved, cur).slice?.source).toBe("Block A");
+      expect(opts.merge!({ ...saved, savedShapes: [] }, cur).slice).toBeNull();
+    });
+
     const shapes = () => useAppStore.getState().savedShapes;
     const session = () => useAppStore.getState().slice;
     const startOn = (name: string) => {
@@ -62,11 +75,12 @@ describe("appStore", () => {
       useAppStore.getState().startSlice(name);
     };
 
-    it("starts on a saved shape and hides the source", () => {
+    it("starts on a saved shape without touching its saved visibility", () => {
       startOn("Block A");
       expect(session()).toMatchObject({ source: "Block A", slices: [polyA], history: [], widths: [] });
-      expect(shapes()[0].visible).toBe(false);
-      expect(session()!.sourceWasVisible).toBe(true);
+      // The map leaves it out while slicing; the saved data stays as it was, so a
+      // session lost to a reload can't leave the shape stuck hidden.
+      expect(shapes()[0].visible).toBe(true);
     });
 
     it("ignores a start on a shape that isn't saved", () => {
@@ -131,8 +145,7 @@ describe("appStore", () => {
       useAppStore.getState().startSlice("Block B");
 
       expect(session()!.source).toBe("Block B");
-      expect(shapes().find((s) => s.name === "Block A")!.visible).toBe(true);
-      expect(shapes().find((s) => s.name === "Block B")!.visible).toBe(false);
+      expect(shapes().every((s) => s.visible)).toBe(true);
     });
 
     it("keeps the original visibility when restarting on the same shape", () => {
@@ -153,8 +166,9 @@ describe("appStore", () => {
       expect(sess.adopted.map((a) => a.name)).toEqual(["Block A 1", "Block A 2"]);
       expect(sess.resumedFrom).toBe(2);
       expect(sess.slices).toEqual([polyA, polyB]); // the slices, not the whole shape
-      // Adopted slices are hidden while the session draws them itself.
-      expect(shapes().filter((s) => s.visible)).toHaveLength(0);
+      // The source is hidden from the finish before; the adopted slices keep
+      // their saved visibility (the map leaves them out during the session).
+      expect(shapes().filter((s) => s.visible).map((s) => s.name)).toEqual(["Block A 1", "Block A 2"]);
     });
 
     it("breaks one slice down further, leaving its siblings alone", () => {
