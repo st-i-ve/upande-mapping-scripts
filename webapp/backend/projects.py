@@ -67,6 +67,9 @@ class SaveRequest(BaseModel):
     folders: Optional[list[str]] = Field(None, max_length=MAX_FOLDERS)
     # Generated results filed in the project. Omit to leave them as they are.
     units: Optional[list[Unit]] = Field(None, max_length=MAX_UNITS)
+    # A slicing session in progress (the knife's cuts before Finish), so it
+    # survives a reload or another machine. Send null to clear it; omit to leave it.
+    draft: Optional[dict[str, Any]] = None
     # The version this save was made from; omit (or force) to overwrite regardless.
     base_version: Optional[int] = None
     force: bool = False
@@ -168,6 +171,7 @@ def get_project(slug: str) -> dict:
     project = _read(slug)
     project.setdefault("folders", [])  # projects saved before folders existed
     project.setdefault("units", [])
+    project.setdefault("draft", None)
     return project
 
 
@@ -181,6 +185,8 @@ def save_shapes(slug: str, req: SaveRequest) -> dict:
         project["folders"] = _clean_folders(req.folders)
     if req.units is not None:
         project["units"] = [u.model_dump() for u in req.units]
+    if "draft" in req.model_fields_set:
+        project["draft"] = req.draft
     project["version"] += 1
     project["updated"] = _now()
     _write(project)

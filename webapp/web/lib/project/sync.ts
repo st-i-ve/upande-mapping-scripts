@@ -14,6 +14,7 @@ import { api, ApiError, type Project } from "@/lib/api/client";
 import { useAppStore } from "@/lib/store/appStore";
 import type { SavedShape, UnitItem } from "@/lib/types";
 import { resetHistory } from "@/lib/store/history";
+import { fromDraft, toDraft } from "@/lib/store/sliceDraft";
 
 export type SyncStatus = "idle" | "loading" | "saving" | "saved" | "conflict" | "error";
 
@@ -33,22 +34,42 @@ export const useProjectSync = create<SyncState>((set) => ({
 }));
 
 const SAVE_DELAY_MS = 800;
-const key = (shapes: SavedShape[], folders: string[] = [], units: UnitItem[] = []) =>
-  JSON.stringify([shapes, folders, units]);
+// The slicing session in progress is part of what's saved, so cuts made before
+// Finish survive a reload, a cleared browser, or opening the project elsewhere.
+const key = (shapes: SavedShape[], folders: string[] = [], units: UnitItem[] = [], draft: unknown = null) =>
+  JSON.stringify([shapes, folders, units, draft ?? null]);
 const appKey = () => {
-  const { savedShapes, folders, units } = useAppStore.getState();
-  return key(savedShapes, folders, units);
+  const { savedShapes, folders, units, slice } = useAppStore.getState();
+  return key(savedShapes, folders, units, toDraft(slice));
 };
+const projectKey = (p: Project) => key(p.shapes, p.folders, p.units, p.draft);
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** Make `project` the open one, with its shapes on the map. */
 export function adoptProject(project: Project) {
   const app = useAppStore.getState();
   app.replaceSavedShapes(project.shapes, project.folders ?? [], project.units ?? []);
+  useAppStore.setState({ slice: fromDraft(project.draft, project.shapes.map((s) => s.name)) });
   app.setActiveProject({ slug: project.slug, name: project.name, version: project.version });
   // Undo must never reach back into the project that was open before.
   resetHistory();
-  useProjectSync.getState().set({ status: "saved", error: null, synced: key(project.shapes, project.folders, project.units) });
+  useProjectSync.getState().set({ status: "saved", error: null, synced: projectKey(project) });
+}
+
+/**
+ * Another tab of this site changed the saved state. Take it on here — otherwise
+ * this tab's next write would put its stale copy back over the other tab's work
+ * (a slicing session, say). The other tab saves to the server, so this one
+ * counts what it took on as already saved rather than saving it a second time.
+ */
+export function followOtherTab() {
+  const before = useAppStore.getState().activeProject?.slug;
+  void Promise.resolve(useAppStore.persist.rehydrate()).then(() => {
+    const sync = useProjectSync.getState();
+    const now = useAppStore.getState().activeProject?.slug;
+    if (now !== before) sync.set({ status: now ? "saved" : "idle", error: null, synced: now ? appKey() : null });
+    else if (now && sync.synced !== null && sync.status === "saved") sync.set({ synced: appKey() });
+  });
 }
 
 /** True while the open project has changes the server hasn't got yet. */
@@ -86,13 +107,14 @@ export function closeProject() {
 
 /** Save now. `force` overwrites whatever is on the server (the "keep mine" answer to a conflict). */
 export async function saveNow(force = false) {
-  const { activeProject, savedShapes, folders, units, setActiveProject } = useAppStore.getState();
+  const { activeProject, savedShapes, folders, units, slice, setActiveProject } = useAppStore.getState();
   if (!activeProject) return;
   const sync = useProjectSync.getState();
-  const k = key(savedShapes, folders, units);
+  const draft = toDraft(slice);
+  const k = key(savedShapes, folders, units, draft);
   sync.set({ status: "saving", error: null });
   try {
-    const r = await api.saveProjectShapes(activeProject.slug, savedShapes, folders, activeProject.version, force, units);
+    const r = await api.saveProjectShapes(activeProject.slug, savedShapes, folders, activeProject.version, force, units, draft);
     // Still the same project? (It may have been closed or switched mid-save.)
     if (useAppStore.getState().activeProject?.slug !== activeProject.slug) return;
     setActiveProject({ ...activeProject, name: r.name, version: r.version });
@@ -108,9 +130,19 @@ export function useProjectAutosave() {
   const shapes = useAppStore((s) => s.savedShapes);
   const folders = useAppStore((s) => s.folders);
   const units = useAppStore((s) => s.units);
+  const slice = useAppStore((s) => s.slice);
   const active = useAppStore((s) => s.activeProject);
   const status = useProjectSync((s) => s.status);
   const synced = useProjectSync((s) => s.synced);
+
+  // Another tab wrote the shared browser state: follow it (see followOtherTab).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === useAppStore.persist.getOptions().name && e.newValue) followOtherTab();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // On load (or when a project is reopened from memory): fetch it and line it up.
   const slug = active?.slug;
@@ -123,8 +155,8 @@ export function useProjectAutosave() {
       (p) => {
         if (stop) return;
         const app = useAppStore.getState();
-        const local = key(app.savedShapes, app.folders, app.units);
-        const remote = key(p.shapes, p.folders, p.units);
+        const local = appKey();
+        const remote = projectKey(p);
         if (local === remote) {
           app.setActiveProject({ slug: p.slug, name: p.name, version: p.version });
           sync.set({ status: "saved", synced: local });
@@ -154,10 +186,10 @@ export function useProjectAutosave() {
   // failure (the panel's Retry resumes; no hammering a server that's down).
   useEffect(() => {
     if (!active || synced === null || status !== "saved") return;
-    if (key(shapes, folders, units) === synced) return;
+    if (key(shapes, folders, units, toDraft(slice)) === synced) return;
     const t = setTimeout(() => void saveNow(), SAVE_DELAY_MS);
     return () => clearTimeout(t);
-  }, [shapes, folders, units, active, synced, status]);
+  }, [shapes, folders, units, slice, active, synced, status]);
 }
 
 /**

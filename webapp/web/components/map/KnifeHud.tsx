@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, Redo2, Slice, Undo2, Waypoints, X } from "lucide-react";
+import { Check, ChevronDown, LocateFixed, Redo2, Slice, Undo2, Waypoints, X } from "lucide-react";
+import { mergePolygons } from "@/lib/geometry/knife";
 import { useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -14,7 +15,7 @@ const SMALL = "flex h-7 w-7 items-center justify-center rounded-md border border
 
 /**
  * The knife's settings and its slicing session, on the map while the knife is
- * out (bottom right, like an operator panel). Every cut goes into a session on
+ * out or a slicing session is open (bottom right, like an operator panel). Every cut goes into a session on
  * the shape it crosses; Finish saves the pieces, the original is kept.
  */
 export function KnifeHud() {
@@ -25,9 +26,13 @@ export function KnifeHud() {
   const slice = useAppStore((s) => (hydrated ? s.slice : null));
   const undoSlice = useAppStore((s) => s.undoSlice);
   const redoSlice = useAppStore((s) => s.redoSlice);
+  const project = useAppStore((s) => (hydrated ? s.activeProject?.name : undefined));
   const [open, setOpen] = useState(true);
-  if (!mode) return null;
+  // A session open with the knife put away (after a reload, say) still shows,
+  // so cuts in progress are never out of sight.
+  if (!mode && !slice) return null;
 
+  const activeProjectNote = project ? `with ${project}, through reloads and on other computers,` : "in this browser through reloads";
   const cuts = slice?.widths.length ?? 0;
   const pieces = slice?.slices.length ?? 0;
 
@@ -41,18 +46,26 @@ export function KnifeHud() {
           <ChevronDown size={12} className={`text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`} />
           Knife
           <span className="font-normal text-muted-foreground">
-            · {mode} · {width} m{slice ? ` · ${pieces} pieces` : ""}
+            · {mode ?? "put away"} · {width} m{slice ? ` · ${pieces} pieces` : ""}
           </span>
         </button>
-        <button onClick={() => handle?.knifeStop()} aria-label="Put the knife away (Esc)" title="Put the knife away (Esc)"
-          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary">
-          <X size={12} />
-        </button>
+        {mode && (
+          <button onClick={() => handle?.knifeStop()} aria-label="Put the knife away (Esc)" title="Put the knife away (Esc)"
+            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary">
+            <X size={12} />
+          </button>
+        )}
       </div>
 
       {open && (
         <div className="space-y-2.5 border-t border-border/60 px-2.5 pb-2.5 pt-2">
-          <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" role="radiogroup" aria-label="Knife type">
+          {!mode && (
+            <button onClick={() => runTool("knife-straight", true)}
+              className="flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 text-[10px] font-medium text-primary transition-colors hover:bg-primary/20">
+              <Slice size={12} /> Resume cutting <kbd className="font-mono text-[9px] opacity-70">K</kbd>
+            </button>
+          )}
+          {mode && <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5" role="radiogroup" aria-label="Knife type">
             <button role="radio" aria-checked={mode === "straight"} onClick={() => runTool("knife-straight", true)}
               className={`${SEG} ${mode === "straight" ? "bg-primary/15 text-primary ring-1 ring-primary/40" : "text-muted-foreground hover:text-foreground"}`}>
               <Waypoints size={12} /> Straight <kbd className="font-mono text-[9px] opacity-70">K</kbd>
@@ -61,7 +74,7 @@ export function KnifeHud() {
               className={`${SEG} ${mode === "freehand" ? "bg-primary/15 text-primary ring-1 ring-primary/40" : "text-muted-foreground hover:text-foreground"}`}>
               <Slice size={12} /> Freehand <kbd className="font-mono text-[9px] opacity-70">⇧K</kbd>
             </button>
-          </div>
+          </div>}
 
           <BladeWidth />
 
@@ -76,6 +89,8 @@ export function KnifeHud() {
                   className="flex h-7 flex-1 items-center justify-center gap-1 rounded-md bg-primary text-[10px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
                   <Check size={12} /> Finish <kbd className="font-mono text-[9px] opacity-70">↵</kbd>
                 </button>
+                <button className={SMALL} onClick={() => { const g = mergePolygons(slice.slices); if (g) handle?.fitGeometry(g); }}
+                  aria-label="Zoom to the pieces" title="Zoom to the pieces"><LocateFixed size={12} /></button>
                 <button className={SMALL} disabled={!cuts} onClick={undoSlice} aria-label="Undo cut" title="Undo cut (Ctrl+Z)"><Undo2 size={12} /></button>
                 <button className={SMALL} disabled={!slice.future.length} onClick={redoSlice} aria-label="Redo cut" title="Redo cut (Ctrl+Y)"><Redo2 size={12} /></button>
                 <button className={`${SMALL} hover:!border-destructive/40 hover:!text-destructive`} onClick={() => void discardSlicing()}
@@ -88,12 +103,17 @@ export function KnifeHud() {
             </p>
           )}
 
-          <p className="text-[9px] leading-snug text-muted-foreground/70">
+          {mode && <p className="text-[9px] leading-snug text-muted-foreground/70">
             {mode === "straight"
               ? "Click points along the cut, click the last one again to cut. Backspace removes a point."
               : "Drag across the shape to cut along the line you draw."}{" "}
             Esc puts the knife away.
-          </p>
+          </p>}
+          {slice && (
+            <p className="text-[9px] leading-snug text-muted-foreground/70">
+              Your cuts are kept {activeProjectNote} until you Finish or discard them.
+            </p>
+          )}
         </div>
       )}
     </div>

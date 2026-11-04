@@ -99,9 +99,10 @@ export default function LeafletMap() {
   useEffect(() => {
     if (!hostRef.current || mapRef.current) return;
 
+    const view = useAppStore.getState().mapView;
     const map = L.map(hostRef.current, {
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
+      center: view ? [view.lat, view.lon] : DEFAULT_CENTER,
+      zoom: view?.zoom ?? DEFAULT_ZOOM,
       zoomControl: false, // ours (themed) sits in the corner instead
     });
     mapRef.current = map;
@@ -181,6 +182,11 @@ export default function LeafletMap() {
     };
     onMove();
     map.on("move zoom", onMove);
+    // Remember the view, so a reload lands where you were working.
+    map.on("moveend", () => {
+      const c = map.getCenter();
+      useAppStore.getState().setMapView({ lat: c.lat, lon: c.lng, zoom: map.getZoom() });
+    });
 
     map.on("click", (e: L.LeafletMouseEvent) => {
       const cb = pickCbRef.current;

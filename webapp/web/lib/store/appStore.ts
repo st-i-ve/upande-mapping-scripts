@@ -240,6 +240,9 @@ export interface AppState {
   /** Switch an imported layer on (it goes on top) or off. */
   setOverlayTileOn: (slug: string, on: boolean) => void;
   overlayOpacity: number;
+  /** Where the map was last looking, so a reload comes back to the same place. */
+  mapView: { lat: number; lon: number; zoom: number } | null;
+  setMapView: (v: { lat: number; lon: number; zoom: number }) => void;
   setOverlayOpacity: (o: number) => void;
 
   // ---- pivot layout (draw a circle, preview pizza slices, confirm) ----
@@ -480,6 +483,8 @@ export const useAppStore = create<AppState>()(
       setOverlayTileOn: (slug, on) =>
         set((s) => ({ overlayTiles: [...s.overlayTiles.filter((x) => x !== slug), ...(on ? [slug] : [])] })),
       overlayOpacity: 1,
+      mapView: null,
+      setMapView: (mapView) => set({ mapView }),
       setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
 
       pivot: null,
@@ -772,6 +777,7 @@ export const useAppStore = create<AppState>()(
         slice: s.slice ? { ...s.slice, history: [], future: [] } : null,
         overlayTiles: s.overlayTiles,
         overlayOpacity: s.overlayOpacity,
+        mapView: s.mapView,
       }),
     },
   ),

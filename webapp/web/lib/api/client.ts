@@ -81,6 +81,8 @@ export interface Project extends Omit<ProjectSummary, "shape_count"> {
   folders?: string[];
   /** Generated results filed in the project (pointers to saved outputs). */
   units?: UnitItem[];
+  /** A slicing session in progress (cuts not yet finished), or null. */
+  draft?: unknown;
 }
 
 const json = (body: unknown): RequestInit => ({
@@ -191,9 +193,12 @@ export const api = {
   createProject: (name: string, shapes: SavedShape[], folders: string[] = [], units: UnitItem[] = []) =>
     request<Project>("/projects", json({ name, shapes, folders, units })),
   getProject: (slug: string) => request<Project>(`/projects/${encodeURIComponent(slug)}`),
-  saveProjectShapes: (slug: string, shapes: SavedShape[], folders: string[], baseVersion: number, force = false, units?: UnitItem[]) =>
+  /** `draft`: the slicing session to keep with the project (null clears it; undefined leaves it). */
+  saveProjectShapes: (slug: string, shapes: SavedShape[], folders: string[], baseVersion: number, force = false, units?: UnitItem[], draft?: unknown) =>
     request<ProjectSummary>(`/projects/${encodeURIComponent(slug)}/shapes`, {
-      ...json({ shapes, folders, units, base_version: baseVersion, force }),
+      ...json(draft === undefined
+        ? { shapes, folders, units, base_version: baseVersion, force }
+        : { shapes, folders, units, draft, base_version: baseVersion, force }),
       method: "PUT",
     }),
   renameProject: (slug: string, name: string) =>
