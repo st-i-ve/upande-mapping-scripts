@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { shapeLetter } from "@/lib/shapeLabels";
+import { isBlock, shapeLetter } from "@/lib/shapeLabels";
 import { checkNames, NAME_ISSUE_TEXT } from "@/lib/shapeNames";
 import type { SavedShape } from "@/lib/types";
 
@@ -388,7 +388,8 @@ function ShapeRow({ s, ctx, depth }: { s: SavedShape; ctx: TreeCtx; depth: numbe
       <input type="checkbox" className="accent-primary" aria-label={`Select ${s.name}`}
         checked={selected} onChange={() => st().toggleSelectedShape(s.name, true)} />
       <span className="tabular w-5 shrink-0 text-[10px] font-bold" style={{ color: s.color }} title="Label shown on the map">
-        {shapeLetter(ctx.index.get(s.name) ?? 0)}
+        {/* A block wears its own name on the map — no letter to match up. */}
+        {isBlock(s.folder) ? "" : shapeLetter(ctx.index.get(s.name) ?? 0)}
       </span>
       {renaming ? (
         <InlineName

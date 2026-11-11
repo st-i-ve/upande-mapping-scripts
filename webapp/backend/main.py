@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from beds_zones import generate_beds_zones, preview_split, terrace_sections
+from block_map import router as block_map_router
 from projects import router as projects_router
 from tile_layers import router as tile_layers_router
 
@@ -30,6 +31,7 @@ TILE_CACHE_EXTENSION = ROOT.parent / "tile-cache-extension"
 app = FastAPI(title="Upande Bed & Zone Mapper")
 app.include_router(tile_layers_router)
 app.include_router(projects_router)
+app.include_router(block_map_router)
 
 
 class GenerateRequest(BaseModel):

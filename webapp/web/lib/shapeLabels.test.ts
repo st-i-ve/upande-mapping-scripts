@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shapeLetter } from "./shapeLabels";
+import { isBlock, shapeLetter, shapeTag } from "./shapeLabels";
 
 describe("shapeLetter", () => {
   it("counts A through Z", () => {
@@ -25,5 +25,15 @@ describe("shapeLetter", () => {
   it("returns empty for nonsense", () => {
     expect(shapeLetter(-1)).toBe("");
     expect(shapeLetter(NaN)).toBe("");
+  });
+});
+
+describe("shapeTag", () => {
+  it("names blocks, letters everything else", () => {
+    expect(shapeTag({ name: "D9B", folder: "Blocks" }, 4)).toBe("D9B");
+    expect(shapeTag({ name: "A1", folder: "Blocks/North" }, 0)).toBe("A1");
+    expect(shapeTag({ name: "Field", folder: "Polygons/Field" }, 1)).toBe("B");
+    expect(shapeTag({ name: "Field" }, 2)).toBe("C");
+    expect(isBlock("Blockset")).toBe(false);
   });
 });

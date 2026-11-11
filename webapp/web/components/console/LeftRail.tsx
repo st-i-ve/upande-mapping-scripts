@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import {
   MousePointer2, Hexagon, Square, Spline, Move, Eraser, Trash2, PencilLine, Circle,
-  Slice, Mountain, Sun, Layers, Ruler, Compass, Puzzle,
+  Slice, Mountain, Sun, Layers, Ruler, Compass, Puzzle, Map as MapIcon,
   SquaresUnite, SquaresSubtract, SquaresIntersect, Undo2, Redo2, CircleX, type LucideIcon,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store/appStore";
@@ -12,6 +12,7 @@ import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHistory } from "@/lib/store/history";
 import { TOOL_INFO, type ToolId } from "@/lib/map/tools";
 import { runTool } from "@/lib/toolActions";
+import { useHydrated } from "@/lib/hooks/useHydrated";
 
 /** The sticky tools, grouped top to bottom in the order you'd use them. */
 const TOOL_GROUPS: { label: string; tools: { id: ToolId; icon: LucideIcon }[] }[] = [
@@ -105,10 +106,27 @@ function RailButton({ id, icon: Icon, disabled, active, danger, note, name, desc
 
 const Divider = () => <span aria-hidden className="my-1 h-px w-6 shrink-0 bg-border" />;
 
-/** Pinned to the rail's foot: downloads the tile-cache browser extension (zipped by the backend). */
+/**
+ * Pinned to the rail's foot: downloads built by the backend — the open project's
+ * block map (when it has a Blocks folder) and the tile-cache browser extension.
+ */
 function TileExtensionLink() {
+  // Persisted state: read only once hydrated, so the server render matches.
+  const hydrated = useHydrated();
+  const project = useAppStore((s) => (hydrated ? s.activeProject : null));
+  const hasBlocks = useAppStore((s) => hydrated && s.folders.includes("Blocks"));
   return (
-    <div className="mt-auto">
+    <div className="mt-auto flex flex-col items-center gap-0.5">
+      {project && hasBlocks && (
+        <RailTip name={`${project.name} block map`}
+          desc="Download the block boundaries and names: a map picture, a map to open in any browser, KML for Google Earth, GeoJSON and a CSV of areas."
+          note="Built from the shapes in the project's Blocks folder.">
+          <a href={`/api/projects/${encodeURIComponent(project.slug)}/block-map.zip`} download
+            aria-label="Download block map" className={`${BTN} ${IDLE}`}>
+            <MapIcon size={16} />
+          </a>
+        </RailTip>
+      )}
       <RailTip name="Tile cache extension"
         desc="Download the browser extension that saves map tiles for offline use."
         note="To install: unzip it, open chrome://extensions, turn on Developer mode and Load unpacked.">

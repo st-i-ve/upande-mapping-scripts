@@ -18,7 +18,7 @@ import {
 import { sliceAll } from "@/lib/geometry/knife";
 import { pivotCircle, pivotSlices, pivotSpokes } from "@/lib/geometry/pivot";
 import { useShapeKeyboard } from "@/lib/hooks/useShapeKeyboard";
-import { shapeLetter } from "@/lib/shapeLabels";
+import { shapeTag } from "@/lib/shapeLabels";
 import { LayerPicker } from "./LayerPicker";
 import { WorkingChip } from "./WorkingChip";
 import { KnifeHud } from "./KnifeHud";
@@ -772,7 +772,7 @@ export default function LeafletMap() {
           fillOpacity: working ? Math.max(0.12, shapeOpacity) : shapeOpacity,
         },
       })
-        .bindTooltip(shapeLetter(i), {
+        .bindTooltip(shapeTag(s, i), {
           permanent: true,
           direction: "center",
           className: `shape-letter${selected ? " shape-letter-sel" : ""}`,
