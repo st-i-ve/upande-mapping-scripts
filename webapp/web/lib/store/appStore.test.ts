@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useAppStore, type AppState } from "./appStore";
+import { slicePiecesShown, useAppStore, type AppState } from "./appStore";
 import type { GeoGeometry } from "@/lib/types";
 
 const geom: GeoGeometry = { type: "Point", coordinates: [35.748, 0.0686] };
@@ -391,5 +391,39 @@ describe("appStore", () => {
     expect(useAppStore.getState().savedShapes[0].visible).toBe(true);
     toggleShapeVisible("x");
     expect(useAppStore.getState().savedShapes[0].visible).toBe(false);
+  });
+});
+
+describe("hiding a slicing session's pieces", () => {
+  beforeEach(() => {
+    useAppStore.setState({ savedShapes: [], selectedShapes: [], slice: null, sliceHidden: false });
+    useAppStore.getState().addSavedShape("Block A", polyA);
+    useAppStore.getState().startSlice("Block A");
+  });
+  const shown = () => slicePiecesShown(useAppStore.getState());
+  const visible = () => useAppStore.getState().savedShapes.find((s) => s.name === "Block A")!.visible;
+
+  it("hides with the session's own eye, without ending the session", () => {
+    expect(shown()).toBe(true);
+    useAppStore.getState().setSliceShown(false);
+    expect(shown()).toBe(false);
+    expect(useAppStore.getState().slice?.source).toBe("Block A");
+    useAppStore.getState().setSliceShown(true);
+    expect(shown()).toBe(true);
+  });
+
+  it("hides when the shape being sliced is turned off, and showing turns it back on", () => {
+    useAppStore.getState().toggleShapeVisible("Block A");
+    expect(shown()).toBe(false);
+    useAppStore.getState().setSliceShown(true);
+    expect(visible()).toBe(true);
+    expect(shown()).toBe(true);
+  });
+
+  it("a new cut shows the pieces again", () => {
+    useAppStore.getState().setSliceShown(false);
+    useAppStore.getState().toggleShapeVisible("Block A");
+    useAppStore.getState().applySlice([polyA, polyB], 1);
+    expect(shown()).toBe(true);
   });
 });

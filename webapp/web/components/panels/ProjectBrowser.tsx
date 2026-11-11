@@ -13,7 +13,7 @@ import { askConfirm } from "@/lib/confirm";
 import { sourceNameOf } from "@/lib/units";
 import type { UnitItem } from "@/lib/types";
 import { exportShapesEach, exportShapesTogether } from "@/lib/exportGeo";
-import { useAppStore } from "@/lib/store/appStore";
+import { slicePiecesShown, useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { api, ApiError, type ProjectSummary } from "@/lib/api/client";
@@ -21,7 +21,8 @@ import {
   adoptProject, closeProject, flushProject, openProject, saveNow, useProjectSync,
 } from "@/lib/project/sync";
 import { allFolders, baseName, childFolders, folderOf, parentOf, within } from "@/lib/store/folders";
-import { deleteSelected, goToUnits, selectedInOrder, setWorkingShape, makePivotFromSelected, selectedCircle, sliceShape } from "@/lib/shapeActions";
+import { deleteSelected, goToUnits, selectedInOrder, setWorkingShape, makePivotFromSelected, selectedCircle, sliceShape, finishSlicing, discardSlicing } from "@/lib/shapeActions";
+import { mergePolygons } from "@/lib/geometry/knife";
 import { SectionCard } from "@/components/console/SectionCard";
 import { CloudBackupButton, CloudBackupForm } from "@/components/panels/CloudBackup";
 import { Button } from "@/components/ui/button";
@@ -363,7 +364,12 @@ function ShapeRow({ s, ctx, depth }: { s: SavedShape; ctx: TreeCtx; depth: numbe
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(s.name);
   const handle = useMapBridge((st) => st.handle);
+  // The shape being sliced: its eye shows and hides the session's pieces.
+  const slicing = useAppStore((st) => st.slice?.source === s.name);
+  const piecesShown = useAppStore(slicePiecesShown);
   const st = useAppStore.getState;
+  const shown = slicing ? piecesShown : s.visible;
+  const toggleShown = () => (slicing ? st().setSliceShown(!shown) : st().toggleShapeVisible(s.name));
 
   const issue = renaming ? checkNames([draft], savedShapes.map((x) => x.name), [s.name])[0] : null;
   const children = renaming ? savedShapes.filter((x) => x.name.startsWith(`${s.name} `)).length : 0;
@@ -427,9 +433,10 @@ function ShapeRow({ s, ctx, depth }: { s: SavedShape; ctx: TreeCtx; depth: numbe
           </span>
         </>
       )}
-      <button className={`shrink-0 ${ICON}`} title={s.visible ? "Hide on the map" : "Show on the map"}
-        aria-label={s.visible ? `Hide ${s.name}` : `Show ${s.name}`} onClick={() => st().toggleShapeVisible(s.name)}>
-        {s.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+      <button className={`shrink-0 ${ICON}`}
+        title={slicing ? (shown ? "Hide it and its slicing pieces" : "Show its slicing pieces") : shown ? "Hide on the map" : "Show on the map"}
+        aria-label={shown ? `Hide ${s.name}` : `Show ${s.name}`} onClick={toggleShown}>
+        {shown ? <Eye size={11} /> : <EyeOff size={11} />}
       </button>
     </li>
   );
@@ -597,11 +604,56 @@ function FolderNode({ path, ctx, depth }: { path: string; ctx: TreeCtx; depth: n
         <button className={`shrink-0 ${ICON}`} disabled={!inside.length}
           title={anyVisible ? "Hide everything in it" : "Show everything in it"}
           aria-label={anyVisible ? `Hide ${path}` : `Show ${path}`}
-          onClick={() => st().setFolderVisible(path, !anyVisible)}>
+          onClick={() => {
+            st().setFolderVisible(path, !anyVisible);
+            // The shape being sliced lives here: its pieces go and come with it.
+            const src = st().slice?.source;
+            if (src && inside.some((x) => x.name === src)) st().setSliceShown(!anyVisible);
+          }}>
           {anyVisible || !inside.length ? <Eye size={11} /> : <EyeOff size={11} />}
         </button>
       </div>
       {isOpen && <TreeLevel parent={path} ctx={ctx} depth={depth + 1} />}
+    </li>
+  );
+}
+
+/**
+ * The open slicing session, as a folder at the top of the tree: its pieces can
+ * be hidden (to see the layers underneath) without ending it, and it can be
+ * finished or discarded from here.
+ */
+function SlicingNode({ depth }: { depth: number }) {
+  const hydrated = useHydrated();
+  const slice = useAppStore((s) => (hydrated ? s.slice : null));
+  const hidden = !useAppStore(slicePiecesShown);
+  const handle = useMapBridge((s) => s.handle);
+  const st = useAppStore.getState;
+  if (!slice) return null;
+  const pieces = slice.slices.length;
+  return (
+    <li>
+      <div className="group/row flex items-center gap-1 rounded bg-primary/5 py-[3px] pr-1 text-[10px] ring-1 ring-primary/25"
+        style={{ paddingLeft: 2 + depth * 12 }}>
+        <Scissors size={11} className="ml-[13px] shrink-0 text-primary" />
+        <span className={`min-w-0 flex-1 truncate font-medium ${hidden ? "text-muted-foreground/60" : "text-foreground"}`}
+          title={`Slicing ${slice.source}: ${pieces} pieces, ${slice.widths.length} cuts — kept until you Finish or discard`}>
+          Slicing <span className="font-normal text-muted-foreground">· {slice.source} · <span className="tabular">{pieces}</span> pieces</span>
+          {hidden && <span className="ml-1 text-[9px] italic font-normal">hidden</span>}
+        </span>
+        <span className="hidden shrink-0 items-center gap-1.5 group-hover/row:flex group-focus-within/row:flex">
+          <button className={ICON} title="Zoom to the pieces" aria-label="Zoom to the slicing pieces"
+            onClick={() => { const g = mergePolygons(slice.slices); if (g) handle?.fitGeometry(g); }}><LocateFixed size={11} /></button>
+          <button className={ICON} title="Finish: save the pieces as shapes (the original is kept, hidden)" aria-label="Finish slicing"
+            disabled={pieces < 2} onClick={finishSlicing}><Check size={11} /></button>
+          <button className="text-muted-foreground hover:text-destructive" title="Discard the cuts — the shape stays as it was"
+            aria-label="Discard slicing" onClick={() => void discardSlicing()}><X size={11} /></button>
+        </span>
+        <button className={`shrink-0 ${ICON}`} title={hidden ? "Show the pieces" : "Hide the pieces (the session carries on)"}
+          aria-label={hidden ? "Show the slicing pieces" : "Hide the slicing pieces"} onClick={() => st().setSliceShown(hidden)}>
+          {hidden ? <EyeOff size={11} /> : <Eye size={11} />}
+        </button>
+      </div>
     </li>
   );
 }
@@ -623,6 +675,7 @@ function TreeLevel({ parent, ctx, depth }: { parent: string; ctx: TreeCtx; depth
   }
   return (
     <ul>
+      {depth === 0 && !ctx.searching && <SlicingNode depth={depth} />}
       {folders.map((f) => <FolderNode key={f} path={f} ctx={ctx} depth={depth} />)}
       {shapes.map((s) => <ShapeRow key={s.name} s={s} ctx={ctx} depth={depth} />)}
       {units.map((u) => <UnitRow key={u.filename} u={u} depth={depth} />)}

@@ -259,6 +259,14 @@ export interface AppState {
 
   // ---- slicing session (cut one saved shape repeatedly) ----
   slice: SliceSession | null;
+  /**
+   * The slicing session's pieces (and their numbers) kept off the map — to look
+   * at the layers underneath. The session itself carries on; the next cut shows them.
+   */
+  sliceHidden: boolean;
+  setSliceHidden: (hidden: boolean) => void;
+  /** Show or hide the session's pieces; showing them also shows the shape being sliced. */
+  setSliceShown: (shown: boolean) => void;
   /** Begin slicing a saved shape; hides the source so the slice gaps read. */
   startSlice: (name: string) => void;
   /** Record a cut: pushes the previous set onto the undo stack. */
@@ -541,6 +549,15 @@ export const useAppStore = create<AppState>()(
       setPivotSettings: (p) => set((s) => ({ pivotSettings: { ...s.pivotSettings, ...p } })),
 
       slice: null,
+      sliceHidden: false,
+      setSliceHidden: (sliceHidden) => set({ sliceHidden }),
+      setSliceShown: (shown) =>
+        set((s) => ({
+          sliceHidden: !shown,
+          savedShapes: shown && s.slice && s.savedShapes.some((x) => x.name === s.slice!.source && !x.visible)
+            ? s.savedShapes.map((x) => (x.name === s.slice!.source ? { ...x, visible: true } : x))
+            : s.savedShapes,
+        })),
       startSlice: (name) =>
         set((s) => {
           const shape = s.savedShapes.find((x) => x.name === name);
@@ -583,6 +600,11 @@ export const useAppStore = create<AppState>()(
                   widths: [...s.slice.widths, width],
                   future: [], // a new cut abandons whatever redo was holding
                 },
+                // You just cut — see what it did, even if the shape had been turned off.
+                sliceHidden: false,
+                savedShapes: s.savedShapes.some((x) => x.name === s.slice!.source && !x.visible)
+                  ? s.savedShapes.map((x) => (x.name === s.slice!.source ? { ...x, visible: true } : x))
+                  : s.savedShapes,
               }
             : {},
         ),
@@ -828,7 +850,12 @@ export const useAppStore = create<AppState>()(
         mapView: s.mapView,
         toolSettings: s.toolSettings,
         knifeWidth: s.knifeWidth,
+        sliceHidden: s.sliceHidden,
       }),
     },
   ),
 );
+
+/** Whether the open slicing session's pieces are drawn: not hidden, and its shape not turned off. */
+export const slicePiecesShown = (s: AppState) =>
+  !!s.slice && !s.sliceHidden && s.savedShapes.find((x) => x.name === s.slice!.source)?.visible !== false;

@@ -1,9 +1,9 @@
 "use client";
 
 import { useToolSetting } from "@/lib/hooks/useToolSetting";
-import { Check, ChevronDown, LocateFixed, Redo2, Slice, Undo2, Waypoints, X } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, LocateFixed, Redo2, Slice, Undo2, Waypoints, X } from "lucide-react";
 import { mergePolygons } from "@/lib/geometry/knife";
-import { useAppStore } from "@/lib/store/appStore";
+import { slicePiecesShown, useAppStore } from "@/lib/store/appStore";
 import { useMapBridge } from "@/lib/map/mapBridge";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import { runTool } from "@/lib/toolActions";
@@ -26,6 +26,8 @@ export function KnifeHud() {
   const slice = useAppStore((s) => (hydrated ? s.slice : null));
   const undoSlice = useAppStore((s) => s.undoSlice);
   const redoSlice = useAppStore((s) => s.redoSlice);
+  const hidden = !useAppStore(slicePiecesShown);
+  const setShown = useAppStore((s) => s.setSliceShown);
   const project = useAppStore((s) => (hydrated ? s.activeProject?.name : undefined));
   const [open, setOpenRaw] = useToolSetting("knife.panelOpen", true);
   const setOpen = (f: (o: boolean) => boolean) => setOpenRaw(f(open));
@@ -47,9 +49,17 @@ export function KnifeHud() {
           <ChevronDown size={12} className={`text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`} />
           Knife
           <span className="font-normal text-muted-foreground">
-            · {mode ?? "put away"} · {width} m{slice ? ` · ${pieces} pieces` : ""}
+            · {mode ?? "put away"} · {width} m{slice ? ` · ${pieces} pieces${hidden ? " (hidden)" : ""}` : ""}
           </span>
         </button>
+        {slice && (
+          <button onClick={() => setShown(hidden)}
+            aria-label={hidden ? "Show the pieces" : "Hide the pieces"}
+            title={hidden ? "Show the pieces" : "Hide the pieces and their numbers (the session carries on; the next cut shows them)"}
+            className={`flex h-5 w-5 items-center justify-center rounded hover:bg-primary/10 hover:text-primary ${hidden ? "text-primary" : "text-muted-foreground"}`}>
+            {hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+          </button>
+        )}
         {mode && (
           <button onClick={() => handle?.knifeStop()} aria-label="Put the knife away (Esc)" title="Put the knife away (Esc)"
             className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary">

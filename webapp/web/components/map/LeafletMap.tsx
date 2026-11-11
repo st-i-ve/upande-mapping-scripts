@@ -5,7 +5,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
-import { useAppStore } from "@/lib/store/appStore";
+import { slicePiecesShown, useAppStore } from "@/lib/store/appStore";
 import { useMapBridge, clickBelongsToTool } from "@/lib/map/mapBridge";
 import {
   buildBaseLayers,
@@ -57,6 +57,7 @@ export default function LeafletMap() {
   const shapeOpacity = useAppStore((s) => s.shapeOpacity);
   const selectedShapes = useAppStore((s) => s.selectedShapes);
   const slice = useAppStore((s) => s.slice);
+  const sliceShown = useAppStore(slicePiecesShown);
   const pivot = useAppStore((s) => s.pivot);
   const pivotSettings = useAppStore((s) => s.pivotSettings);
   const workingPolygon = useAppStore((s) => s.workingPolygon);
@@ -808,7 +809,9 @@ export default function LeafletMap() {
     const grp = sliceLayerRef.current;
     if (!grp) return;
     grp.clearLayers();
-    if (!slice) return;
+    // Hidden on request (the Slicing folder's eye, the source shape's, or all
+    // shapes off) — the session carries on underneath.
+    if (!slice || !sliceShown || !shapesVisible) return;
     slice.slices.forEach((g, i) => {
       L.geoJSON(g as never, {
         // Non-interactive: a slice must never swallow a knife click.
@@ -824,7 +827,7 @@ export default function LeafletMap() {
         })
         .addTo(grp);
     });
-  }, [slice]);
+  }, [slice, sliceShown, shapesVisible]);
 
   // ---- pivot layout preview: the slices as they'll be cut, dotted spokes, and
   // the dotted machinery disc — redrawn on every settings change ----
